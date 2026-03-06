@@ -9,6 +9,7 @@ import {
   UnknownError,
 } from "@formbricks/types/errors";
 import { validateInputs } from "@/lib/utils/validate";
+import { validateWebhookUrl } from "@/lib/utils/validate-webhook-url";
 import { isDiscordWebhook } from "@/modules/integrations/webhooks/lib/utils";
 import { TWebhookInput } from "../types/webhooks";
 
@@ -16,6 +17,10 @@ export const updateWebhook = async (
   webhookId: string,
   webhookInput: Partial<TWebhookInput>
 ): Promise<boolean> => {
+  if (webhookInput.url) {
+    await validateWebhookUrl(webhookInput.url);
+  }
+
   try {
     await prisma.webhook.update({
       where: {
@@ -60,6 +65,8 @@ export const deleteWebhook = async (id: string): Promise<boolean> => {
 };
 
 export const createWebhook = async (environmentId: string, webhookInput: TWebhookInput): Promise<boolean> => {
+  await validateWebhookUrl(webhookInput.url);
+
   try {
     if (isDiscordWebhook(webhookInput.url)) {
       throw new UnknownError("Discord webhooks are currently not supported.");
@@ -113,6 +120,8 @@ export const getWebhooks = async (environmentId: string): Promise<Webhook[]> => 
 };
 
 export const testEndpoint = async (url: string): Promise<boolean> => {
+  await validateWebhookUrl(url);
+
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);

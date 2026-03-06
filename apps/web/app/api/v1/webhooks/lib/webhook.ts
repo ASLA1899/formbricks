@@ -5,9 +5,11 @@ import { DatabaseError, InvalidInputError } from "@formbricks/types/errors";
 import { TWebhookInput, ZWebhookInput } from "@/app/api/v1/webhooks/types/webhooks";
 import { ITEMS_PER_PAGE } from "@/lib/constants";
 import { validateInputs } from "@/lib/utils/validate";
+import { validateWebhookUrl } from "@/lib/utils/validate-webhook-url";
 
 export const createWebhook = async (webhookInput: TWebhookInput): Promise<Webhook> => {
   validateInputs([webhookInput, ZWebhookInput]);
+  await validateWebhookUrl(webhookInput.url);
 
   try {
     const createdWebhook = await prisma.webhook.create({
