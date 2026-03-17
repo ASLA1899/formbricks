@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ElementError, getElementErrorAria } from "@/components/general/element-error";
 import { ElementHeader } from "@/components/general/element-header";
+import { Input } from "@/components/general/input";
 import { Label } from "@/components/general/label";
 import { FB_PART } from "@/lib/parts";
 import { cn } from "@/lib/utils";
@@ -48,6 +49,16 @@ interface MatrixProps {
   imageAltText?: string;
   /** Video URL to display above the headline */
   videoUrl?: string;
+  /** ID of the "other" row (if present) */
+  otherRowId?: string;
+  /** Display label for the "other" row */
+  otherRowLabel?: string;
+  /** Placeholder for the "other" row text input */
+  otherRowPlaceholder?: string;
+  /** Current text value for the "other" row input */
+  otherRowValue?: string;
+  /** Callback when the "other" row text input changes */
+  onOtherRowValueChange?: (value: string) => void;
 }
 
 /**
@@ -88,6 +99,11 @@ function Matrix({
   imageUrl,
   imageAltText,
   videoUrl,
+  otherRowId,
+  otherRowLabel,
+  otherRowPlaceholder,
+  otherRowValue,
+  onOtherRowValueChange,
 }: Readonly<MatrixProps>): React.JSX.Element {
   const errorAria = getElementErrorAria(inputId, errorMessage);
 
@@ -106,6 +122,9 @@ function Matrix({
     const { [rowId]: _, ...rest } = selectedValues;
     onChange(rest);
   };
+
+  const otherRowSelected = otherRowId ? Boolean(selectedValues[otherRowId]) : false;
+  const totalRowCount = rows.length + (otherRowId ? 1 : 0);
 
   return (
     <div className="w-full space-y-4" id={elementId} dir={dir}>
@@ -214,6 +233,77 @@ function Matrix({
                     </tr>
                   );
                 })}
+                {/* "Other" row */}
+                {otherRowId ? (
+                  <tr
+                    className={cn("relative", totalRowCount % 2 !== 0 ? "bg-input-bg" : "bg-transparent")}
+                    dir={dir}>
+                    {/* Other row label cell with text input */}
+                    <th
+                      scope="row"
+                      id={`${inputId}-row-${otherRowId}-header`}
+                      className={cn("rounded-s-input p-2 align-middle")}>
+                      <div className="flex flex-col gap-1 leading-none">
+                        <Label>{otherRowLabel}</Label>
+                        {otherRowSelected ? (
+                          <Input
+                            type="text"
+                            placeholder={otherRowPlaceholder || ""}
+                            value={otherRowValue || ""}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              onOtherRowValueChange?.(e.target.value);
+                            }}
+                            className="mt-1 h-8 text-sm"
+                            dir={dir}
+                          />
+                        ) : null}
+                      </div>
+                    </th>
+                    {/* Column options for the other row */}
+                    {columns.map((column, colIndex) => {
+                      const rowGroupId = `${inputId}-row-${otherRowId}`;
+                      const cellId = `${rowGroupId}-${column.id}`;
+                      const columnHeaderId = `${inputId}-col-${column.id}`;
+                      const isLastColumn = colIndex === columns.length - 1;
+                      const isSelected = selectedValues[otherRowId] === column.id;
+
+                      return (
+                        <td
+                          key={column.id}
+                          className={cn("p-2 text-center align-middle", isLastColumn && "rounded-e-input")}>
+                          <label
+                            htmlFor={cellId}
+                            data-fb-part={FB_PART.option}
+                            data-checked={isSelected ? "true" : undefined}
+                            className={cn(
+                              "flex justify-center",
+                              disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+                            )}>
+                            <input
+                              type="radio"
+                              id={cellId}
+                              name={rowGroupId}
+                              value={column.id}
+                              checked={isSelected}
+                              disabled={disabled}
+                              aria-labelledby={`${rowGroupId}-header ${columnHeaderId}`}
+                              className="peer sr-only"
+                              onChange={() => {
+                                handleSelect(otherRowId, column.id);
+                              }}
+                              onClick={() => {
+                                if (!required && isSelected) {
+                                  handleDeselect(otherRowId, column.id);
+                                }
+                              }}
+                            />
+                            <MatrixRadioIndicator />
+                          </label>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>
