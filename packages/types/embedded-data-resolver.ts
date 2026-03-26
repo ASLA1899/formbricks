@@ -1152,7 +1152,7 @@ export interface TListReadableFieldsInput {
  * Matches one full recall token (`#recall:<id>/fallback:<text>#`) — the editor's storage syntax.
  * `.replace()` only: `.test()`/`.exec()` would carry `lastIndex` across calls on this shared instance.
  */
-const RECALL_TOKEN_REGEX = /#recall:[A-Za-z0-9_-]+\/fallback:[^#]*#/g;
+const RECALL_TOKEN_REGEX = /#recall:[A-Za-z0-9_.-]+\/fallback:[^#]*#/g;
 
 /**
  * A blank label draws a row with nothing to read or click (the same reasoning behind

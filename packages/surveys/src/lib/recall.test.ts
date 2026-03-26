@@ -298,3 +298,23 @@ describe("parseRecallInformation", () => {
     expect(result.subheader?.en).toBe("");
   });
 });
+
+describe("replaceRecallInfo sub-field recall", () => {
+  test("pipes a contact-info sub-field, including custom fields", () => {
+    const data = { ci1: { firstName: "Ada", cf_city: "Chicago" } } as TResponseData;
+    expect(replaceRecallInfo("Hi #recall:ci1.firstName/fallback:there#", data, {})).toBe("Hi Ada");
+    expect(replaceRecallInfo("In #recall:ci1.cf_city/fallback:?#", data, {})).toBe("In Chicago");
+  });
+
+  test("pipes an address sub-field from the positional array", () => {
+    const data = { addr: ["1 Main", "", "Denver", "CO", "80202", "US", "Ada", "ASLA"] } as TResponseData;
+    expect(replaceRecallInfo("#recall:addr.city/fallback:x#", data, {})).toBe("Denver");
+    expect(replaceRecallInfo("#recall:addr.organization/fallback:x#", data, {})).toBe("ASLA");
+  });
+
+  test("falls back when the sub-field is empty or missing", () => {
+    const data = { ci1: { firstName: "" } } as TResponseData;
+    expect(replaceRecallInfo("#recall:ci1.firstName/fallback:friend#", data, {})).toBe("friend");
+    expect(replaceRecallInfo("#recall:nope.firstName/fallback:friend#", data, {})).toBe("friend");
+  });
+});

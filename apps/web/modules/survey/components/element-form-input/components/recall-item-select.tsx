@@ -21,6 +21,7 @@ import {
   listMidSurveyReservedEntries,
   listReadableFields,
 } from "@formbricks/types/embedded-data-resolver";
+import { COMPOUND_FIELD_LABELS, getCompoundFields } from "@formbricks/types/surveys/compound-fields";
 import { TSurveyElement, TSurveyElementId, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import { TSurvey, TSurveyRecallItem } from "@formbricks/types/surveys/types";
 import { getTextContent } from "@formbricks/types/surveys/validation";
@@ -197,17 +198,52 @@ export const RecallItemSelect = ({
       ? elements.length
       : elements.findIndex((recallElement) => recallElement.id === elementId);
 
-    return elements
-      .filter((element, index) => {
-        const notAllowed = isNotAllowedElementType(element);
-        return !recallItemIds.includes(element.id) && !notAllowed && element.id !== elementId && idx > index;
-      })
-      .map((element) => ({
-        id: element.id,
-        label: element.headline[selectedLanguageCode],
-        type: "element" as const,
-        icon: elementIconMapping[element.type as keyof typeof elementIconMapping] ?? null,
-      }));
+    const earlierElements = elements.filter((element, index) => {
+      const notAllowed = isNotAllowedElementType(element);
+      return !notAllowed && element.id !== elementId && idx > index;
+    });
+
+    return earlierElements.flatMap((element): TRecallOption[] => {
+      const icon = elementIconMapping[element.type as keyof typeof elementIconMapping] ?? null;
+      const compoundFields = getCompoundFields(element.type);
+
+      if (compoundFields) {
+        // Contact info and address are piped one sub-field at a time ("questionId.firstName").
+        const headline = getTextContent(element.headline[selectedLanguageCode] ?? "") || element.id;
+        const subFields = compoundFields
+          .filter(
+            (fieldName) =>
+              (element as unknown as Record<string, { show?: boolean } | undefined>)[fieldName]?.show
+          )
+          .map((fieldName) => ({
+            id: fieldName,
+            label: COMPOUND_FIELD_LABELS[fieldName] ?? fieldName,
+          }));
+        if (element.type === TSurveyElementTypeEnum.ContactInfo) {
+          for (const customField of element.customFields ?? []) {
+            if (customField.show) subFields.push({ id: customField.id, label: customField.label });
+          }
+        }
+        return subFields
+          .map((subField) => ({
+            id: `${element.id}.${subField.id}`,
+            label: `${headline} > ${subField.label}`,
+            type: "element" as const,
+            icon,
+          }))
+          .filter((option) => !recallItemIds.includes(option.id));
+      }
+
+      if (recallItemIds.includes(element.id)) return [];
+      return [
+        {
+          id: element.id,
+          label: element.headline[selectedLanguageCode],
+          type: "element" as const,
+          icon,
+        },
+      ];
+    });
   }, [elementId, elements, recallItemIds, selectedLanguageCode]);
 
   /**

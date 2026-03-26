@@ -112,7 +112,7 @@ const isValidHostname = (hostname: string): boolean => {
   return labels.every((label) => DOMAIN_LABEL.test(label)) && TOP_LEVEL_DOMAIN.test(topLevelDomain);
 };
 
-const RECALL_TOKEN_START = /#recall:[A-Za-z0-9_-]+\/fallback:/y;
+const RECALL_TOKEN_START = /#recall:[A-Za-z0-9_.-]+\/fallback:/y;
 
 // Replaces each complete `#recall:<id>/fallback:<value>#` token with its fallback, the way the survey
 // does at runtime when the value is missing. A token without its closing "#" is left as it is, as the
@@ -218,7 +218,7 @@ export const isEmailAddressShape = (address: string): boolean => {
 
 const RECALL_PREFIX = "#recall:";
 const RECALL_FALLBACK_MARKER = "/fallback:";
-const RECALL_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+const RECALL_ID_PATTERN = /^[A-Za-z0-9_.-]+$/;
 
 // A recipient filled in from a recall value is only known at response time. It must use the grammar the
 // survey renderer resolves (`#recall:<id>/fallback:<text>#`), and its fallback, which is what the link
