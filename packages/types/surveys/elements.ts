@@ -287,6 +287,7 @@ export const ZSurveyDateElement = ZSurveyElementBase.extend({
   html: ZI18nString.optional(),
   format: z.enum(["M-d-y", "d-M-y", "y-M-d"]),
   validation: ZValidation.optional(),
+  dateKind: z.enum(["full", "monthYear"]).optional().default("full"),
 });
 
 export type TSurveyDateElement = z.infer<typeof ZSurveyDateElement>;

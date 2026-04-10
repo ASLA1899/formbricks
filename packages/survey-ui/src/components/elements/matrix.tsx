@@ -181,7 +181,7 @@ function Matrix({
                   return (
                     <tr key={row.id} className={cn("relative", baseBgColor)} dir={dir}>
                       {/* Row label */}
-                      <th scope="row" id={rowHeaderId} className={cn("rounded-s-input p-2 align-middle")}>
+                      <th scope="row" id={rowHeaderId} className={cn("rounded-s-input p-2 text-start align-middle")}>
                         <div className="flex flex-col gap-0 leading-none">
                           <Label>{row.label}</Label>
                         </div>
@@ -242,7 +242,7 @@ function Matrix({
                     <th
                       scope="row"
                       id={`${inputId}-row-${otherRowId}-header`}
-                      className={cn("rounded-s-input p-2 align-middle")}>
+                      className={cn("rounded-s-input p-2 text-start align-middle")}>
                       <div className="flex flex-col gap-1 leading-none">
                         <Label>{otherRowLabel}</Label>
                         {otherRowSelected ? (

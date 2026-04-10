@@ -11,6 +11,8 @@ import { createI18nString, extractLanguageCodes } from "@/lib/i18n/utils";
 import { ElementFormInput } from "@/modules/survey/components/element-form-input";
 import { ValidationRulesEditor } from "@/modules/survey/editor/components/validation-rules-editor";
 import { Button } from "@/modules/ui/components/button";
+import { Label } from "@/modules/ui/components/label";
+import { OptionsSwitch } from "@/modules/ui/components/options-switch";
 
 interface IDateElementFormProps {
   localSurvey: TSurvey;
@@ -22,6 +24,19 @@ interface IDateElementFormProps {
   isStorageConfigured: boolean;
   isExternalUrlsAllowed?: boolean;
 }
+
+      <div className="mt-3">
+        <Label htmlFor="dateKind">{t("workspace.surveys.edit.date_selection")}</Label>
+        <div className="mt-2 flex items-center">
+          <OptionsSwitch
+            options={dateKindOptions}
+            currentOption={element.dateKind ?? "full"}
+            handleOptionChange={(value: "full" | "monthYear") =>
+              updateElement(elementIdx, { dateKind: value })
+            }
+          />
+        </div>
+      </div>
 
 export const DateElementForm = ({
   element,
@@ -90,6 +105,7 @@ export const DateElementForm = ({
         )}
       </div>
 
+<<<<<<< HEAD
       <ValidationRulesEditor
         elementType={element.type}
         validation={element.validation}
@@ -99,6 +115,33 @@ export const DateElementForm = ({
           });
         }}
       />
+=======
+      <div className="mt-3">
+        <Label htmlFor="dateKind">{t("environments.surveys.edit.date_selection")}</Label>
+        <div className="mt-2 flex items-center">
+          <OptionsSwitch
+            options={dateKindOptions}
+            currentOption={element.dateKind ?? "full"}
+            handleOptionChange={(value: "full" | "monthYear") =>
+              updateElement(elementIdx, { dateKind: value })
+            }
+          />
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <Label htmlFor="elementType">{t("environments.surveys.edit.date_format")}</Label>
+        <div className="mt-2 flex items-center">
+          <OptionsSwitch
+            options={element.dateKind === "monthYear" ? monthYearDateOptions : fullDateOptions}
+            currentOption={element.format}
+            handleOptionChange={(value: "M-d-y" | "d-M-y" | "y-M-d") =>
+              updateElement(elementIdx, { format: value })
+            }
+          />
+        </div>
+      </div>
+>>>>>>> b7d3ed236 (feat: add month & year only option to date question type)
     </form>
   );
 };
