@@ -16,16 +16,34 @@ type Props = {
 export const generateMetadata = async (props: Props): Promise<Metadata> => {
   const params = await props.params;
   const session = await getServerSession(authOptions);
-  const survey = await getSurvey(params.surveyId);
-  const responseCount = await getResponseCountBySurveyId(params.surveyId);
+  if (!session?.user?.id) return { title: "" };
 
-  if (session) {
-    return {
-      title: `${responseCount} Responses | ${survey?.name} Results`,
-    };
+  const surveyAcl = await prisma.survey.findUnique({
+    where: { id: params.surveyId },
+    select: {
+      id: true,
+      visibility: true,
+      createdBy: true,
+      surveyAccess: { select: { userId: true } },
+      environment: { select: { project: { select: { organizationId: true } } } },
+    },
+  });
+  if (!surveyAcl) return { title: "" };
+
+  const membership = await getSurveyAccessMembership(
+    session.user.id,
+    surveyAcl.environment.project.organizationId
+  );
+  if (!canAccessSurvey({ userId: session.user.id, survey: surveyAcl, membership })) {
+    return { title: "" };
   }
+
+  const [survey, responseCount] = await Promise.all([
+    getSurvey(params.surveyId),
+    getResponseCountBySurveyId(params.surveyId),
+  ]);
   return {
-    title: "",
+    title: `${responseCount} Responses | ${survey?.name} Results`,
   };
 };
 

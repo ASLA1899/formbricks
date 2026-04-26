@@ -129,8 +129,10 @@ export const copySurveyToOtherEnvironmentAction = authenticatedActionClient
           );
         }
 
-        // ACL: caller must have access to the source survey
-        await loadSurveyForAccess(parsedInput.surveyId, ctx.user.id);
+        // ACL: caller must have access to the source survey AND manage privilege
+        const { membership: copyMembership, accessMembership: copyAccessMembership } =
+          await loadSurveyForAccess(parsedInput.surveyId, ctx.user.id);
+        requireSurveyManagePrivilege(copyMembership, copyAccessMembership);
 
         // authorization check for source environment
         await checkAuthorizationUpdated({
