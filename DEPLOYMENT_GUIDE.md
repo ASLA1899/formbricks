@@ -13,13 +13,14 @@ Complete guide for deploying custom Formbricks builds to the Azure VM (nan01).
 
 The Azure VM (8GB RAM + 4GB swap) cannot build Formbricks Docker images. Next.js builds require 8-10GB+ memory and cause OOM kills on the VM.
 
-**Solution:** Build on your Mac, transfer the image to the VM.
+**Solution:** Build on your Mac, push to GHCR, pull on the VM.
 
 ## Prerequisites
 
 - Docker with buildx support
 - SSH access to Azure VM
 - Build secrets configured (`.secrets/` directory)
+- GHCR classic PAT with `write:packages` scope (shared with contractiq2 deploy)
 
 ### Build Secrets Setup
 
@@ -34,11 +35,15 @@ echo "postgresql://user:pass@host:5432/db" > .secrets/database_url
 echo "your-32-char-encryption-key-here" > .secrets/encryption_key
 echo "redis://host:6379" > .secrets/redis_url
 echo "" > .secrets/sentry_auth_token  # Optional
+echo "ghp_your_pat_here" > .secrets/ghcr_token  # write:packages scope
+chmod 600 .secrets/*
 ```
+
+`.secrets/` is excluded from git locally via `.git/info/exclude` (avoids conflicts with upstream's `.gitignore`).
 
 ## Standard Deployment Process
 
-### Step 1: Build Docker Image Locally
+### Step 1: Build and Push to GHCR
 
 ```bash
 cd /Users/gcohen/dev/formbricks
@@ -47,45 +52,29 @@ cd /Users/gcohen/dev/formbricks
 git checkout feature/dropdown-display-option
 git pull
 
-# Build for linux/amd64 (VM architecture)
-docker buildx build \
-  --platform linux/amd64 \
-  --secret id=database_url,src=.secrets/database_url \
-  --secret id=encryption_key,src=.secrets/encryption_key \
-  --secret id=redis_url,src=.secrets/redis_url \
-  --secret id=sentry_auth_token,src=.secrets/sentry_auth_token \
-  -t formbricks-dropdown:amd64 \
-  -f apps/web/Dockerfile \
-  --load \
-  .
+./scripts/build-and-push.sh
 ```
 
-**Build time:** ~10-15 minutes on M-series Mac
+The script logs into GHCR, runs `docker buildx build --platform linux/amd64 --push`, and tags the image as both `ghcr.io/asla1899/formbricks:latest` and `ghcr.io/asla1899/formbricks:sha-<short>` for rollback.
+
+**Build time:** ~15-20 minutes on M-series Mac (build + push)
 
 **Troubleshooting:**
 - If build fails with TypeScript errors, rebase on upstream
 - Sentry auth errors are non-fatal (source maps won't upload but build completes)
+- For a fresh build without cache, set `DOCKER_BUILDKIT_NO_CACHE=1` before running the script, or temporarily add `--no-cache` to the `docker buildx build` line in `scripts/build-and-push.sh`
 
-### Step 2: Transfer and Deploy to VM
-
-**One-liner deployment:**
+### Step 2: Deploy on the VM
 
 ```bash
-docker save formbricks-dropdown:amd64 | gzip | \
-  ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
-  "gunzip | docker load && \
-   docker tag formbricks-dropdown:amd64 formbricks-local:dropdown-fix-v2-amd64 && \
-   cd /opt/formbricks && \
-   docker compose down formbricks && \
-   docker compose up -d formbricks"
+ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
+  "cd /opt/formbricks && docker compose pull formbricks && docker compose up -d formbricks"
 ```
 
 **What this does:**
-1. Saves and compresses the image (~500MB)
-2. Transfers via SSH
-3. Loads into Docker on VM
-4. Tags with the correct name expected by docker-compose.yml
-5. Restarts Formbricks container
+1. VM's docker daemon (pre-authenticated via `/opt/formbricks/.secrets/ghcr_token`, a read-only PAT) pulls `ghcr.io/asla1899/formbricks:latest`
+2. `docker compose up -d` recreates the formbricks container with the new image
+3. Postgres/Redis/MinIO sidecars are left alone (they're stateful)
 
 ### Step 3: Apply Database Schema Changes (If Needed)
 
@@ -119,33 +108,16 @@ curl -s -o /dev/null -w "%{http_code}" https://surveys.asla.org/
 
 ### Docker Image Naming
 
-The VM's `docker-compose.yml` expects the image to be named:
+The VM's `docker-compose.yml` references:
 ```
-formbricks-local:dropdown-fix-v2-amd64
+ghcr.io/asla1899/formbricks:latest
 ```
 
-**Always tag your image** with this name after loading it on the VM:
-```bash
-docker tag formbricks-dropdown:amd64 formbricks-local:dropdown-fix-v2-amd64
-```
+`build-and-push.sh` always tags both `:latest` and `:sha-<short>`, so `docker compose pull` picks up the new `:latest` on every deploy.
 
 ### Cache Issues
 
-If you make code changes but the deployed container doesn't reflect them:
-
-```bash
-# Rebuild with --no-cache
-docker buildx build --no-cache \
-  --platform linux/amd64 \
-  --secret id=database_url,src=.secrets/database_url \
-  --secret id=encryption_key,src=.secrets/encryption_key \
-  --secret id=redis_url,src=.secrets/redis_url \
-  --secret id=sentry_auth_token,src=.secrets/sentry_auth_token \
-  -t formbricks-dropdown:amd64 \
-  -f apps/web/Dockerfile \
-  --load \
-  .
-```
+If you make code changes but the deployed container doesn't reflect them, rebuild without cache by temporarily editing `scripts/build-and-push.sh` to add `--no-cache` to the `docker buildx build` invocation. Turborepo's internal cache can also bypass this — the Dockerfile uses a fresh checkout, so a new git SHA should always produce fresh output.
 
 ### Database Migrations
 
@@ -182,7 +154,7 @@ ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
 ```yaml
 services:
   formbricks:
-    image: formbricks-local:dropdown-fix-v2-amd64
+    image: ghcr.io/asla1899/formbricks:latest
     container_name: formbricks
     restart: unless-stopped
     depends_on:
@@ -209,15 +181,13 @@ ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
 # - Port conflicts (unlikely with Caddy reverse proxy)
 ```
 
-**Rollback to previous version:**
+**Rollback to a previous SHA:**
 ```bash
-# List available images
+# Pull the known-good SHA and retag it as :latest, then bounce the container
 ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
-  "docker images | grep formbricks"
-
-# Update docker-compose.yml to use previous image, then:
-ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
-  "cd /opt/formbricks && docker compose up -d formbricks"
+  "sudo docker pull ghcr.io/asla1899/formbricks:sha-<good-sha> && \
+   sudo docker tag ghcr.io/asla1899/formbricks:sha-<good-sha> ghcr.io/asla1899/formbricks:latest && \
+   cd /opt/formbricks && sudo docker compose up -d formbricks"
 ```
 
 **Clean up old images:**
@@ -256,16 +226,15 @@ Use this for deployments:
 Pre-deployment:
 [ ] Code committed and pushed to origin
 [ ] On correct branch (feature/dropdown-display-option)
-[ ] Build secrets configured in .secrets/
+[ ] Build secrets configured in .secrets/ (including ghcr_token)
 
-Build:
-[ ] Docker buildx build completed successfully
-[ ] Image tagged: formbricks-dropdown:amd64
+Build + Push:
+[ ] ./scripts/build-and-push.sh completed successfully
+[ ] Image pushed as :latest and :sha-<short> to ghcr.io/asla1899/formbricks
 
 Deploy:
-[ ] Image transferred to VM
-[ ] Image tagged: formbricks-local:dropdown-fix-v2-amd64
-[ ] Container restarted
+[ ] VM pulled the new image (docker compose pull formbricks)
+[ ] Container recreated (docker compose up -d formbricks)
 
 Post-deployment:
 [ ] Database schema applied (if schema changes)
@@ -275,7 +244,6 @@ Post-deployment:
 [ ] Feature tested in browser
 
 Cleanup:
-[ ] Old local images removed (docker image prune)
 [ ] Deployment documented in changelog/notes
 ```
 
@@ -315,13 +283,17 @@ ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
 ### Deployment Issues
 
 **Problem:** Container shows old code after deployment
-**Solution:** Rebuild with `--no-cache` flag
+**Solution:** Confirm the image SHA changed on GHCR (rebuild with `--no-cache` if cache was stale); verify VM ran `docker compose pull formbricks` before `up -d`
 
 **Problem:** Database table doesn't exist
 **Solution:** Run `prisma db push` after deploying
 
-**Problem:** Image tag mismatch
-**Solution:** Ensure image is tagged `formbricks-local:dropdown-fix-v2-amd64`
+**Problem:** `docker compose pull` returns `unauthorized` on VM
+**Solution:** VM PAT expired. Re-login with the refreshed token:
+```bash
+ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
+  "sudo cat /opt/formbricks/.secrets/ghcr_token | sudo docker login ghcr.io -u asla1899 --password-stdin"
+```
 
 ### Runtime Issues
 
@@ -343,24 +315,12 @@ ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
 ## Quick Reference Commands
 
 ```bash
-# Full deployment (one command)
-cd /Users/gcohen/dev/formbricks && \
-docker buildx build --platform linux/amd64 \
-  --secret id=database_url,src=.secrets/database_url \
-  --secret id=encryption_key,src=.secrets/encryption_key \
-  --secret id=redis_url,src=.secrets/redis_url \
-  --secret id=sentry_auth_token,src=.secrets/sentry_auth_token \
-  -t formbricks-dropdown:amd64 \
-  -f apps/web/Dockerfile --load . && \
-docker save formbricks-dropdown:amd64 | gzip | \
-  ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
-  "gunzip | docker load && \
-   docker tag formbricks-dropdown:amd64 formbricks-local:dropdown-fix-v2-amd64 && \
-   cd /opt/formbricks && \
-   docker compose down formbricks && \
-   docker compose up -d formbricks"
+# Full deployment: build + push locally, then pull + restart on VM
+cd /Users/gcohen/dev/formbricks && ./scripts/build-and-push.sh && \
+ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
+  "cd /opt/formbricks && docker compose pull formbricks && docker compose up -d formbricks"
 
-# Quick restart (no rebuild)
+# Quick restart (no rebuild, no pull)
 ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
   "cd /opt/formbricks && docker compose restart formbricks"
 
@@ -401,6 +361,6 @@ day will not cause duplicate emails.
 
 ---
 
-**Last Updated:** 2026-02-09
+**Last Updated:** 2026-04-23
 **Maintainer:** Greg Cohen
 **VM:** nan01 (20.185.219.8:2222)

@@ -1,5 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# brainstorming artifacts
+.superpowers/
+
 # dependencies
 **/node_modules
 .pnp
@@ -63,3 +66,7 @@ packages/ios/FormbricksSDK/FormbricksSDK.xcodeproj/project.xcworkspace/xcuserdat
 .cursorrules
 i18n.cache
 .env.docker
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
