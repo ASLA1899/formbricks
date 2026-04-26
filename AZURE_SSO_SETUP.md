@@ -206,9 +206,9 @@ Fill these in after creating the app, then paste into 1Password / share with the
 | Item | Value |
 |---|---|
 | Display name | `Formbricks Surveys` |
-| Application (client) ID | `<fill in from Azure Overview>` |
-| Object ID | `<fill in from Azure Overview>` |
-| Directory (tenant) ID | `<ASLA's Entra tenant UUID>` |
+| Application (client) ID | `11b61ed3-c1fd-4a34-b634-1d17f9189c64` |
+| Object ID | `266996a9-72ba-4a05-9127-667d3e969338` |
+| Directory (tenant) ID | `93c82f7f-a521-4771-b392-dc2fd726d446` |
 | Supported account types | Single tenant (ASLA only) |
 | Redirect URI | `https://surveys.asla.org/api/auth/callback/azure-ad` |
 
@@ -222,9 +222,9 @@ Fill these in after creating the app, then paste into 1Password / share with the
 ### `.env` block to add on the VM
 
 ```bash
-AZUREAD_CLIENT_ID=<application-client-id>
+AZUREAD_CLIENT_ID=11b61ed3-c1fd-4a34-b634-1d17f9189c64
 AZUREAD_CLIENT_SECRET=<client-secret-value-from-1password>
-AZUREAD_TENANT_ID=<asla-directory-tenant-id>
+AZUREAD_TENANT_ID=93c82f7f-a521-4771-b392-dc2fd726d446
 ```
 
 ---
