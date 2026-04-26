@@ -1,8 +1,8 @@
 "use client";
 
 import * as Collapsible from "@radix-ui/react-collapsible";
-import { MailsIcon, SendIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { MailsIcon, SendIcon, UploadIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import type { TSegment } from "@formbricks/types/segment";
 import {
@@ -57,6 +57,103 @@ interface RecipientsCardProps {
   segments: TSegment[];
 }
 
+// Minimal RFC-4180-ish CSV parser. Handles quoted fields (with embedded commas
+// and "" escapes), and both \n and \r\n line endings. We avoid a library dep
+// because the input is small (invitation lists, not data warehouses).
+const parseCsv = (text: string): string[][] => {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(field);
+      field = "";
+      if (row.some((c) => c.trim() !== "")) rows.push(row);
+      row = [];
+    } else {
+      field += ch;
+    }
+  }
+  if (field !== "" || row.length > 0) {
+    row.push(field);
+    if (row.some((c) => c.trim() !== "")) rows.push(row);
+  }
+  return rows;
+};
+
+const HEADER_ALIASES: Record<"email" | "firstName" | "lastName", string[]> = {
+  email: ["email", "e-mail", "emailaddress", "email_address"],
+  firstName: ["firstname", "first_name", "first", "givenname", "given_name", "fname"],
+  lastName: ["lastname", "last_name", "last", "surname", "familyname", "family_name", "lname"],
+};
+
+// Parses CSV text into recipients. Auto-detects a header row when any cell in
+// the first row matches a known alias; otherwise treats columns positionally
+// as [email, firstName, lastName].
+const csvToRecipients = (csv: string): TManualRecipient[] => {
+  const rows = parseCsv(csv);
+  if (rows.length === 0) return [];
+
+  const norm = (s: string) =>
+    s
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]/g, "");
+  const firstRow = rows[0].map(norm);
+  const looksLikeHeader = firstRow.some((cell) =>
+    Object.values(HEADER_ALIASES).some((aliases) => aliases.map(norm).includes(cell))
+  );
+
+  let emailIdx = 0;
+  let firstIdx = 1;
+  let lastIdx = 2;
+  let dataStart = 0;
+
+  if (looksLikeHeader) {
+    dataStart = 1;
+    const findIdx = (aliases: string[]) => firstRow.findIndex((cell) => aliases.map(norm).includes(cell));
+    emailIdx = findIdx(HEADER_ALIASES.email);
+    firstIdx = findIdx(HEADER_ALIASES.firstName);
+    lastIdx = findIdx(HEADER_ALIASES.lastName);
+    if (emailIdx === -1) emailIdx = 0;
+  }
+
+  return rows
+    .slice(dataStart)
+    .map((cols) => ({
+      email: (cols[emailIdx] ?? "").trim(),
+      firstName: firstIdx >= 0 ? (cols[firstIdx] ?? "").trim() || undefined : undefined,
+      lastName: lastIdx >= 0 ? (cols[lastIdx] ?? "").trim() || undefined : undefined,
+    }))
+    .filter((r) => /.+@.+\..+/.test(r.email));
+};
+
+const recipientsToTextarea = (recipients: TManualRecipient[]): string =>
+  recipients
+    .map((r) => [r.email, r.firstName ?? "", r.lastName ?? ""].join(", ").replace(/(,\s*)+$/, ""))
+    .join("\n");
+
 const emptyDraft: TInvitationConfigDraft = {
   audience: { source: "segment", segmentId: "" },
   reminderSchedule: { enabled: false, daysAfterInvite: [3, 7], maxReminders: 2 },
@@ -88,12 +185,34 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
   const [manualListRaw, setManualListRaw] = useState<string>(() => {
     const existing = localSurvey.invitationConfig as TInvitationConfigDraft | null | undefined;
     if (existing?.audience.source !== "manualList") return "";
-    return existing.audience.recipients
-      .map((r) =>
-        [r.email, r.firstName ?? "", r.lastName ?? ""].join(", ").replace(/(,\s*)+$/, "")
-      )
-      .join("\n");
+    return recipientsToTextarea(existing.audience.recipients);
   });
+
+  const csvInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleCsvFile = async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed = csvToRecipients(text);
+      if (parsed.length === 0) {
+        toast.error("No valid emails found in CSV");
+        return;
+      }
+      // Merge with whatever is already in the textarea, dedupe by email
+      // (case-insensitive), new entries win on name fields.
+      const existing = audience.source === "manualList" ? audience.recipients : [];
+      const byEmail = new Map<string, TManualRecipient>();
+      for (const r of existing) byEmail.set(r.email.toLowerCase(), r);
+      for (const r of parsed) byEmail.set(r.email.toLowerCase(), r);
+      const merged = Array.from(byEmail.values());
+
+      setManualListRaw(recipientsToTextarea(merged));
+      updateAudience({ source: "manualList", recipients: merged });
+      toast.success(`Imported ${parsed.length} recipient${parsed.length === 1 ? "" : "s"} from CSV`);
+    } catch {
+      toast.error("Could not read CSV file");
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -257,7 +376,31 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
 
             {audience.source === "manualList" && (
               <div className="space-y-2">
-                <Label htmlFor="manualEmails">Recipients (email, first name, last name)</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="manualEmails">Recipients (email, first name, last name)</Label>
+                  <div>
+                    <input
+                      ref={csvInputRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleCsvFile(file);
+                        // Reset so selecting the same file again re-triggers change.
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => csvInputRef.current?.click()}>
+                      <UploadIcon className="mr-1 h-3 w-3" />
+                      Upload CSV
+                    </Button>
+                  </div>
+                </div>
                 <textarea
                   id="manualEmails"
                   className="min-h-28 w-full rounded-md border border-slate-300 bg-white p-2 font-mono text-sm"
@@ -281,13 +424,12 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
                       .filter((r) => /.+@.+\..+/.test(r.email));
                     updateAudience({ source: "manualList", recipients });
                   }}
-                  placeholder={
-                    "alice@example.com\nbob@example.com, Bob\ncarol@example.com, Carol, Smith"
-                  }
+                  placeholder={"alice@example.com\nbob@example.com, Bob\ncarol@example.com, Carol, Smith"}
                 />
                 <p className="text-xs text-slate-500">
-                  One recipient per line. Format: <code>email, firstName, lastName</code> (first and
-                  last names are optional). {audience.recipients.length} valid recipient
+                  Type one recipient per line (<code>email, firstName, lastName</code>) or upload a CSV with
+                  columns like <code>email, firstName, lastName</code> (header row optional; column order
+                  auto-detected). {audience.recipients.length} valid recipient
                   {audience.recipients.length === 1 ? "" : "s"}.
                 </p>
               </div>
