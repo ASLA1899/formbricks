@@ -121,7 +121,7 @@ describe("getTeams", () => {
     vi.clearAllMocks();
   });
   test("returns userTeams and otherTeams", async () => {
-    vi.mocked(prisma.membership.findUnique).mockResolvedValueOnce(mockMembership);
+    vi.mocked(prisma.membership.findUnique).mockResolvedValueOnce(mockMembership as any);
     vi.mocked(prisma.team.findMany).mockResolvedValueOnce(mockUserTeams);
     vi.mocked(prisma.team.findMany).mockResolvedValueOnce(mockOtherTeams);
     const result = await getTeams("u1", "org1");

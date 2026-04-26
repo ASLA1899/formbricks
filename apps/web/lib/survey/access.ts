@@ -1,5 +1,6 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
+import { prisma } from "@formbricks/database";
 
 export type SurveyAccessSurvey = {
   id: string;
@@ -9,6 +10,17 @@ export type SurveyAccessSurvey = {
 };
 
 export type SurveyAccessMembership = { userId: string; surveyAdmin: boolean } | null;
+
+export const getSurveyAccessMembership = async (
+  userId: string,
+  organizationId: string
+): Promise<SurveyAccessMembership> => {
+  const row = await prisma.membership.findUnique({
+    where: { userId_organizationId: { userId, organizationId } },
+    select: { userId: true, surveyAdmin: true },
+  });
+  return row;
+};
 
 export const canAccessSurvey = ({
   userId,

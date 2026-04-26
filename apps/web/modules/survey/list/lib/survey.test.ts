@@ -130,6 +130,15 @@ const environmentId = "env_1";
 const surveyId = "survey_1";
 const userId = "user_1";
 
+const adminCtx = {
+  userId,
+  membership: { userId, surveyAdmin: true },
+} as const;
+const memberCtx = {
+  userId,
+  membership: { userId, surveyAdmin: false },
+} as const;
+
 const mockSurveyPrisma = {
   id: surveyId,
   createdAt: new Date(),
@@ -148,27 +157,43 @@ describe("getSurveyCount", () => {
     resetMocks();
   });
 
-  test("should return survey count successfully", async () => {
+  test("surveyAdmin sees count of all surveys (no ACL filter)", async () => {
     vi.mocked(prisma.survey.count).mockResolvedValue(5);
-    const count = await getSurveyCount(environmentId);
+    const count = await getSurveyCount(environmentId, adminCtx);
     expect(count).toBe(5);
     expect(prisma.survey.count).toHaveBeenCalledWith({
-      where: { environmentId },
+      where: { AND: [{ environmentId }, {}] },
     });
     expect(validateInputs).toHaveBeenCalledWith([environmentId, expect.any(Object)]);
+  });
+
+  test("regular member count is filtered by access OR clause", async () => {
+    vi.mocked(prisma.survey.count).mockResolvedValue(2);
+    const count = await getSurveyCount(environmentId, memberCtx);
+    expect(count).toBe(2);
+    expect(prisma.survey.count).toHaveBeenCalledWith({
+      where: {
+        AND: [
+          { environmentId },
+          {
+            OR: [{ visibility: "public" }, { createdBy: userId }, { surveyAccess: { some: { userId } } }],
+          },
+        ],
+      },
+    });
   });
 
   test("should throw DatabaseError on Prisma error", async () => {
     const prismaError = makePrismaKnownError();
     vi.mocked(prisma.survey.count).mockRejectedValue(prismaError);
-    await expect(getSurveyCount(environmentId)).rejects.toThrow(DatabaseError);
+    await expect(getSurveyCount(environmentId, adminCtx)).rejects.toThrow(DatabaseError);
     expect(logger.error).toHaveBeenCalledWith(prismaError, "Error getting survey count");
   });
 
   test("should rethrow unknown error", async () => {
     const unknownError = new Error("Unknown error");
     vi.mocked(prisma.survey.count).mockRejectedValue(unknownError);
-    await expect(getSurveyCount(environmentId)).rejects.toThrow(unknownError);
+    await expect(getSurveyCount(environmentId, adminCtx)).rejects.toThrow(unknownError);
   });
 });
 
@@ -224,13 +249,13 @@ describe("getSurveys", () => {
     responseCount: s._count.responses,
   }));
 
-  test("should return surveys with default parameters", async () => {
+  test("surveyAdmin sees all surveys (no ACL filter)", async () => {
     vi.mocked(prisma.survey.findMany).mockResolvedValue(mockPrismaSurveys as any);
-    const surveys = await getSurveys(environmentId);
+    const surveys = await getSurveys(environmentId, adminCtx);
 
     expect(surveys).toEqual(expectedSurveys);
     expect(prisma.survey.findMany).toHaveBeenCalledWith({
-      where: { environmentId, ...buildWhereClause() },
+      where: { AND: [{ environmentId, ...buildWhereClause() }, {}] },
       select: surveySelect,
       orderBy: buildOrderByClause(),
       take: undefined,
@@ -238,13 +263,20 @@ describe("getSurveys", () => {
     });
   });
 
-  test("should return surveys with limit and offset", async () => {
+  test("regular member sees only accessible surveys", async () => {
     vi.mocked(prisma.survey.findMany).mockResolvedValue([mockPrismaSurveys[0]] as any);
-    const surveys = await getSurveys(environmentId, 1, 1);
+    const surveys = await getSurveys(environmentId, memberCtx, 1, 1);
 
     expect(surveys).toEqual([expectedSurveys[0]]);
     expect(prisma.survey.findMany).toHaveBeenCalledWith({
-      where: { environmentId, ...buildWhereClause() },
+      where: {
+        AND: [
+          { environmentId, ...buildWhereClause() },
+          {
+            OR: [{ visibility: "public" }, { createdBy: userId }, { surveyAccess: { some: { userId } } }],
+          },
+        ],
+      },
       select: surveySelect,
       orderBy: buildOrderByClause(),
       take: 1,
@@ -258,14 +290,14 @@ describe("getSurveys", () => {
     vi.mocked(buildOrderByClause).mockReturnValue([{ createdAt: "desc" }]); // Mock specific return
     vi.mocked(prisma.survey.findMany).mockResolvedValue(mockPrismaSurveys as any);
 
-    const surveys = await getSurveys(environmentId, undefined, undefined, filterCriteria);
+    const surveys = await getSurveys(environmentId, adminCtx, undefined, undefined, filterCriteria);
 
     expect(surveys).toEqual(expectedSurveys);
     expect(buildWhereClause).toHaveBeenCalledWith(filterCriteria);
     expect(buildOrderByClause).toHaveBeenCalledWith("createdAt");
     expect(prisma.survey.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { environmentId, AND: [{ name: { contains: "Test" } }] }, // Check with correct structure
+        where: { AND: [{ environmentId, AND: [{ name: { contains: "Test" } }] }, {}] },
         orderBy: [{ createdAt: "desc" }], // Check the mocked order by
       })
     );
@@ -274,14 +306,14 @@ describe("getSurveys", () => {
   test("should throw DatabaseError on Prisma error", async () => {
     const prismaError = makePrismaKnownError();
     vi.mocked(prisma.survey.findMany).mockRejectedValue(prismaError);
-    await expect(getSurveys(environmentId)).rejects.toThrow(DatabaseError);
+    await expect(getSurveys(environmentId, adminCtx)).rejects.toThrow(DatabaseError);
     expect(logger.error).toHaveBeenCalledWith(prismaError, "Error getting surveys");
   });
 
   test("should rethrow unknown error", async () => {
     const unknownError = new Error("Unknown error");
     vi.mocked(prisma.survey.findMany).mockRejectedValue(unknownError);
-    await expect(getSurveys(environmentId)).rejects.toThrow(unknownError);
+    await expect(getSurveys(environmentId, adminCtx)).rejects.toThrow(unknownError);
   });
 });
 
@@ -306,27 +338,29 @@ describe("getSurveysSortedByRelevance", () => {
   const expectedInProgressSurvey: TSurvey = { ...mockInProgressPrisma, responseCount: 3 };
   const expectedOtherSurvey: TSurvey = { ...mockOtherPrisma, responseCount: 5 };
 
-  test("should fetch inProgress surveys first, then others if limit not met", async () => {
+  test("should fetch inProgress surveys first, then others if limit not met (admin)", async () => {
     vi.mocked(prisma.survey.count).mockResolvedValue(1); // 1 inProgress survey
     vi.mocked(prisma.survey.findMany)
       .mockResolvedValueOnce([mockInProgressPrisma] as any) // In-progress surveys
       .mockResolvedValueOnce([mockOtherPrisma] as any); // Additional surveys
 
-    const surveys = await getSurveysSortedByRelevance(environmentId, 2, 0);
+    const surveys = await getSurveysSortedByRelevance(environmentId, adminCtx, 2, 0);
 
     expect(surveys).toEqual([expectedInProgressSurvey, expectedOtherSurvey]);
     expect(prisma.survey.count).toHaveBeenCalledWith({
-      where: { environmentId, status: "inProgress", ...buildWhereClause() },
+      where: { AND: [{ environmentId, status: "inProgress", ...buildWhereClause() }, {}] },
     });
     expect(prisma.survey.findMany).toHaveBeenNthCalledWith(1, {
-      where: { environmentId, status: "inProgress", ...buildWhereClause() },
+      where: { AND: [{ environmentId, status: "inProgress", ...buildWhereClause() }, {}] },
       select: surveySelect,
       orderBy: buildOrderByClause("updatedAt"),
       take: 2,
       skip: 0,
     });
     expect(prisma.survey.findMany).toHaveBeenNthCalledWith(2, {
-      where: { environmentId, status: { not: "inProgress" }, ...buildWhereClause() },
+      where: {
+        AND: [{ environmentId, status: { not: "inProgress" }, ...buildWhereClause() }, {}],
+      },
       select: surveySelect,
       orderBy: buildOrderByClause("updatedAt"),
       take: 1,
@@ -334,11 +368,26 @@ describe("getSurveysSortedByRelevance", () => {
     });
   });
 
+  test("regular member sortedByRelevance applies ACL filter", async () => {
+    vi.mocked(prisma.survey.count).mockResolvedValue(0);
+    vi.mocked(prisma.survey.findMany)
+      .mockResolvedValueOnce([] as any)
+      .mockResolvedValueOnce([] as any);
+
+    await getSurveysSortedByRelevance(environmentId, memberCtx, 1, 0);
+    const aclFilter = {
+      OR: [{ visibility: "public" }, { createdBy: userId }, { surveyAccess: { some: { userId } } }],
+    };
+    expect(prisma.survey.count).toHaveBeenCalledWith({
+      where: { AND: [{ environmentId, status: "inProgress", ...buildWhereClause() }, aclFilter] },
+    });
+  });
+
   test("should only fetch inProgress surveys if limit is met", async () => {
     vi.mocked(prisma.survey.count).mockResolvedValue(1);
     vi.mocked(prisma.survey.findMany).mockResolvedValueOnce([mockInProgressPrisma] as any);
 
-    const surveys = await getSurveysSortedByRelevance(environmentId, 1, 0);
+    const surveys = await getSurveysSortedByRelevance(environmentId, adminCtx, 1, 0);
     expect(surveys).toEqual([expectedInProgressSurvey]);
     expect(prisma.survey.findMany).toHaveBeenCalledTimes(1);
   });
@@ -346,19 +395,19 @@ describe("getSurveysSortedByRelevance", () => {
   test("should throw DatabaseError on Prisma error", async () => {
     const prismaError = makePrismaKnownError();
     vi.mocked(prisma.survey.count).mockRejectedValue(prismaError);
-    await expect(getSurveysSortedByRelevance(environmentId)).rejects.toThrow(DatabaseError);
+    await expect(getSurveysSortedByRelevance(environmentId, adminCtx)).rejects.toThrow(DatabaseError);
     expect(logger.error).toHaveBeenCalledWith(prismaError, "Error getting surveys sorted by relevance");
 
     resetMocks(); // Reset for the next part of the test
     vi.mocked(prisma.survey.count).mockResolvedValue(0); // Make count succeed
     vi.mocked(prisma.survey.findMany).mockRejectedValue(prismaError); // Error on findMany
-    await expect(getSurveysSortedByRelevance(environmentId)).rejects.toThrow(DatabaseError);
+    await expect(getSurveysSortedByRelevance(environmentId, adminCtx)).rejects.toThrow(DatabaseError);
   });
 
   test("should rethrow unknown error", async () => {
     const unknownError = new Error("Unknown error");
     vi.mocked(prisma.survey.count).mockRejectedValue(unknownError);
-    await expect(getSurveysSortedByRelevance(environmentId)).rejects.toThrow(unknownError);
+    await expect(getSurveysSortedByRelevance(environmentId, adminCtx)).rejects.toThrow(unknownError);
   });
 });
 

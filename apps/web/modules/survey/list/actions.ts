@@ -3,6 +3,8 @@
 import { z } from "zod";
 import { OperationNotAllowedError, ResourceNotFoundError } from "@formbricks/types/errors";
 import { ZSurveyFilterCriteria } from "@formbricks/types/surveys/types";
+import { getSurveyAccessMembership } from "@/lib/survey/access";
+import { getSurvey as getFullSurveyService } from "@/lib/survey/service";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
 import { checkAuthorizationUpdated } from "@/lib/utils/action-client/action-client-middleware";
 import { AuthenticatedActionClientCtx } from "@/lib/utils/action-client/types/context";
@@ -17,7 +19,6 @@ import { generateSurveySingleUseIds } from "@/lib/utils/single-use-surveys";
 import { withAuditLogging } from "@/modules/ee/audit-logs/lib/handler";
 import { getProjectIdIfEnvironmentExists } from "@/modules/survey/list/lib/environment";
 import { getUserProjects } from "@/modules/survey/list/lib/project";
-import { getSurvey as getFullSurveyService } from "@/lib/survey/service";
 import {
   copySurveyToOtherEnvironment,
   deleteSurvey,
@@ -283,8 +284,12 @@ export const getSurveysAction = authenticatedActionClient
       ],
     });
 
+    const organizationId = await getOrganizationIdFromEnvironmentId(parsedInput.environmentId);
+    const membership = await getSurveyAccessMembership(ctx.user.id, organizationId);
+
     return await getSurveys(
       parsedInput.environmentId,
+      { userId: ctx.user.id, membership },
       parsedInput.limit,
       parsedInput.offset,
       parsedInput.filterCriteria

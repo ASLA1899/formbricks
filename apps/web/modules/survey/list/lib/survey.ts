@@ -8,6 +8,7 @@ import { logger } from "@formbricks/logger";
 import { DatabaseError, InvalidInputError, ResourceNotFoundError } from "@formbricks/types/errors";
 import { TSurveyFilterCriteria } from "@formbricks/types/surveys/types";
 import { getOrganizationByEnvironmentId } from "@/lib/organization/service";
+import { type SurveyAccessMembership, getSurveyAccessWhere } from "@/lib/survey/access";
 import { checkForInvalidMediaInBlocks } from "@/lib/survey/utils";
 import { validateInputs } from "@/lib/utils/validate";
 import { getIsQuotasEnabled } from "@/modules/ee/license-check/lib/utils";
@@ -36,9 +37,15 @@ export const surveySelect: Prisma.SurveySelect = {
   },
 };
 
+export type SurveyAccessContext = {
+  userId: string;
+  membership: SurveyAccessMembership;
+};
+
 export const getSurveys = reactCache(
   async (
     environmentId: string,
+    accessContext: SurveyAccessContext,
     limit?: number,
     offset?: number,
     filterCriteria?: TSurveyFilterCriteria
@@ -46,14 +53,19 @@ export const getSurveys = reactCache(
     try {
       if (filterCriteria?.sortBy === "relevance") {
         // Call the sortByRelevance function
-        return await getSurveysSortedByRelevance(environmentId, limit, offset ?? 0, filterCriteria);
+        return await getSurveysSortedByRelevance(
+          environmentId,
+          accessContext,
+          limit,
+          offset ?? 0,
+          filterCriteria
+        );
       }
 
       // Fetch surveys normally with pagination and include response count
       const surveysPrisma = await prisma.survey.findMany({
         where: {
-          environmentId,
-          ...buildWhereClause(filterCriteria),
+          AND: [{ environmentId, ...buildWhereClause(filterCriteria) }, getSurveyAccessWhere(accessContext)],
         },
         select: surveySelect,
         orderBy: buildOrderByClause(filterCriteria?.sortBy),
@@ -80,18 +92,25 @@ export const getSurveys = reactCache(
 export const getSurveysSortedByRelevance = reactCache(
   async (
     environmentId: string,
+    accessContext: SurveyAccessContext,
     limit?: number,
     offset?: number,
     filterCriteria?: TSurveyFilterCriteria
   ): Promise<TSurvey[]> => {
     try {
       let surveys: TSurvey[] = [];
+      const accessWhere = getSurveyAccessWhere(accessContext);
 
       const inProgressSurveyCount = await prisma.survey.count({
         where: {
-          environmentId,
-          status: "inProgress",
-          ...buildWhereClause(filterCriteria),
+          AND: [
+            {
+              environmentId,
+              status: "inProgress",
+              ...buildWhereClause(filterCriteria),
+            },
+            accessWhere,
+          ],
         },
       });
 
@@ -101,9 +120,14 @@ export const getSurveysSortedByRelevance = reactCache(
           ? []
           : await prisma.survey.findMany({
               where: {
-                environmentId,
-                status: "inProgress",
-                ...buildWhereClause(filterCriteria),
+                AND: [
+                  {
+                    environmentId,
+                    status: "inProgress",
+                    ...buildWhereClause(filterCriteria),
+                  },
+                  accessWhere,
+                ],
               },
               select: surveySelect,
               orderBy: buildOrderByClause("updatedAt"),
@@ -124,9 +148,14 @@ export const getSurveysSortedByRelevance = reactCache(
         const newOffset = Math.max(0, offset - inProgressSurveyCount);
         const additionalSurveys = await prisma.survey.findMany({
           where: {
-            environmentId,
-            status: { not: "inProgress" },
-            ...buildWhereClause(filterCriteria),
+            AND: [
+              {
+                environmentId,
+                status: { not: "inProgress" },
+                ...buildWhereClause(filterCriteria),
+              },
+              accessWhere,
+            ],
           },
           select: surveySelect,
           orderBy: buildOrderByClause("updatedAt"),
@@ -602,22 +631,24 @@ export const copySurveyToOtherEnvironment = async (
   }
 };
 
-export const getSurveyCount = reactCache(async (environmentId: string): Promise<number> => {
-  validateInputs([environmentId, z.string().cuid2()]);
-  try {
-    const surveyCount = await prisma.survey.count({
-      where: {
-        environmentId: environmentId,
-      },
-    });
+export const getSurveyCount = reactCache(
+  async (environmentId: string, accessContext: SurveyAccessContext): Promise<number> => {
+    validateInputs([environmentId, z.string().cuid2()]);
+    try {
+      const surveyCount = await prisma.survey.count({
+        where: {
+          AND: [{ environmentId }, getSurveyAccessWhere(accessContext)],
+        },
+      });
 
-    return surveyCount;
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      logger.error(error, "Error getting survey count");
-      throw new DatabaseError(error.message);
+      return surveyCount;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        logger.error(error, "Error getting survey count");
+        throw new DatabaseError(error.message);
+      }
+
+      throw error;
     }
-
-    throw error;
   }
-});
+);

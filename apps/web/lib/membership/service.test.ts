@@ -25,14 +25,15 @@ describe("Membership Service", () => {
     const mockOrgId = "org123";
 
     test("returns membership when found", async () => {
-      const mockMembership: TMembership = {
+      const mockMembership = {
         organizationId: mockOrgId,
         userId: mockUserId,
         accepted: true,
-        role: "owner",
+        role: "owner" as const,
+        surveyAdmin: false,
       };
 
-      vi.mocked(prisma.membership.findUnique).mockResolvedValue(mockMembership);
+      vi.mocked(prisma.membership.findUnique).mockResolvedValue(mockMembership as any);
 
       const result = await getMembershipByUserIdOrganizationId(mockUserId, mockOrgId);
       expect(result).toEqual(mockMembership);

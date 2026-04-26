@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DEFAULT_LOCALE, SURVEYS_PER_PAGE } from "@/lib/constants";
 import { getPublicDomain } from "@/lib/getPublicUrl";
+import { getSurveyAccessMembership } from "@/lib/survey/access";
 import { getUserLocale } from "@/lib/user/service";
 import { getTranslate } from "@/lingodotdev/server";
 import { getEnvironmentAuth } from "@/modules/environments/lib/utils";
@@ -36,13 +37,20 @@ export const SurveysPage = async ({ params: paramsProps }: SurveyTemplateProps) 
     throw new Error(t("common.workspace_not_found"));
   }
 
-  const { session, isBilling, environment, isReadOnly } = await getEnvironmentAuth(params.environmentId);
+  const { session, isBilling, environment, isReadOnly, organization } = await getEnvironmentAuth(
+    params.environmentId
+  );
 
   if (isBilling) {
     return redirect(`/environments/${params.environmentId}/settings/billing`);
   }
 
-  const surveyCount = await getSurveyCount(params.environmentId);
+  const surveyAccessMembership = await getSurveyAccessMembership(session.user.id, organization.id);
+
+  const surveyCount = await getSurveyCount(params.environmentId, {
+    userId: session.user.id,
+    membership: surveyAccessMembership,
+  });
 
   const currentProjectChannel = project.config.channel ?? null;
   const locale = (await getUserLocale(session.user.id)) ?? DEFAULT_LOCALE;
