@@ -25,7 +25,9 @@ export const EditMemberships = async ({
   const members = await getMembershipByOrganizationId(organization.id);
   const invites = await getInvitesByOrganizationId(organization.id);
   const callerSurveyAdminRow = await getSurveyAccessMembership(currentUserId, organization.id);
-  const callerCanManageSurveyAdmin = role === "owner" || callerSurveyAdminRow?.surveyAdmin === true;
+  // OrganizationRole is unreliable in non-EE (every member defaults to "owner"),
+  // so only existing surveyAdmins can promote/demote others. Bootstrap is via SQL.
+  const callerCanManageSurveyAdmin = callerSurveyAdminRow?.surveyAdmin === true;
   const t = await getTranslate();
 
   return (

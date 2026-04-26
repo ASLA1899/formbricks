@@ -8,7 +8,6 @@ import {
   ResourceNotFoundError,
 } from "@formbricks/types/errors";
 import { ZSurveyFilterCriteria } from "@formbricks/types/surveys/types";
-import { getMembershipByUserIdOrganizationId } from "@/lib/membership/service";
 import { canAccessSurvey, getSurveyAccessMembership } from "@/lib/survey/access";
 import { getSurvey as getFullSurveyService } from "@/lib/survey/service";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
@@ -45,23 +44,24 @@ const loadSurveyForAccess = async (surveyId: string, userId: string) => {
   if (!survey) throw new ResourceNotFoundError("Survey", surveyId);
 
   const organizationId = survey.environment.project.organizationId;
-  const membership = await getMembershipByUserIdOrganizationId(userId, organizationId);
   const accessMembership = await getSurveyAccessMembership(userId, organizationId);
 
   if (!canAccessSurvey({ userId, survey, membership: accessMembership })) {
     throw new AuthorizationError("You do not have access to this survey.");
   }
-  return { survey, membership, accessMembership, organizationId };
+  return { survey, accessMembership, organizationId };
 };
 
+// OrganizationRole is unreliable in non-EE (every member defaults to "owner"),
+// so mutating-action gate = creator OR surveyAdmin only.
 const requireSurveyManagePrivilege = (
-  membership: { role?: string } | null,
-  accessMembership: { surveyAdmin: boolean } | null
+  survey: { createdBy: string | null },
+  accessMembership: { surveyAdmin: boolean } | null,
+  userId: string
 ) => {
-  const isPrivileged =
-    accessMembership?.surveyAdmin === true || membership?.role === "owner" || membership?.role === "manager";
+  const isPrivileged = accessMembership?.surveyAdmin === true || survey.createdBy === userId;
   if (!isPrivileged) {
-    throw new OperationNotAllowedError("Only survey admins or org owners/managers can perform this action.");
+    throw new OperationNotAllowedError("Only the survey creator or a survey admin can perform this action.");
   }
 };
 
@@ -130,9 +130,11 @@ export const copySurveyToOtherEnvironmentAction = authenticatedActionClient
         }
 
         // ACL: caller must have access to the source survey AND manage privilege
-        const { membership: copyMembership, accessMembership: copyAccessMembership } =
-          await loadSurveyForAccess(parsedInput.surveyId, ctx.user.id);
-        requireSurveyManagePrivilege(copyMembership, copyAccessMembership);
+        const { survey: copySurvey, accessMembership: copyAccessMembership } = await loadSurveyForAccess(
+          parsedInput.surveyId,
+          ctx.user.id
+        );
+        requireSurveyManagePrivilege(copySurvey, copyAccessMembership, ctx.user.id);
 
         // authorization check for source environment
         await checkAuthorizationUpdated({
@@ -218,11 +220,11 @@ export const deleteSurveyAction = authenticatedActionClient.schema(ZDeleteSurvey
     "deleted",
     "survey",
     async ({ ctx, parsedInput }: { ctx: AuthenticatedActionClientCtx; parsedInput: Record<string, any> }) => {
-      const { membership, accessMembership, organizationId } = await loadSurveyForAccess(
+      const { survey, accessMembership, organizationId } = await loadSurveyForAccess(
         parsedInput.surveyId,
         ctx.user.id
       );
-      requireSurveyManagePrivilege(membership, accessMembership);
+      requireSurveyManagePrivilege(survey, accessMembership, ctx.user.id);
 
       ctx.auditLoggingCtx.organizationId = organizationId;
       ctx.auditLoggingCtx.surveyId = parsedInput.surveyId;
@@ -241,8 +243,8 @@ const ZGenerateSingleUseIdAction = z.object({
 export const generateSingleUseIdsAction = authenticatedActionClient
   .schema(ZGenerateSingleUseIdAction)
   .action(async ({ ctx, parsedInput }) => {
-    const { membership, accessMembership } = await loadSurveyForAccess(parsedInput.surveyId, ctx.user.id);
-    requireSurveyManagePrivilege(membership, accessMembership);
+    const { survey, accessMembership } = await loadSurveyForAccess(parsedInput.surveyId, ctx.user.id);
+    requireSurveyManagePrivilege(survey, accessMembership, ctx.user.id);
 
     return generateSurveySingleUseIds(parsedInput.count, parsedInput.isEncrypted);
   });

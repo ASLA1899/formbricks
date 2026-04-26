@@ -3,7 +3,6 @@
 import { z } from "zod";
 import { prisma } from "@formbricks/database";
 import { OperationNotAllowedError, ResourceNotFoundError } from "@formbricks/types/errors";
-import { getMembershipByUserIdOrganizationId } from "@/lib/membership/service";
 import { canAccessSurvey, getSurveyAccessMembership } from "@/lib/survey/access";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
 import {
@@ -29,19 +28,16 @@ const loadSurveyManageContext = async (surveyId: string, userId: string) => {
 
   const organizationId = survey.environment.project.organizationId;
   const accessMembership = await getSurveyAccessMembership(userId, organizationId);
-  const orgMembership = await getMembershipByUserIdOrganizationId(userId, organizationId);
 
   if (!canAccessSurvey({ userId, survey, membership: accessMembership })) {
     throw new OperationNotAllowedError("No access to this survey.");
   }
 
-  const canManage =
-    survey.createdBy === userId ||
-    accessMembership?.surveyAdmin === true ||
-    orgMembership?.role === "owner" ||
-    orgMembership?.role === "manager";
+  // OrganizationRole is unreliable in non-EE (every member defaults to "owner"),
+  // so manage = creator OR surveyAdmin only.
+  const canManage = survey.createdBy === userId || accessMembership?.surveyAdmin === true;
   if (!canManage) {
-    throw new OperationNotAllowedError("Only the creator or an admin can manage sharing.");
+    throw new OperationNotAllowedError("Only the survey creator or a survey admin can manage sharing.");
   }
   return { survey, organizationId };
 };

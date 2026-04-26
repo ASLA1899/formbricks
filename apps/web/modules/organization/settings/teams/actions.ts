@@ -345,14 +345,12 @@ const ZSetMembershipSurveyAdminAction = z.object({
 export const setMembershipSurveyAdminAction = authenticatedActionClient
   .schema(ZSetMembershipSurveyAdminAction)
   .action(async ({ ctx, parsedInput }) => {
-    const callerOrgMembership = await getMembershipByUserIdOrganizationId(
-      ctx.user.id,
-      parsedInput.organizationId
-    );
+    // OrganizationRole is unreliable in non-EE deployments (every member defaults
+    // to "owner"), so the only trustworthy gate is an existing surveyAdmin promoting
+    // others. Bootstrap of the first surveyAdmin is via SQL migration, not UI.
     const callerSurveyAdmin = await getSurveyAccessMembership(ctx.user.id, parsedInput.organizationId);
-    const canManage = callerOrgMembership?.role === "owner" || callerSurveyAdmin?.surveyAdmin === true;
-    if (!canManage) {
-      throw new OperationNotAllowedError("Only org owners or survey admins can manage this.");
+    if (callerSurveyAdmin?.surveyAdmin !== true) {
+      throw new OperationNotAllowedError("Only existing survey admins can manage this.");
     }
     return prisma.membership.update({
       where: {

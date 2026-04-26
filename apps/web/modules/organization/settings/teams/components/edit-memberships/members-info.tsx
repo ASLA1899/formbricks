@@ -155,7 +155,7 @@ export const MembersInfo = ({
               <Switch
                 checked={surveyAdminState[member.userId] ?? false}
                 onCheckedChange={(next) => void onToggleSurveyAdmin(member.userId, next)}
-                disabled={!callerCanManageSurveyAdmin || member.userId === currentUserId}
+                disabled={!callerCanManageSurveyAdmin}
                 aria-label={`Toggle survey admin for ${member.name}`}
               />
             )}
