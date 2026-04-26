@@ -307,6 +307,11 @@ enum SurveyType {
   app
 }
 
+enum SurveyVisibility {
+  private
+  public
+}
+
 enum displayOptions {
   displayOnce
   displayMultiple
@@ -338,6 +343,8 @@ model Survey {
   creator             User?                   @relation(fields: [createdBy], references: [id])
   createdBy           String?
   status              SurveyStatus            @default(draft)
+  visibility          SurveyVisibility        @default(private)
+  surveyAccess        SurveyAccess[]
   /// [SurveyWelcomeCard]
   welcomeCard         Json                    @default("{\"enabled\": false}")
   /// [SurveyQuestions]
@@ -399,6 +406,20 @@ model Survey {
 
   @@index([environmentId, updatedAt])
   @@index([segmentId])
+}
+
+/// Per-user access to a private survey. Bypassed for users with
+/// Membership.surveyAdmin=true and for the survey creator. Ignored when
+/// Survey.visibility = public.
+model SurveyAccess {
+  surveyId  String
+  userId    String
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  survey    Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([surveyId, userId])
+  @@index([userId])
 }
 
 /// Represents a quota configuration for a survey.
@@ -718,6 +739,7 @@ model Membership {
   userId         String
   accepted       Boolean          @default(false)
   role           OrganizationRole @default(member)
+  surveyAdmin    Boolean          @default(false)
 
   @@id([userId, organizationId])
   @@index([userId])
@@ -885,6 +907,7 @@ model User {
   /// [Locale]
   locale                    String           @default("en-US")
   surveys                   Survey[]
+  surveyAccess              SurveyAccess[]
   teamUsers                 TeamUser[]
   lastLoginAt               DateTime?
   isActive                  Boolean          @default(true)
