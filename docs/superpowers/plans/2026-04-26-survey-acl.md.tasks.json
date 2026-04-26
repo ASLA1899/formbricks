@@ -1,68 +1,77 @@
 {
+  "lastUpdated": "2026-04-26T12:31:00Z",
   "planPath": "docs/superpowers/plans/2026-04-26-survey-acl.md",
   "tasks": [
     {
+      "description": "Schema additions: SurveyVisibility enum, Survey.visibility, SurveyAccess model, Membership.surveyAdmin. Prisma client regenerated; tsc clean for new types.",
       "id": 0,
-      "subject": "Task 0: Schema additions for per-survey ACL",
-      "status": "pending",
-      "description": "**Goal:** Add the SurveyVisibility enum, Survey.visibility field, SurveyAccess model, Membership.surveyAdmin field; regenerate Prisma client.\n\n**Files:**\n- Modify: `packages/database/schema.prisma`\n\n**Acceptance Criteria:**\n- SurveyVisibility enum (private | public) exists\n- Survey.visibility = SurveyVisibility @default(private)\n- Survey.surveyAccess relation exists\n- SurveyAccess model with composite PK (surveyId, userId), @@index([userId]), cascade deletes\n- Membership.surveyAdmin Boolean @default(false)\n- Prisma generate succeeds\n- TypeScript compiles in apps/web\n\n**Verify:** `cd apps/web && pnpm exec tsc --noEmit -p tsconfig.json` returns no errors related to new types.\n\n```json:metadata\n{\"files\":[\"packages/database/schema.prisma\"],\"verifyCommand\":\"cd apps/web && pnpm exec tsc --noEmit -p tsconfig.json\",\"acceptanceCriteria\":[\"SurveyVisibility enum exists\",\"Survey.visibility default private\",\"SurveyAccess model with composite PK and userId index\",\"Membership.surveyAdmin Boolean default false\",\"Prisma generate succeeds\",\"TypeScript compiles\"]}\n```"
+      "lastUpdated": "2026-04-26T11:50:00Z",
+      "status": "completed",
+      "subject": "Task 0: Schema additions for per-survey ACL"
     },
     {
+      "blockedBy": [0],
+      "description": "scripts/2026-04-26-survey-acl-migration.sql — idempotent, transactional, raises if gcohen@asla.org missing, sets surveyAdmin=true on his memberships, grandfathers existing surveys to visibility=public.",
       "id": 1,
-      "subject": "Task 1: Data migration script",
-      "status": "pending",
-      "blockedBy": [0],
-      "description": "**Goal:** Idempotent SQL migration that grants surveyAdmin=true to gcohen@asla.org and grandfathers existing surveys to visibility=public.\n\n**Files:**\n- Create: `scripts/2026-04-26-survey-acl-migration.sql`\n\n**Acceptance Criteria:**\n- Aborts cleanly when target user missing\n- Idempotent (re-run = 0 changes)\n- Logs counts via RAISE NOTICE\n- Wrapped in transaction\n\n**Verify:** Run on local dev DB and inspect membership/visibility tables.\n\n```json:metadata\n{\"files\":[\"scripts/2026-04-26-survey-acl-migration.sql\"],\"verifyCommand\":\"psql $DATABASE_URL -f scripts/2026-04-26-survey-acl-migration.sql\",\"acceptanceCriteria\":[\"Aborts cleanly when target user missing\",\"Idempotent\",\"Logs counts via RAISE NOTICE\",\"Wrapped in transaction\"]}\n```"
+      "lastUpdated": "2026-04-26T11:53:00Z",
+      "status": "completed",
+      "subject": "Task 1: Data migration script"
     },
     {
+      "blockedBy": [0],
+      "description": "apps/web/lib/survey/access.ts: canAccessSurvey + getSurveyAccessWhere + getSurveyAccessMembership helpers. 10 unit tests, all pass.",
       "id": 2,
-      "subject": "Task 2: Access check helper + tests (TDD)",
-      "status": "pending",
-      "blockedBy": [0],
-      "description": "**Goal:** Pure-function `canAccessSurvey` and `getSurveyAccessWhere` helpers in `apps/web/lib/survey/access.ts` with comprehensive Vitest tests.\n\n**Files:**\n- Create: `apps/web/lib/survey/access.ts`\n- Create: `apps/web/lib/survey/access.test.ts`\n\n**Acceptance Criteria:**\n- canAccessSurvey: !membership→false, surveyAdmin→true, public→true, creator→true, else SurveyAccess check\n- getSurveyAccessWhere returns matching Prisma SurveyWhereInput fragment\n- Tests cover all branches + where-clause sanity\n\n**Verify:** `cd apps/web && pnpm exec vitest run lib/survey/access.test.ts`\n\n```json:metadata\n{\"files\":[\"apps/web/lib/survey/access.ts\",\"apps/web/lib/survey/access.test.ts\"],\"verifyCommand\":\"cd apps/web && pnpm exec vitest run lib/survey/access.test.ts\",\"acceptanceCriteria\":[\"canAccessSurvey: 7 test cases pass\",\"getSurveyAccessWhere: 3 test cases pass\",\"No DB calls inside helpers\",\"Pure function signatures\"]}\n```"
+      "lastUpdated": "2026-04-26T11:55:00Z",
+      "status": "completed",
+      "subject": "Task 2: Access check helper + tests (TDD)"
     },
     {
+      "blockedBy": [2],
+      "description": "getSurveys / getSurveysSortedByRelevance / getSurveyCount in apps/web/modules/survey/list/lib/survey.ts now require accessContext. All callers updated. 37 tests, all pass.",
       "id": 3,
-      "subject": "Task 3: Filter the survey list query",
-      "status": "pending",
-      "blockedBy": [2],
-      "description": "**Goal:** Apply `getSurveyAccessWhere` to `getSurveys`, `getSurveysSortedByRelevance`, `getSurveyCount`. Update all callers + tests.\n\n**Files:**\n- Modify: `apps/web/modules/survey/list/lib/survey.ts`\n- Modify: `apps/web/modules/survey/list/lib/survey.test.ts`\n- Modify: every caller of these three functions\n\n**Acceptance Criteria:**\n- All three functions accept `accessContext: { userId, membership }`\n- Each forwards getSurveyAccessWhere into Prisma where via AND\n- All callers updated\n- Existing tests pass + new admin/member coverage tests\n\n**Verify:** `cd apps/web && pnpm exec vitest run modules/survey/list/lib/survey.test.ts`\n\n```json:metadata\n{\"files\":[\"apps/web/modules/survey/list/lib/survey.ts\",\"apps/web/modules/survey/list/lib/survey.test.ts\"],\"verifyCommand\":\"cd apps/web && pnpm exec vitest run modules/survey/list/lib/survey.test.ts\",\"acceptanceCriteria\":[\"accessContext required on all three queries\",\"getSurveyAccessWhere forwarded into Prisma where\",\"All callers updated\",\"surveyAdmin and member coverage tests added\"]}\n```"
+      "lastUpdated": "2026-04-26T12:09:00Z",
+      "status": "completed",
+      "subject": "Task 3: Filter survey list query"
     },
     {
+      "blockedBy": [2],
+      "description": "loadSurveyForAccess + requireSurveyManagePrivilege helpers gate getSurveyAction, getFullSurveyAction, copySurveyToOtherEnvironmentAction (source), deleteSurveyAction, generateSingleUseIdsAction.",
       "id": 4,
-      "subject": "Task 4: ACL check on server actions",
-      "status": "pending",
-      "blockedBy": [2],
-      "description": "**Goal:** Replace owner/manager-or-projectTeam check on survey-id-scoped server actions with `canAccessSurvey`. Mutating actions additionally require surveyAdmin or org owner/manager.\n\n**Files:**\n- Modify: `apps/web/modules/survey/list/actions.ts`\n- Modify: corresponding test files\n\n**Acceptance Criteria:**\n- All survey-id-scoped actions use canAccessSurvey\n- Mutating actions also gate on surveyAdmin/owner/manager\n- Tests cover creator, surveyAdmin, member-with-access, member-without-access\n\n**Verify:** `cd apps/web && pnpm exec vitest run modules/survey/list/actions`\n\n```json:metadata\n{\"files\":[\"apps/web/modules/survey/list/actions.ts\"],\"verifyCommand\":\"cd apps/web && pnpm exec vitest run modules/survey/list/actions\",\"acceptanceCriteria\":[\"All survey-id-scoped actions use canAccessSurvey\",\"Mutating actions also gate on surveyAdmin/owner/manager\",\"Tests cover creator, surveyAdmin, member-with-access, member-without-access\"]}\n```"
+      "lastUpdated": "2026-04-26T12:14:00Z",
+      "status": "completed",
+      "subject": "Task 4: ACL check on server actions"
     },
     {
+      "blockedBy": [2],
+      "description": "Both [surveyId]/layout.tsx and (analysis)/layout.tsx call canAccessSurvey before rendering; denied users → notFound().",
       "id": 5,
-      "subject": "Task 5: Page-level guards",
-      "status": "pending",
-      "blockedBy": [2],
-      "description": "**Goal:** Survey-detail layout server components call canAccessSurvey before rendering. Denied users see notFound() (less leakage than forbidden).\n\n**Files:**\n- Modify: `apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/layout.tsx`\n- Modify: `apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/layout.tsx`\n\n**Acceptance Criteria:**\n- Both layouts call canAccessSurvey\n- Denied → notFound()\n- Allowed → renders as today\n\n**Verify:** Manual smoke — denied user sees not-found page; gcohen sees survey.\n\n```json:metadata\n{\"files\":[\"apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/layout.tsx\",\"apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/layout.tsx\"],\"verifyCommand\":\"pnpm dev (manual)\",\"acceptanceCriteria\":[\"Both layouts call canAccessSurvey\",\"Denied → notFound()\",\"Allowed → renders as today\"]}\n```"
+      "lastUpdated": "2026-04-26T12:17:00Z",
+      "status": "completed",
+      "subject": "Task 5: Page-level guards"
     },
     {
+      "blockedBy": [2],
+      "description": "modules/survey/sharing/{lib,actions,components/sharing-panel}. Mounted as collapsible card in SettingsView. Server-side manage-permission gate.",
       "id": 6,
-      "subject": "Task 6: Sharing UI in survey settings",
-      "status": "pending",
-      "blockedBy": [2],
-      "description": "**Goal:** \"Sharing\" panel in survey editor: visibility radio (private/public), per-user access multi-select, save server actions with manage-permission gate.\n\n**Files:**\n- Create: `apps/web/modules/survey/sharing/components/sharing-panel.tsx`\n- Create: `apps/web/modules/survey/sharing/actions.ts`\n- Create: `apps/web/modules/survey/sharing/lib/survey-access.ts`\n- Modify: existing survey settings entry point\n\n**Acceptance Criteria:**\n- Sharing panel renders\n- Visibility toggle persists\n- Add/remove user access works\n- Manage gate enforced on server (creator OR surveyAdmin OR owner/manager)\n\n**Verify:** Manual smoke — create private, share, log in as recipient, confirm visibility.\n\n```json:metadata\n{\"files\":[\"apps/web/modules/survey/sharing/components/sharing-panel.tsx\",\"apps/web/modules/survey/sharing/actions.ts\",\"apps/web/modules/survey/sharing/lib/survey-access.ts\"],\"verifyCommand\":\"pnpm dev (manual)\",\"acceptanceCriteria\":[\"Sharing panel renders\",\"Visibility toggle persists\",\"Add/remove user access works\",\"Manage gate enforced on server\"]}\n```"
+      "lastUpdated": "2026-04-26T12:21:00Z",
+      "status": "completed",
+      "subject": "Task 6: Sharing UI in survey settings"
     },
     {
-      "id": 7,
-      "subject": "Task 7: surveyAdmin toggle in members UI",
-      "status": "pending",
       "blockedBy": [0],
-      "description": "**Goal:** Add \"Survey Admin\" toggle column to org members admin table. Org owners (and existing surveyAdmins) can promote/demote.\n\n**Files:**\n- Modify: `apps/web/modules/organization/settings/teams/components/edit-memberships/edit-memberships.tsx`\n- Modify: `apps/web/modules/organization/settings/teams/actions.ts`\n\n**Acceptance Criteria:**\n- Toggle column visible\n- setMembershipSurveyAdminAction persists\n- Manage gate enforced\n- Optimistic UI with rollback\n\n**Verify:** Manual smoke — flip another user's surveyAdmin, sign in as them, confirm they see all surveys.\n\n```json:metadata\n{\"files\":[\"apps/web/modules/organization/settings/teams/components/edit-memberships/edit-memberships.tsx\",\"apps/web/modules/organization/settings/teams/actions.ts\"],\"verifyCommand\":\"pnpm dev (manual)\",\"acceptanceCriteria\":[\"Toggle column visible\",\"Manage gate enforced\",\"Optimistic UI with rollback\"]}\n```"
+      "description": "Survey Admin column with optimistic Switch in members-info.tsx. setMembershipSurveyAdminAction in teams/actions.ts. Owner OR existing surveyAdmin can toggle others.",
+      "id": 7,
+      "lastUpdated": "2026-04-26T12:27:00Z",
+      "status": "completed",
+      "subject": "Task 7: surveyAdmin toggle in members UI"
     },
     {
-      "id": 8,
-      "subject": "Task 8: Production rollout runbook + execution",
-      "status": "pending",
       "blockedBy": [1, 3, 4, 5, 6, 7],
-      "description": "**Goal:** Write SURVEY_ACL_RUNBOOK.md and follow it on production. Gated steps: backup → schema → respondent smoke → data migration → app deploy → smoke tests → 30-min watch.\n\n**Files:**\n- Create: `SURVEY_ACL_RUNBOOK.md`\n- Optional modify: `DEPLOYMENT_GUIDE.md`\n\n**Acceptance Criteria:**\n- DB backup taken and verified\n- Schema migration applied (no app code yet)\n- Live respondent flow smoke-tested before app deploy\n- Data migration script run, NOTICE counts match\n- App deployed via DEPLOYMENT_GUIDE.md procedure\n- All 9 smoke-test items pass\n- 30 min observation clean\n\n**Verify:** All checklist items crossed off; surveys.asla.org healthy.\n\n```json:metadata\n{\"files\":[\"SURVEY_ACL_RUNBOOK.md\",\"DEPLOYMENT_GUIDE.md\"],\"verifyCommand\":\"manual ops procedure\",\"acceptanceCriteria\":[\"Backup verified\",\"Schema migrated to prod\",\"Respondent flow smoke-tested before app deploy\",\"Data migration NOTICE counts match\",\"App image deployed\",\"All 9 smoke items pass\",\"30 min observation clean\"]}\n```"
+      "description": "SURVEY_ACL_RUNBOOK.md written with full deploy procedure, schema-then-respondent-smoke gate, post-deploy 9-item checklist, and rollback table per failure mode. Live prod deploy NOT executed in this session per user direction.",
+      "id": 8,
+      "lastUpdated": "2026-04-26T12:31:00Z",
+      "status": "completed",
+      "subject": "Task 8: Production rollout runbook (deploy execution skipped)"
     }
-  ],
-  "lastUpdated": "2026-04-26T11:15:00Z"
+  ]
 }
