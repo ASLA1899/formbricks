@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "@formbricks/database";
+import { createAccount } from "@/lib/account/service";
 import { createMembership } from "@/lib/membership/service";
 import { findMatchingLocale } from "@/lib/utils/locale";
+import { createBrevoCustomer } from "@/modules/auth/lib/brevo";
 import { createUser, getUserByEmail, updateUser } from "@/modules/auth/lib/user";
 import { handleMicrosoftCallback } from "./microsoft-handler";
 import { mockUser } from "./mock-data";
@@ -10,6 +12,7 @@ vi.mock("@formbricks/database", () => ({
   prisma: {
     user: {
       findFirst: vi.fn(),
+      update: vi.fn(),
     },
     organization: {
       findFirst: vi.fn(),
@@ -23,12 +26,20 @@ vi.mock("@/modules/auth/lib/user", () => ({
   updateUser: vi.fn(),
 }));
 
+vi.mock("@/lib/account/service", () => ({
+  createAccount: vi.fn(),
+}));
+
 vi.mock("@/lib/membership/service", () => ({
   createMembership: vi.fn(),
 }));
 
 vi.mock("@/lib/utils/locale", () => ({
   findMatchingLocale: vi.fn(),
+}));
+
+vi.mock("@/modules/auth/lib/brevo", () => ({
+  createBrevoCustomer: vi.fn(),
 }));
 
 describe("handleMicrosoftCallback", () => {
@@ -79,18 +90,67 @@ describe("handleMicrosoftCallback", () => {
     );
   });
 
-  test("returns true when no azure account exists but user already exists by email", async () => {
+  test("returns false when user has no email", async () => {
+    const result = await handleMicrosoftCallback({
+      user: { ...mockUser, email: "" } as any,
+      account,
+    });
+    expect(result).toBe(false);
+  });
+
+  test("updates providerAccountId when existing email user is azuread but oid changed", async () => {
     vi.mocked(prisma.user.findFirst).mockResolvedValueOnce(null);
-    vi.mocked(getUserByEmail).mockResolvedValueOnce({ id: "u2", email: mockUser.email } as any);
+    vi.mocked(getUserByEmail).mockResolvedValueOnce({
+      id: "u2",
+      email: mockUser.email,
+      identityProvider: "azuread",
+    } as any);
 
     const result = await handleMicrosoftCallback({ user: mockUser, account });
 
     expect(result).toBe(true);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "u2" },
+      data: { identityProviderAccountId: "azure-account-id" },
+    });
     expect(createUser).not.toHaveBeenCalled();
     expect(createMembership).not.toHaveBeenCalled();
   });
 
-  test("creates user and default organization membership for new users", async () => {
+  test("migrates an existing credentials (email) user on first Microsoft sign-in", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(getUserByEmail).mockResolvedValueOnce({
+      id: "u2",
+      email: mockUser.email,
+      identityProvider: "email",
+    } as any);
+
+    const result = await handleMicrosoftCallback({ user: mockUser, account });
+
+    expect(result).toBe(true);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "u2" },
+      data: { identityProvider: "azuread", identityProviderAccountId: "azure-account-id" },
+    });
+    expect(createUser).not.toHaveBeenCalled();
+  });
+
+  test("refuses login when existing email user used a different SSO provider", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(getUserByEmail).mockResolvedValueOnce({
+      id: "u2",
+      email: mockUser.email,
+      identityProvider: "google",
+    } as any);
+
+    await expect(handleMicrosoftCallback({ user: mockUser, account })).rejects.toThrow(
+      "different sign-in method"
+    );
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(createUser).not.toHaveBeenCalled();
+  });
+
+  test("creates user, account, brevo customer, and default organization membership for new users", async () => {
     vi.mocked(prisma.user.findFirst).mockResolvedValueOnce(null);
     vi.mocked(getUserByEmail).mockResolvedValueOnce(null);
     vi.mocked(createUser).mockResolvedValueOnce({ id: "new-user-id", email: mockUser.email } as any);
@@ -107,6 +167,9 @@ describe("handleMicrosoftCallback", () => {
       identityProviderAccountId: "azure-account-id",
       locale: "en-US",
     });
+    expect(createAccount).toHaveBeenCalledWith({ ...account, userId: "new-user-id" });
+    expect(createBrevoCustomer).toHaveBeenCalledWith({ id: "new-user-id", email: mockUser.email });
+    expect(prisma.organization.findFirst).toHaveBeenCalledWith({ orderBy: { createdAt: "asc" } });
     expect(createMembership).toHaveBeenCalledWith("org-1", "new-user-id", { role: "member", accepted: true });
   });
 });

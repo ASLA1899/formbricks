@@ -312,7 +312,7 @@ export const authOptions: NextAuthOptions = {
         return user;
       },
     }),
-    ...(AZURE_OAUTH_ENABLED
+    ...(AZURE_OAUTH_ENABLED && !ENTERPRISE_LICENSE_KEY
       ? [
           AzureADProvider({
             clientId: AZUREAD_CLIENT_ID || "",
