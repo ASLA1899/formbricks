@@ -1,9 +1,15 @@
 "use server";
 
 import { z } from "zod";
-import { OperationNotAllowedError, ResourceNotFoundError } from "@formbricks/types/errors";
+import { prisma } from "@formbricks/database";
+import {
+  AuthorizationError,
+  OperationNotAllowedError,
+  ResourceNotFoundError,
+} from "@formbricks/types/errors";
 import { ZSurveyFilterCriteria } from "@formbricks/types/surveys/types";
-import { getSurveyAccessMembership } from "@/lib/survey/access";
+import { getMembershipByUserIdOrganizationId } from "@/lib/membership/service";
+import { canAccessSurvey, getSurveyAccessMembership } from "@/lib/survey/access";
 import { getSurvey as getFullSurveyService } from "@/lib/survey/service";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
 import { checkAuthorizationUpdated } from "@/lib/utils/action-client/action-client-middleware";
@@ -11,9 +17,7 @@ import { AuthenticatedActionClientCtx } from "@/lib/utils/action-client/types/co
 import {
   getEnvironmentIdFromSurveyId,
   getOrganizationIdFromEnvironmentId,
-  getOrganizationIdFromSurveyId,
   getProjectIdFromEnvironmentId,
-  getProjectIdFromSurveyId,
 } from "@/lib/utils/helper";
 import { generateSurveySingleUseIds } from "@/lib/utils/single-use-surveys";
 import { withAuditLogging } from "@/modules/ee/audit-logs/lib/handler";
@@ -26,6 +30,41 @@ import {
   getSurveys,
 } from "@/modules/survey/list/lib/survey";
 
+const loadSurveyForAccess = async (surveyId: string, userId: string) => {
+  const survey = await prisma.survey.findUnique({
+    where: { id: surveyId },
+    select: {
+      id: true,
+      visibility: true,
+      createdBy: true,
+      environmentId: true,
+      surveyAccess: { select: { userId: true } },
+      environment: { select: { project: { select: { organizationId: true } } } },
+    },
+  });
+  if (!survey) throw new ResourceNotFoundError("Survey", surveyId);
+
+  const organizationId = survey.environment.project.organizationId;
+  const membership = await getMembershipByUserIdOrganizationId(userId, organizationId);
+  const accessMembership = await getSurveyAccessMembership(userId, organizationId);
+
+  if (!canAccessSurvey({ userId, survey, membership: accessMembership })) {
+    throw new AuthorizationError("You do not have access to this survey.");
+  }
+  return { survey, membership, accessMembership, organizationId };
+};
+
+const requireSurveyManagePrivilege = (
+  membership: { role?: string } | null,
+  accessMembership: { surveyAdmin: boolean } | null
+) => {
+  const isPrivileged =
+    accessMembership?.surveyAdmin === true || membership?.role === "owner" || membership?.role === "manager";
+  if (!isPrivileged) {
+    throw new OperationNotAllowedError("Only survey admins or org owners/managers can perform this action.");
+  }
+};
+
 const ZGetSurveyAction = z.object({
   surveyId: z.string().cuid2(),
 });
@@ -33,22 +72,7 @@ const ZGetSurveyAction = z.object({
 export const getSurveyAction = authenticatedActionClient
   .schema(ZGetSurveyAction)
   .action(async ({ ctx, parsedInput }) => {
-    await checkAuthorizationUpdated({
-      userId: ctx.user.id,
-      organizationId: await getOrganizationIdFromSurveyId(parsedInput.surveyId),
-      access: [
-        {
-          type: "organization",
-          roles: ["owner", "manager"],
-        },
-        {
-          type: "projectTeam",
-          minPermission: "read",
-          projectId: await getProjectIdFromSurveyId(parsedInput.surveyId),
-        },
-      ],
-    });
-
+    await loadSurveyForAccess(parsedInput.surveyId, ctx.user.id);
     return await getSurvey(parsedInput.surveyId);
   });
 
@@ -59,22 +83,7 @@ const ZGetFullSurveyAction = z.object({
 export const getFullSurveyAction = authenticatedActionClient
   .schema(ZGetFullSurveyAction)
   .action(async ({ ctx, parsedInput }) => {
-    await checkAuthorizationUpdated({
-      userId: ctx.user.id,
-      organizationId: await getOrganizationIdFromSurveyId(parsedInput.surveyId),
-      access: [
-        {
-          type: "organization",
-          roles: ["owner", "manager"],
-        },
-        {
-          type: "projectTeam",
-          minPermission: "read",
-          projectId: await getProjectIdFromSurveyId(parsedInput.surveyId),
-        },
-      ],
-    });
-
+    await loadSurveyForAccess(parsedInput.surveyId, ctx.user.id);
     return await getFullSurveyService(parsedInput.surveyId);
   });
 
@@ -119,6 +128,9 @@ export const copySurveyToOtherEnvironmentAction = authenticatedActionClient
             "Source and target environments must be in the same organization"
           );
         }
+
+        // ACL: caller must have access to the source survey
+        await loadSurveyForAccess(parsedInput.surveyId, ctx.user.id);
 
         // authorization check for source environment
         await checkAuthorizationUpdated({
@@ -204,23 +216,13 @@ export const deleteSurveyAction = authenticatedActionClient.schema(ZDeleteSurvey
     "deleted",
     "survey",
     async ({ ctx, parsedInput }: { ctx: AuthenticatedActionClientCtx; parsedInput: Record<string, any> }) => {
-      await checkAuthorizationUpdated({
-        userId: ctx.user.id,
-        organizationId: await getOrganizationIdFromSurveyId(parsedInput.surveyId),
-        access: [
-          {
-            type: "organization",
-            roles: ["owner", "manager"],
-          },
-          {
-            type: "projectTeam",
-            projectId: await getProjectIdFromSurveyId(parsedInput.surveyId),
-            minPermission: "readWrite",
-          },
-        ],
-      });
+      const { membership, accessMembership, organizationId } = await loadSurveyForAccess(
+        parsedInput.surveyId,
+        ctx.user.id
+      );
+      requireSurveyManagePrivilege(membership, accessMembership);
 
-      ctx.auditLoggingCtx.organizationId = await getOrganizationIdFromSurveyId(parsedInput.surveyId);
+      ctx.auditLoggingCtx.organizationId = organizationId;
       ctx.auditLoggingCtx.surveyId = parsedInput.surveyId;
       ctx.auditLoggingCtx.oldObject = await getSurvey(parsedInput.surveyId);
       return await deleteSurvey(parsedInput.surveyId);
@@ -237,21 +239,8 @@ const ZGenerateSingleUseIdAction = z.object({
 export const generateSingleUseIdsAction = authenticatedActionClient
   .schema(ZGenerateSingleUseIdAction)
   .action(async ({ ctx, parsedInput }) => {
-    await checkAuthorizationUpdated({
-      userId: ctx.user.id,
-      organizationId: await getOrganizationIdFromSurveyId(parsedInput.surveyId),
-      access: [
-        {
-          type: "organization",
-          roles: ["owner", "manager"],
-        },
-        {
-          type: "projectTeam",
-          projectId: await getProjectIdFromSurveyId(parsedInput.surveyId),
-          minPermission: "readWrite",
-        },
-      ],
-    });
+    const { membership, accessMembership } = await loadSurveyForAccess(parsedInput.surveyId, ctx.user.id);
+    requireSurveyManagePrivilege(membership, accessMembership);
 
     return generateSurveySingleUseIds(parsedInput.count, parsedInput.isEncrypted);
   });
