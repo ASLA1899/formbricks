@@ -3,10 +3,11 @@
 **Prepared for:** ASLA IT (gcohen@asla.org)
 **Feature:** Per-survey access control on `https://surveys.asla.org`
 **Branch:** `feature/survey-acl`
+**Deploy mechanism:** GHCR image push/pull (NOT local image transfer)
 
-This runbook executes the deploy in **gated steps** so a respondent-side regression is caught **before** the app code ships. The schema migration is applied first, against a still-running old image — old code ignores the new columns, so the worst case at that point is a clean revert.
+This runbook executes the deploy in **gated steps** so a respondent-side regression is caught **before** the app code ships. The schema migration is applied first via a one-shot migration container, against the still-running old image — old code ignores the new columns, so the worst case at that point is a clean revert.
 
-> ⚠️ Do **not** skip step 4 (live respondent smoke test). It is the load-bearing check between schema migration and app deploy.
+> ⚠️ Do **not** skip step 5 (live respondent smoke test). It is the load-bearing check between schema migration and app deploy.
 
 ---
 
@@ -20,111 +21,152 @@ This runbook executes the deploy in **gated steps** so a respondent-side regress
 
 ## What This Feature Does NOT Touch
 
-- Microsoft 365 SSO (`299f6f52a` + `14ac8ce0e`) — independent.
-- Org roles (`owner` / `manager` / `member` / `billing`) — unchanged. The new `surveyAdmin` flag is a separate axis.
+- Microsoft 365 SSO (`299f6f52a` + `14ac8ce0e`) — independent, ships in the same image.
 - Snowflake export, response submission, public survey URLs.
+
+## ⚠️ Important Security Model (read before deploy)
+
+In ASLA's non-EE deployment, every member defaults to `OrganizationRole.owner`. The ACL therefore deliberately **does not** trust the org role for managing surveyAdmin or survey sharing — only:
+
+- **Existing surveyAdmins** can promote/demote other surveyAdmins.
+- **Survey creator OR existing surveyAdmin** can manage that survey's visibility / access list / delete / copy.
+
+The **first surveyAdmin** is bootstrapped by the data migration script (`scripts/2026-04-26-survey-acl-migration.sql`) which sets `Membership.surveyAdmin = true` for `gcohen@asla.org`. **If that script fails to find the user row, the deployment has zero surveyAdmins and recovery requires direct DB access.** This is intentional fail-closed behavior.
 
 ---
 
 ## Pre-Flight Checklist
 
-- [ ] DB backup taken **and verified restorable** within the last hour.
+- [ ] `gcohen@asla.org` exists in production `User` table:
   ```bash
-  ssh -p 2222 -i ~/.ssh/id_ed25519_workgh asla@20.185.219.8 \
-    'cd /opt/formbricks && docker compose exec -T postgres pg_dump -U formbricks formbricks | gzip > /opt/formbricks/backups/pre-acl-$(date +%Y%m%d-%H%M%S).sql.gz'
-  ```
-- [ ] `gcohen@asla.org` exists in production `User` table.
-  ```bash
-  ssh -p 2222 -i ~/.ssh/id_ed25519_workgh asla@20.185.219.8 \
-    'cd /opt/formbricks && docker compose exec -T postgres psql -U formbricks -d formbricks \
+  ssh -p 2222 -i ~/.ssh/id_ed25519_workgh gregcohen@20.185.219.8 \
+    'docker exec formbricks-postgres psql -U formbricks -d formbricks \
       -c "SELECT id, email FROM \"User\" WHERE email = '\''gcohen@asla.org'\'';"'
   ```
   Expected: one row.
-- [ ] Local dev DB validation completed (schema push + migration script idempotency confirmed).
+- [ ] Local CI / smoke test of `feature/survey-acl` branch passed (vitest + dev-server click-through).
+- [ ] Migration verified safe by applying against a clone of the prod schema dump.
 - [ ] No active maintenance windows or live invitation campaigns in flight.
-- [ ] Slack/email standby — let stakeholders know a brief look-and-feel change is coming.
+- [ ] `it@aslalabs.org` mail-from is reachable (no SMTP issues).
+- [ ] You can SSH to the VM: `ssh -p 2222 -i ~/.ssh/id_ed25519_workgh gregcohen@20.185.219.8 'whoami'`.
 
 ---
 
-## 1. Build & Stage the New Image (locally)
-
-Per `MEMORY.md` deployment process — VM cannot build (OOM at 8 GB).
+## 1. Backups (DB + Image Rollback Tag)
 
 ```bash
+ssh -p 2222 -i ~/.ssh/id_ed25519_workgh gregcohen@20.185.219.8
+
+# DB backup
+mkdir -p /opt/formbricks/backups
+TS=$(date +%Y%m%d-%H%M%S)
+docker exec formbricks-postgres pg_dump -U formbricks formbricks | \
+  gzip > /opt/formbricks/backups/pre-acl-${TS}.sql.gz
+ls -lh /opt/formbricks/backups/pre-acl-${TS}.sql.gz
+# Sanity-check the dump contains expected tables:
+gunzip -c /opt/formbricks/backups/pre-acl-${TS}.sql.gz | grep -c '^CREATE TABLE'
+# Expected: ~33
+
+# Image rollback tag (locally on VM — already exists if you ran the prep work)
+docker tag ghcr.io/asla1899/formbricks:latest ghcr.io/asla1899/formbricks:pre-acl-backup
+docker images ghcr.io/asla1899/formbricks --format '{{.Repository}}:{{.Tag}} {{.ID}}'
+# Expected: at minimum :latest and :pre-acl-backup at the same SHA, plus the
+# CI-generated :sha-<commit> tag at the same SHA.
+```
+
+The `:sha-<commit>` tag from CI also serves as a rollback handle. Note its commit hash for the record.
+
+---
+
+## 2. Build & Push the New Image
+
+Build is local because the VM is RAM-constrained (8 GB, OOMs on `next build`).
+
+```bash
+# On the dev machine
 cd /Users/gcohen/dev/formbricks-survey-acl
 git checkout feature/survey-acl
 git pull --ff-only
 
+# Capture the commit you're shipping (for the rollback story)
+COMMIT_SHA=$(git rev-parse --short HEAD)
+echo "Shipping commit $COMMIT_SHA"
+
+# Authenticate to GHCR if you haven't recently
+echo "$GITHUB_TOKEN" | docker login ghcr.io -u <your-github-username> --password-stdin
+# (token needs write:packages scope; create at https://github.com/settings/tokens)
+
+# Build for amd64 (matches the Linux/amd64 VM) and push to GHCR
 docker buildx build --platform linux/amd64 \
-  --secret id=DATABASE_URL,src=.secrets/DATABASE_URL \
-  --secret id=ENCRYPTION_KEY,src=.secrets/ENCRYPTION_KEY \
-  --secret id=NEXTAUTH_SECRET,src=.secrets/NEXTAUTH_SECRET \
-  -t formbricks-local:survey-acl-amd64 \
-  -f apps/web/Dockerfile .
-
-docker save formbricks-local:survey-acl-amd64 | gzip | \
-  ssh -p 2222 -i ~/.ssh/id_ed25519_workgh asla@20.185.219.8 \
-    'gunzip | docker load'
+  -t ghcr.io/asla1899/formbricks:survey-acl-${COMMIT_SHA} \
+  -f apps/web/Dockerfile \
+  --push .
 ```
 
-**Do not start the new image yet.** It's just staged on the VM.
-
-Tag the currently-running production image as a backup before doing anything destructive:
-
-```bash
-ssh -p 2222 -i ~/.ssh/id_ed25519_workgh asla@20.185.219.8 \
-  'docker tag formbricks-local:dropdown-fix-v2-amd64 formbricks-local:pre-acl-backup'
-```
+This pushes a **commit-pinned tag** but does NOT yet replace `:latest`. The old image keeps running.
 
 ---
 
-## 2. Apply Schema Migration (no app deploy yet)
+## 3. Apply Schema Migration (without restarting the running app)
 
-The schema is **additive** — adding `Membership.surveyAdmin`, `Survey.visibility`, and the `SurveyAccess` table — so the still-running production image can ignore these columns without error.
-
-Use `prisma db push` (per project convention; no migration files):
+The new image's startup script auto-runs `db:migrate:deploy`. To preserve the gated rollout, we run that against the live DB ahead of replacing the running container, using a one-shot container that joins the postgres container's network namespace:
 
 ```bash
-ssh -p 2222 -i ~/.ssh/id_ed25519_workgh asla@20.185.219.8
+ssh -p 2222 -i ~/.ssh/id_ed25519_workgh gregcohen@20.185.219.8
 
-# inside the VM
 cd /opt/formbricks
-git fetch origin
-git checkout feature/survey-acl
-git pull --ff-only
+POSTGRES_PASSWORD=$(grep ^POSTGRES_PASSWORD .env | cut -d= -f2-)
+COMMIT_SHA=<commit-from-step-2>
 
-# Push schema using the new image (without restarting the running web container)
+docker pull ghcr.io/asla1899/formbricks:survey-acl-${COMMIT_SHA}
+
 docker run --rm \
-  --network host \
-  -v "$PWD/packages/database/schema.prisma:/app/packages/database/schema.prisma" \
-  -e DATABASE_URL="$(grep ^DATABASE_URL .env | cut -d= -f2-)" \
-  formbricks-local:survey-acl-amd64 \
-  pnpm --filter @formbricks/database db:push
+  --network container:formbricks-postgres \
+  -e DATABASE_URL="postgresql://formbricks:${POSTGRES_PASSWORD}@localhost:5432/formbricks" \
+  ghcr.io/asla1899/formbricks:survey-acl-${COMMIT_SHA} \
+  pnpm --filter @formbricks/database db:migrate:deploy
 ```
 
-Verify:
+Watch for: `Successfully applied schema migration: 20260426191252_add_survey_acl` and `All migrations completed`.
+
+The migration is idempotent for pre-existing schema drift (autoAdvance, snowflakeSync, OptionList) and additive for the survey-acl items.
+
+Verify directly:
 
 ```bash
-docker compose exec -T postgres psql -U formbricks -d formbricks -c '\d "Survey"'   | grep -E 'visibility'
-docker compose exec -T postgres psql -U formbricks -d formbricks -c '\d "Membership"' | grep -E 'surveyAdmin'
-docker compose exec -T postgres psql -U formbricks -d formbricks -c '\d "SurveyAccess"'
+docker exec formbricks-postgres psql -U formbricks -d formbricks -c '\d "Survey"' | grep -iE 'visibility|autoAdvance|snowflakeSync'
+docker exec formbricks-postgres psql -U formbricks -d formbricks -c '\d "Membership"' | grep -i 'surveyAdmin'
+docker exec formbricks-postgres psql -U formbricks -d formbricks -c '\d "SurveyAccess"' | head -10
 ```
 
 Expected:
 - `visibility | "SurveyVisibility" | not null default 'private'`
 - `surveyAdmin | boolean | not null default false`
-- `SurveyAccess` table with PK `(surveyId, userId)` + index on `userId`.
+- `SurveyAccess` table with PK `(surveyId, userId)` and `userId` index.
 
 **App at this point:** unchanged production image is still running. Old code does not read the new columns — the site continues working.
 
 ---
 
-## 3. Run the Data Migration
+## 4. Run the Data Migration
+
+Bootstrap gcohen as surveyAdmin and grandfather existing surveys to public:
 
 ```bash
-# inside the VM, /opt/formbricks
-docker compose exec -T postgres psql -U formbricks -d formbricks \
-  -f - < scripts/2026-04-26-survey-acl-migration.sql
+# inside the VM
+cd /opt/formbricks
+
+# Get the migration SQL onto the VM (one-shot — pull from the branch)
+git clone --depth=1 -b feature/survey-acl \
+  https://github.com/ASLA1899/formbricks.git /tmp/survey-acl-migration
+docker cp /tmp/survey-acl-migration/scripts/2026-04-26-survey-acl-migration.sql \
+  formbricks-postgres:/tmp/survey-acl-migration.sql
+
+docker exec formbricks-postgres psql -U formbricks -d formbricks \
+  -v ON_ERROR_STOP=1 -f /tmp/survey-acl-migration.sql
+
+# Cleanup
+rm -rf /tmp/survey-acl-migration
 ```
 
 Watch for these `NOTICE` lines:
@@ -135,27 +177,29 @@ NOTICE:  N memberships updated to surveyAdmin=true
 NOTICE:  M existing surveys set to visibility=public (grandfather)
 ```
 
-Expected: N ≥ 1 (at least one membership for gcohen). M = current production survey count. If `N == 0` and gcohen has memberships, something is wrong — abort and investigate.
+Expected: N ≥ 1 (at least one membership for gcohen). M = current production survey count. If `N == 0` after a fresh apply, gcohen's row may have been missing or the script was already run.
+
+**If the script aborts with `gcohen@asla.org not found in "User"`:** stop here. Either the email in the script doesn't match production, or the user row is missing. Don't proceed without a bootstrap surveyAdmin — the deployment will have zero surveyAdmins and no UI path to create one.
 
 Sanity:
 
 ```bash
-docker compose exec -T postgres psql -U formbricks -d formbricks -c \
+docker exec formbricks-postgres psql -U formbricks -d formbricks -c \
   "SELECT u.email, m.\"surveyAdmin\" FROM \"Membership\" m JOIN \"User\" u ON u.id=m.\"userId\" WHERE m.\"surveyAdmin\";"
 
-docker compose exec -T postgres psql -U formbricks -d formbricks -c \
+docker exec formbricks-postgres psql -U formbricks -d formbricks -c \
   "SELECT visibility, count(*) FROM \"Survey\" GROUP BY visibility;"
 ```
 
 Expected:
-- Only gcohen's memberships are surveyAdmin=true.
-- Every existing survey is visibility=public (count matches pre-migration `count(*)`).
+- Only gcohen's memberships show `surveyAdmin = true`.
+- Every existing survey is `visibility = public` (count matches pre-migration `count(*)`).
 
 ---
 
-## 4. ⚠️ Live Respondent Smoke Test (BEFORE deploying app code)
+## 5. ⚠️ Live Respondent Smoke Test (BEFORE deploying app code)
 
-This is the gate. If respondents broke after the schema migration, you find out **now** when rolling forward is still cheap.
+This is the gate. If respondents broke after the schema or data migration, you find out **now** when rolling forward is still cheap.
 
 Open an incognito window. Hit a known-live survey URL:
 
@@ -164,7 +208,7 @@ https://surveys.asla.org/s/<known-live-survey-id>
 ```
 
 - [ ] Page loads.
-- [ ] Survey renders (questions/welcome card visible).
+- [ ] Survey renders (questions / welcome card visible).
 - [ ] Submit a response.
 - [ ] Response landed: check Snowflake (`SELECT * FROM <table> ORDER BY received_at DESC LIMIT 1;`) and any active webhook destination.
 
@@ -174,65 +218,74 @@ If everything is green: continue.
 
 ---
 
-## 5. Deploy the New App Image
+## 6. Deploy the New App Image
+
+Replace `:latest` with the new commit's tag and recreate the container:
 
 ```bash
-ssh -p 2222 -i ~/.ssh/id_ed25519_workgh asla@20.185.219.8
+ssh -p 2222 -i ~/.ssh/id_ed25519_workgh gregcohen@20.185.219.8
 
 cd /opt/formbricks
-# Update docker-compose to point web service at survey-acl image, OR retag:
-docker tag formbricks-local:survey-acl-amd64 formbricks-local:dropdown-fix-v2-amd64
+COMMIT_SHA=<commit-from-step-2>
 
-docker compose up -d web
-docker compose logs -f --tail=200 web
+# Re-tag locally so docker compose pulls the new content under :latest
+docker tag ghcr.io/asla1899/formbricks:survey-acl-${COMMIT_SHA} \
+  ghcr.io/asla1899/formbricks:latest
+
+docker compose up -d --force-recreate formbricks
+docker compose logs -f --tail=200 formbricks
 ```
 
-Watch startup logs. Expected: clean Next.js boot, no Prisma client errors, no "column does not exist" failures. Ctrl-C the log tail once steady.
+Watch startup logs. Expected:
+- Migration runner: `All migrations completed` (mostly no-ops since schema was applied in step 3).
+- `🗃️ Running SAML database setup...` → `✅ Database setup completed`.
+- `🚀 Starting Next.js server...` → `✓ Ready in <ms>`.
+- No Prisma client errors. No "column does not exist" failures.
+
+Ctrl-C the log tail once steady.
 
 ---
 
-## 6. Post-Deploy Smoke Tests
+## 7. Post-Deploy Smoke Tests
 
-Run all of these. Tick each before declaring success.
+Run all of these against `https://surveys.asla.org`. Tick each before declaring success.
 
-1. [ ] Open https://surveys.asla.org in incognito → branded login renders.
+1. [ ] Open in incognito → branded login page renders. The "Sign in with Microsoft" button is visible (M365 SSO ships in the same image).
 2. [ ] Hit a live survey URL `https://surveys.asla.org/s/<known-live-id>` → loads and accepts a response.
 3. [ ] Sign in as `gcohen@asla.org` → survey list shows **all** surveys (same count as pre-deploy).
-4. [ ] Sign in as a non-admin member → survey list shows only the **grandfathered** (public) surveys (also same count as pre-deploy, since everything was made public).
-5. [ ] As that member, click "New Survey" → new survey is created with `visibility = private`. Reload — only the creator sees it.
-6. [ ] As the creator, open Settings → Sharing → flip to "Public" → another non-admin member can now see it in their list.
-7. [ ] Set back to "Private" → add the other member via the access list → they see it.
-8. [ ] Submit a response to a live survey → check Snowflake export landed (pipeline logs + table).
-9. [ ] Check active webhook destination(s) received the response payload.
+4. [ ] Sign in as a non-admin member → survey list shows only the **grandfathered** (public) surveys (same count as pre-deploy, since everything was made public).
+5. [ ] As that member, click "New Survey" → survey is created with `visibility = private`. Reload — only the creator sees it. (Other non-admin members do **not** see it.)
+6. [ ] As the creator, open Settings → **Sharing** card → flip to "Public" → another non-admin member can now see it in their list.
+7. [ ] Set back to "Private" → add the other member via the access list → they see it. Remove them → they don't.
+8. [ ] As gcohen, Org Settings → Members → toggle a member's "Survey Admin" on → sign in as that member → they now see all surveys. Toggle off → access reverts.
+9. [ ] Submit a response to a live survey → check Snowflake export landed (pipeline logs + Snowflake row).
+10. [ ] Check active webhook destination(s) received the response payload.
 
 If any item fails: see Rollback (App Stage) below.
 
 ---
 
-## 7. 30-Minute Observation Period
+## 8. 30-Minute Observation Period
 
 Tail logs in two windows for 30 minutes:
 
 ```bash
-docker compose logs -f --tail=0 web
+docker compose logs -f --tail=0 formbricks
 ```
 
 Watch for:
 - `403` / `404` spikes on respondent endpoints (`/s/...`, `/api/v1/client/...`) — should be near zero.
 - Repeated Prisma errors mentioning `surveyAccess`, `visibility`, or `surveyAdmin`.
-- Authorization errors that look like the new `loadSurveyForAccess` helper rejecting legitimate access (could indicate a missing membership for someone who should have one).
+- `AuthorizationError: You do not have access to this survey.` from the new `loadSurveyForAccess` helper — could indicate a missing membership for someone who should have access. A handful is fine (someone hitting an old bookmark to a private survey); a flood is a sign the ACL is too tight.
+- `OperationNotAllowedError: Only existing survey admins can manage this.` — same logic; ignore unless flooded.
 
 Spot-check Snowflake:
 ```sql
-SELECT count(*) FROM <table> WHERE received_at > DATEADD('minute', -30, CURRENT_TIMESTAMP());
+SELECT count(*) FROM <responses-table> WHERE received_at > DATEADD('minute', -30, CURRENT_TIMESTAMP());
 ```
-Should be in the normal hourly range — no zero, no order-of-magnitude drop.
+Should be in the normal range — no zero, no order-of-magnitude drop.
 
-If the 30-minute window passes clean: ship is complete. Tag the image as the new known-good:
-
-```bash
-docker tag formbricks-local:survey-acl-amd64 formbricks-local:known-good-$(date +%Y%m%d)
-```
+If the 30-minute window passes clean: ship is complete. The CI-generated `:sha-<commit>` tag pinned at deploy time serves as the new known-good rollback handle.
 
 ---
 
@@ -240,15 +293,25 @@ docker tag formbricks-local:survey-acl-amd64 formbricks-local:known-good-$(date 
 
 | Scenario | Action |
 |---|---|
-| **App boot fails after deploy** | `docker compose down web && docker tag formbricks-local:pre-acl-backup formbricks-local:dropdown-fix-v2-amd64 && docker compose up -d web`. Schema stays — old code ignores new columns. |
-| **ACL is blocking respondents (unexpected)** | Respondent paths don't use ACL; if /s/ is broken, the schema or app boot is the cause, not the ACL. Roll back the app image. |
-| **ACL is blocking admins who should have access** | Surface emergency: temporarily flip everything public: `UPDATE "Survey" SET visibility='public';`. Then restart web. Investigate root cause without time pressure. |
-| **Migration partial / wrong** | Re-run the migration script (idempotent). If gcohen flagging is wrong: `UPDATE "Membership" SET "surveyAdmin"=false WHERE "userId" != '<gcohen-id>';`. |
-| **Catastrophic** | `docker compose stop web` → restore the pre-migration backup: `gunzip -c /opt/formbricks/backups/pre-acl-<ts>.sql.gz \| docker compose exec -T postgres psql -U formbricks -d formbricks` → restart with the pre-acl-backup image. |
+| **Migration step 3 fails** | Schema is unchanged (migration is transactional). Old image keeps running. Investigate before retrying. |
+| **Data migration step 4 fails partway** | Re-run — script is idempotent. If gcohen flagging is wrong: `UPDATE "Membership" SET "surveyAdmin"=false WHERE "userId" != '<gcohen-id>';` |
+| **Respondent smoke test fails after step 5** | Restore DB from backup; old image is still running so app is fine. Investigate. |
+| **App boot fails after step 6** | See "App rollback" below. |
+| **ACL is unexpectedly blocking admins/respondents post-deploy** | Emergency: `UPDATE "Survey" SET visibility='public';` (flips everything visible). Then `docker compose restart formbricks`. Investigate root cause without time pressure. |
+| **Catastrophic** | App rollback **and** DB restore from `pre-acl-${TS}.sql.gz`. |
 
-### Schema-Stage Rollback (post step 2 / before step 5)
+### App rollback (image-only)
 
-The new columns are nullable-with-default and additive — they're harmless to leave in place if you decide to abort the rollout. But if you want a fully clean revert:
+```bash
+ssh -p 2222 -i ~/.ssh/id_ed25519_workgh gregcohen@20.185.219.8
+cd /opt/formbricks
+docker tag ghcr.io/asla1899/formbricks:pre-acl-backup ghcr.io/asla1899/formbricks:latest
+docker compose up -d --force-recreate formbricks
+```
+
+The schema stays in place — old code ignores `visibility`, `surveyAdmin`, `SurveyAccess`. No DB rollback needed.
+
+### Schema rollback (rare — only if you want a fully clean revert)
 
 ```sql
 ALTER TABLE "Membership" DROP COLUMN "surveyAdmin";
@@ -259,15 +322,30 @@ DROP TYPE "SurveyVisibility";
 
 (Old image keeps running; nothing else to revert.)
 
+### Catastrophic DB restore
+
+```bash
+ssh -p 2222 -i ~/.ssh/id_ed25519_workgh gregcohen@20.185.219.8
+cd /opt/formbricks
+docker compose stop formbricks
+gunzip -c /opt/formbricks/backups/pre-acl-${TS}.sql.gz | \
+  docker exec -i formbricks-postgres psql -U formbricks -d formbricks
+docker tag ghcr.io/asla1899/formbricks:pre-acl-backup ghcr.io/asla1899/formbricks:latest
+docker compose up -d formbricks
+```
+
 ---
 
 ## Sign-Off
 
-- [ ] Deploy completed
-- [ ] All 9 smoke tests passed
+- [ ] DB backup at `/opt/formbricks/backups/pre-acl-${TS}.sql.gz` retained for ≥ 7 days
+- [ ] `:pre-acl-backup` and `:sha-<previous-commit>` image tags retained
+- [ ] All 10 smoke tests passed
 - [ ] 30-minute observation clean
-- [ ] Pre-acl-backup image and pre-migration DB backup retained for at least 7 days
-- [ ] gcohen@asla.org sees all surveys; non-admin members see grandfathered set; new surveys default private — verified by direct user test, not just SQL
+- [ ] gcohen sees all surveys; non-admins see grandfathered set; new surveys default private — verified by direct user test, not just SQL
+- [ ] M365 SSO button visible at login (smoke test of the bundled feature)
 
 **Operator:** ____________________
 **Date/Time UTC:** ____________________
+**Image SHA shipped:** ____________________
+**Pre-acl backup retained until:** ____________________
