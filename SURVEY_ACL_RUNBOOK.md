@@ -96,14 +96,17 @@ echo "Shipping commit $COMMIT_SHA"
 echo "$GITHUB_TOKEN" | docker login ghcr.io -u <your-github-username> --password-stdin
 # (token needs write:packages scope; create at https://github.com/settings/tokens)
 
-# Build for amd64 (matches the Linux/amd64 VM) and push to GHCR
+# Build for amd64 (matches the Linux/amd64 VM) and push to GHCR.
+# Note: Apple Silicon Mac builds for amd64 via Rosetta have intermittently
+# stalled in the Next.js TypeScript-check phase. If you hit that, build on a
+# native Linux/amd64 host (small Azure VM, EC2, etc.) and push from there.
 docker buildx build --platform linux/amd64 \
-  -t ghcr.io/asla1899/formbricks:survey-acl-${COMMIT_SHA} \
+  -t ghcr.io/asla1899/formbricks:sha-${COMMIT_SHA} \
   -f apps/web/Dockerfile \
   --push .
 ```
 
-This pushes a **commit-pinned tag** but does NOT yet replace `:latest`. The old image keeps running.
+This pushes a **commit-pinned tag** (`:sha-${COMMIT_SHA}`). Whether `:latest` on GHCR also gets updated depends on your build pipeline — both behaviors are safe **as long as nobody runs `docker compose pull` on the VM until the cutover step**, since the running container uses the VM's local image cache, not GHCR's `:latest`.
 
 ---
 
@@ -118,12 +121,12 @@ cd /opt/formbricks
 POSTGRES_PASSWORD=$(grep ^POSTGRES_PASSWORD .env | cut -d= -f2-)
 COMMIT_SHA=<commit-from-step-2>
 
-docker pull ghcr.io/asla1899/formbricks:survey-acl-${COMMIT_SHA}
+docker pull ghcr.io/asla1899/formbricks:sha-${COMMIT_SHA}
 
 docker run --rm \
   --network container:formbricks-postgres \
   -e DATABASE_URL="postgresql://formbricks:${POSTGRES_PASSWORD}@localhost:5432/formbricks" \
-  ghcr.io/asla1899/formbricks:survey-acl-${COMMIT_SHA} \
+  ghcr.io/asla1899/formbricks:sha-${COMMIT_SHA} \
   pnpm --filter @formbricks/database db:migrate:deploy
 ```
 
@@ -229,7 +232,7 @@ cd /opt/formbricks
 COMMIT_SHA=<commit-from-step-2>
 
 # Re-tag locally so docker compose pulls the new content under :latest
-docker tag ghcr.io/asla1899/formbricks:survey-acl-${COMMIT_SHA} \
+docker tag ghcr.io/asla1899/formbricks:sha-${COMMIT_SHA} \
   ghcr.io/asla1899/formbricks:latest
 
 docker compose up -d --force-recreate formbricks
