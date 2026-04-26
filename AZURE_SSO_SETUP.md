@@ -107,6 +107,30 @@ The web app reads these at startup:
 - `AZURE_OAUTH_ENABLED` becomes `true` automatically when `AZUREAD_CLIENT_ID` and `AZUREAD_CLIENT_SECRET` are both set (see `apps/web/lib/constants.ts:34`).
 - The "Sign in with Microsoft" button only appears when both are set and Enterprise SSO is **not** licensed (which it isn't in this deployment).
 
+### 5b. Wire the vars into `docker-compose.yml`
+
+> ⚠️ **Easy to miss.** `/opt/formbricks/.env` provides values for variable substitution in the compose YAML, but **only env vars explicitly listed in the `formbricks` service's `environment:` block are passed into the container.** The compose file does not use `env_file:`, so adding to `.env` alone is not enough.
+
+Add these three entries to the `environment:` block of the `formbricks` service in `/opt/formbricks/docker-compose.yml`:
+
+```yaml
+  formbricks:
+    environment:
+      # ... existing entries ...
+      # Microsoft Entra SSO (single-tenant)
+      AZUREAD_CLIENT_ID: ${AZUREAD_CLIENT_ID}
+      AZUREAD_CLIENT_SECRET: ${AZUREAD_CLIENT_SECRET}
+      AZUREAD_TENANT_ID: ${AZUREAD_TENANT_ID}
+```
+
+Validate before restart:
+
+```bash
+docker compose config --quiet  # silent on success; prints YAML errors otherwise
+```
+
+Without this step the vars sit unused in `.env`, the container starts with no `AZUREAD_*` in its environment, and the Microsoft button silently never renders — see Troubleshooting.
+
 ---
 
 ## 6. Restart the App
@@ -177,7 +201,7 @@ Azure caps secret lifetime at 24 months. Rotate with overlap to avoid an outage:
 
 | Symptom | Likely cause |
 |---|---|
-| "Sign in with Microsoft" button not visible | `AZUREAD_CLIENT_ID` or `AZUREAD_CLIENT_SECRET` not set, or the container wasn't restarted |
+| "Sign in with Microsoft" button not visible | (1) `AZUREAD_*` vars not in the container — most often because they're in `.env` but never wired into the `environment:` block of `docker-compose.yml` (see step 5b). Verify with `docker exec formbricks env \| grep AZUREAD` — if empty, the vars never made it through. (2) Container wasn't restarted after the edit. (3) `AZUREAD_CLIENT_ID` or `AZUREAD_CLIENT_SECRET` is empty/unset in `.env`. |
 | Microsoft login redirects but Formbricks shows "Invalid credentials" | `AZUREAD_TENANT_ID` mismatch, or `handleMicrosoftCallback` rejected the user — check `docker compose logs formbricks` for the exact error |
 | `AADSTS50011` (redirect URI mismatch) | The redirect URI in Azure must be **exactly** `https://surveys.asla.org/api/auth/callback/azure-ad` — check trailing slashes, http vs https |
 | `AADSTS7000215` (invalid client secret) | Wrong secret value, or you copied the Secret ID instead of the Value. Create a new secret. |
