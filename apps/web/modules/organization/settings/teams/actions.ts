@@ -2,6 +2,7 @@
 
 import { OrganizationRole } from "@prisma/client";
 import { z } from "zod";
+import { prisma } from "@formbricks/database";
 import { ZId, ZUuid } from "@formbricks/types/common";
 import { AuthenticationError, OperationNotAllowedError, ValidationError } from "@formbricks/types/errors";
 import { TOrganizationRole, ZOrganizationRole } from "@formbricks/types/memberships";
@@ -9,6 +10,7 @@ import { INVITE_DISABLED, IS_FORMBRICKS_CLOUD } from "@/lib/constants";
 import { createInviteToken } from "@/lib/jwt";
 import { getMembershipByUserIdOrganizationId } from "@/lib/membership/service";
 import { getAccessFlags } from "@/lib/membership/utils";
+import { getSurveyAccessMembership } from "@/lib/survey/access";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
 import { checkAuthorizationUpdated } from "@/lib/utils/action-client/action-client-middleware";
 import { AuthenticatedActionClientCtx } from "@/lib/utils/action-client/types/context";
@@ -333,6 +335,36 @@ export const inviteUserAction = authenticatedActionClient.schema(ZInviteUserActi
     }
   )
 );
+
+const ZSetMembershipSurveyAdminAction = z.object({
+  organizationId: ZId,
+  userId: ZId,
+  surveyAdmin: z.boolean(),
+});
+
+export const setMembershipSurveyAdminAction = authenticatedActionClient
+  .schema(ZSetMembershipSurveyAdminAction)
+  .action(async ({ ctx, parsedInput }) => {
+    const callerOrgMembership = await getMembershipByUserIdOrganizationId(
+      ctx.user.id,
+      parsedInput.organizationId
+    );
+    const callerSurveyAdmin = await getSurveyAccessMembership(ctx.user.id, parsedInput.organizationId);
+    const canManage = callerOrgMembership?.role === "owner" || callerSurveyAdmin?.surveyAdmin === true;
+    if (!canManage) {
+      throw new OperationNotAllowedError("Only org owners or survey admins can manage this.");
+    }
+    return prisma.membership.update({
+      where: {
+        userId_organizationId: {
+          userId: parsedInput.userId,
+          organizationId: parsedInput.organizationId,
+        },
+      },
+      data: { surveyAdmin: parsedInput.surveyAdmin },
+      select: { userId: true, surveyAdmin: true },
+    });
+  });
 
 const ZLeaveOrganizationAction = z.object({
   organizationId: ZId,

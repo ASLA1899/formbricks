@@ -22,6 +22,7 @@ export const ZMember = z.object({
   accepted: z.boolean(),
   role: ZOrganizationRole,
   isActive: z.boolean(),
+  surveyAdmin: z.boolean().default(false),
 });
 
 export type TMember = z.infer<typeof ZMember>;

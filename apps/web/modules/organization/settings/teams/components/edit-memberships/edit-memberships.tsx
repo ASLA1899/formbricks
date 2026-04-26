@@ -1,6 +1,7 @@
 import { TOrganizationRole } from "@formbricks/types/memberships";
 import { TOrganization } from "@formbricks/types/organizations";
 import { IS_FORMBRICKS_CLOUD } from "@/lib/constants";
+import { getSurveyAccessMembership } from "@/lib/survey/access";
 import { getTranslate } from "@/lingodotdev/server";
 import { MembersInfo } from "@/modules/organization/settings/teams/components/edit-memberships/members-info";
 import { getInvitesByOrganizationId } from "@/modules/organization/settings/teams/lib/invite";
@@ -23,6 +24,8 @@ export const EditMemberships = async ({
 }: EditMembershipsProps) => {
   const members = await getMembershipByOrganizationId(organization.id);
   const invites = await getInvitesByOrganizationId(organization.id);
+  const callerSurveyAdminRow = await getSurveyAccessMembership(currentUserId, organization.id);
+  const callerCanManageSurveyAdmin = role === "owner" || callerSurveyAdminRow?.surveyAdmin === true;
   const t = await getTranslate();
 
   return (
@@ -35,6 +38,8 @@ export const EditMemberships = async ({
           {isAccessControlAllowed && (
             <div className="min-w-[100px] whitespace-nowrap">{t("common.role")}</div>
           )}
+
+          <div className="min-w-[110px] whitespace-nowrap">Survey Admin</div>
 
           <div className="min-w-[80px] whitespace-nowrap">{t("common.status")}</div>
 
@@ -50,6 +55,7 @@ export const EditMemberships = async ({
             invites={invites ?? []}
             members={members ?? []}
             currentUserRole={role}
+            callerCanManageSurveyAdmin={callerCanManageSurveyAdmin}
             isAccessControlAllowed={isAccessControlAllowed}
             isFormbricksCloud={IS_FORMBRICKS_CLOUD}
             isUserManagementDisabledFromUi={isUserManagementDisabledFromUi}

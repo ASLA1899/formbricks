@@ -1,15 +1,19 @@
 "use client";
 
+import { useState } from "react";
+import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { TMember, TOrganizationRole } from "@formbricks/types/memberships";
 import { TOrganization } from "@formbricks/types/organizations";
 import { getAccessFlags } from "@/lib/membership/utils";
 import { getFormattedDateTimeString } from "@/lib/utils/datetime";
 import { EditMembershipRole } from "@/modules/ee/role-management/components/edit-membership-role";
+import { setMembershipSurveyAdminAction } from "@/modules/organization/settings/teams/actions";
 import { MemberActions } from "@/modules/organization/settings/teams/components/edit-memberships/member-actions";
 import { isInviteExpired } from "@/modules/organization/settings/teams/lib/utils";
 import { TInvite } from "@/modules/organization/settings/teams/types/invites";
 import { Badge } from "@/modules/ui/components/badge";
+import { Switch } from "@/modules/ui/components/switch";
 import { TooltipRenderer } from "@/modules/ui/components/tooltip";
 
 interface MembersInfoProps {
@@ -18,6 +22,7 @@ interface MembersInfoProps {
   invites: TInvite[];
   currentUserRole: TOrganizationRole;
   currentUserId: string;
+  callerCanManageSurveyAdmin: boolean;
   isAccessControlAllowed: boolean;
   isFormbricksCloud: boolean;
   isUserManagementDisabledFromUi: boolean;
@@ -34,12 +39,33 @@ export const MembersInfo = ({
   currentUserRole,
   members,
   currentUserId,
+  callerCanManageSurveyAdmin,
   isAccessControlAllowed,
   isFormbricksCloud,
   isUserManagementDisabledFromUi,
 }: MembersInfoProps) => {
   const allMembers = [...members, ...invites];
   const { t } = useTranslation();
+
+  const [surveyAdminState, setSurveyAdminState] = useState<Record<string, boolean>>(
+    Object.fromEntries(members.map((m) => [m.userId, m.surveyAdmin]))
+  );
+
+  const onToggleSurveyAdmin = async (userId: string, next: boolean) => {
+    const prev = surveyAdminState[userId] ?? false;
+    setSurveyAdminState({ ...surveyAdminState, [userId]: next });
+    const res = await setMembershipSurveyAdminAction({
+      organizationId: organization.id,
+      userId,
+      surveyAdmin: next,
+    });
+    if (res?.data) {
+      toast.success(next ? "Granted survey admin" : "Revoked survey admin");
+    } else {
+      setSurveyAdminState((s) => ({ ...s, [userId]: prev }));
+      toast.error("Failed to update survey admin");
+    }
+  };
 
   const getMembershipBadge = (member: TMember | TInvite) => {
     if (isInvitee(member)) {
@@ -121,6 +147,20 @@ export const MembersInfo = ({
               />
             </div>
           )}
+
+          <div className="min-w-[110px]">
+            {isInvitee(member) ? (
+              <span className="text-xs text-slate-400">—</span>
+            ) : (
+              <Switch
+                checked={surveyAdminState[member.userId] ?? false}
+                onCheckedChange={(next) => void onToggleSurveyAdmin(member.userId, next)}
+                disabled={!callerCanManageSurveyAdmin || member.userId === currentUserId}
+                aria-label={`Toggle survey admin for ${member.name}`}
+              />
+            )}
+          </div>
+
           <div className="min-w-[80px]">{getMembershipBadge(member)}</div>
 
           {!isUserManagementDisabledFromUi && (
