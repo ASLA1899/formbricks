@@ -14,6 +14,7 @@ import { SurveyPlacementCard } from "@/modules/survey/editor/components/survey-p
 import { TargetingLockedCard } from "@/modules/survey/editor/components/targeting-locked-card";
 import { WhenToSendCard } from "@/modules/survey/editor/components/when-to-send-card";
 import { RecipientsCard } from "@/modules/survey/invitations/components/recipients-card";
+import { SharingPanel } from "@/modules/survey/sharing/components/sharing-panel";
 
 interface SettingsViewProps {
   environment: Pick<Environment, "id" | "appSetupCompleted">;
@@ -52,6 +53,7 @@ export const SettingsView = ({
 
   return (
     <div className="mt-12 space-y-3 p-5">
+      <SharingPanel surveyId={localSurvey.id} />
       <HowToSendCard localSurvey={localSurvey} setLocalSurvey={setLocalSurvey} environment={environment} />
 
       {localSurvey.type === "app" ? (
