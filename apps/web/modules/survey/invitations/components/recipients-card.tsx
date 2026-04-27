@@ -286,7 +286,18 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
     const res = await sendInvitationsAction({ surveyId: localSurvey.id, config: validated });
     setIsSending(false);
     if (res?.data) {
-      toast.success(`Sent ${res.data.sent}, skipped ${res.data.skipped}, failed ${res.data.failed}`);
+      const { enqueued, alreadySent } = res.data;
+      if (enqueued > 0) {
+        toast.success(
+          `Queued ${enqueued} invitation${enqueued === 1 ? "" : "s"}` +
+            (alreadySent ? ` (${alreadySent} already sent)` : "") +
+            ` — sending in background`
+        );
+      } else if (alreadySent > 0) {
+        toast.success(`No new recipients — ${alreadySent} already sent`);
+      } else {
+        toast.success("No recipients found in audience");
+      }
       const next = await getInvitationSummaryAction({ surveyId: localSurvey.id });
       if (next?.data) setSummary(next.data);
     } else {

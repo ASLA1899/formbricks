@@ -2,8 +2,10 @@ import "server-only";
 import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
 import type { TSurveyInvitationConfig } from "@formbricks/types/surveys/types";
+import { EMAIL_SEND_THROTTLE_MS } from "@/lib/constants";
 import { getContactSurveyLink } from "@/modules/ee/contacts/lib/contact-survey-link";
 import { sendSurveyInvitationEmail } from "@/modules/email";
+import { sleep } from "./send-queue";
 import { renderSubject, renderTemplate } from "./template";
 
 // Sends a reminder to every invitation for `surveyId` where:
@@ -93,6 +95,8 @@ export async function sendManualReminders(args: {
       logger.error({ error, invitationId: inv.id, surveyId }, "Reminder send failed");
       failed++;
     }
+
+    await sleep(EMAIL_SEND_THROTTLE_MS);
   }
 
   skipped = 0; // currently no skip path for manual reminders

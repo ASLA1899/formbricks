@@ -2,9 +2,11 @@ import "server-only";
 import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
 import { ZSurveyInvitationConfig } from "@formbricks/types/surveys/types";
+import { EMAIL_SEND_THROTTLE_MS } from "@/lib/constants";
 import { getOrganizationByEnvironmentId } from "@/lib/organization/service";
 import { getContactSurveyLink } from "@/modules/ee/contacts/lib/contact-survey-link";
 import { sendSurveyInvitationEmail } from "@/modules/email";
+import { sleep } from "./send-queue";
 import { renderSubject, renderTemplate } from "./template";
 
 // Iterates every survey that has an enabled reminder schedule and sends any
@@ -130,6 +132,8 @@ export async function runScheduledReminders(): Promise<{
           );
           failed++;
         }
+
+        await sleep(EMAIL_SEND_THROTTLE_MS);
       }
     }
   }

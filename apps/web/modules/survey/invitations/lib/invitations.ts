@@ -2,11 +2,14 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
-import type { TSurveyInvitationConfig } from "@formbricks/types/surveys/types";
+import { type TSurveyInvitationConfig, ZSurveyInvitationConfig } from "@formbricks/types/surveys/types";
+import { EMAIL_SEND_CHUNK_SIZE, EMAIL_SEND_THROTTLE_MS } from "@/lib/constants";
+import { getOrganizationByEnvironmentId } from "@/lib/organization/service";
 import { getContactSurveyLink } from "@/modules/ee/contacts/lib/contact-survey-link";
 import { sendSurveyInvitationEmail } from "@/modules/email";
 import type { TInvitationSummary } from "../types/invitation";
 import { type TAudienceMember, resolveAudience } from "./audience";
+import { sleep } from "./send-queue";
 import { renderSubject, renderTemplate } from "./template";
 
 const DEFAULT_ATTRIBUTE_KEYS = ["email", "firstName", "lastName"] as const;
@@ -140,77 +143,216 @@ export async function upsertInvitation(args: {
   return { id: created.id, contactId, linkToken, created: true };
 }
 
-// Resolves the configured audience, upserts invitations, and emails any rows
-// that haven't been sent yet (sentAt is null).
-export async function sendInvitationsForSurvey(args: {
+// Resolves the configured audience and upserts SurveyInvitation rows with
+// `sentAt: null`. Does NOT send any emails — the drainer (`runPendingInvitationSends`)
+// picks up unsent rows on its own throttle. Returns the number of rows newly
+// queued vs already sent so the UI can give the user a useful summary.
+//
+// Decoupling enqueue from send means: (a) the user's "Send invitations" click
+// returns instantly even for 1000-recipient audiences, and (b) the same
+// throttle/rate-limit logic governs both manual sends and scheduled reminders.
+export async function enqueueInvitationsForSurvey(args: {
   surveyId: string;
   environmentId: string;
-  organizationName: string;
-  surveyName: string;
   config: TSurveyInvitationConfig;
-}): Promise<{ sent: number; skipped: number; failed: number }> {
-  const { surveyId, environmentId, organizationName, surveyName, config } = args;
+}): Promise<{ enqueued: number; alreadySent: number }> {
+  const { surveyId, environmentId, config } = args;
 
   const members = await resolveAudience(config.audience);
   if (members.length === 0) {
-    logger.warn({ surveyId }, "No audience members resolved for invitation send");
-    return { sent: 0, skipped: 0, failed: 0 };
+    logger.warn({ surveyId }, "No audience members resolved for invitation enqueue");
+    return { enqueued: 0, alreadySent: 0 };
   }
 
-  let sent = 0;
-  let skipped = 0;
-  let failed = 0;
+  let enqueued = 0;
+  let alreadySent = 0;
 
   for (const member of members) {
     try {
-      // Pre-check: if an invitation already exists and has been sent or responded,
-      // skip without even resolving a Contact — cheapest possible re-run path.
       const existing = await prisma.surveyInvitation.findUnique({
         where: { surveyId_recipientEmail: { surveyId, recipientEmail: member.email } },
         select: { sentAt: true, respondedAt: true },
       });
       if (existing?.sentAt || existing?.respondedAt) {
-        skipped++;
+        alreadySent++;
         continue;
       }
 
-      const { id: invitationId, linkToken } = await upsertInvitation({
-        surveyId,
-        member,
-        environmentId,
-      });
-
-      const vars = {
-        recipientName: member.name ?? "",
-        recipientFirstName: member.firstName ?? "",
-        recipientLastName: member.lastName ?? "",
-        recipientEmail: member.email,
-        surveyName,
-        surveyLink: linkToken,
-        organizationName,
-      };
-      const subject = renderSubject(config.emailTemplates.invitation.subject, vars);
-      const body = renderTemplate(config.emailTemplates.invitation.body, vars);
-
-      await sendSurveyInvitationEmail({
-        to: member.email,
-        subject,
-        body,
-        surveyLink: linkToken,
-      });
-
-      await prisma.surveyInvitation.update({
-        where: { id: invitationId },
-        data: { sentAt: new Date() },
-      });
-      sent++;
+      // Either creates a new row or refreshes a previously-created-but-unsent
+      // one — both count as enqueued for the user-facing summary.
+      await upsertInvitation({ surveyId, member, environmentId });
+      enqueued++;
     } catch (error) {
-      logger.error({ error, email: member.email, surveyId }, "Invitation send failed");
-      failed++;
+      logger.error({ error, email: member.email, surveyId }, "Invitation enqueue failed");
     }
   }
 
-  return { sent, skipped, failed };
+  return { enqueued, alreadySent };
+}
+
+// Atomically claim a single SurveyInvitation row by setting sentAt = NOW() iff
+// it is currently null. Returns true if this caller won the claim (and is now
+// responsible for sending), false if another worker claimed it first.
+//
+// We use a tentative claim (mark sent before send, roll back on failure) rather
+// than a separate "claimedAt" column so we don't need a schema migration. The
+// trade-off: a process crash between claim and SMTP success leaves the row
+// marked sent without an email being delivered — the recipient is silently
+// missed. The inverse design (mark sent after SMTP) risks double-sends on
+// crash, which is worse for recipients. Missed sends can be recovered by
+// manually clearing sentAt if needed.
+async function claimInvitationForSend(invitationId: string): Promise<boolean> {
+  const claimed = await prisma.$executeRaw<number>`
+    UPDATE "SurveyInvitation"
+    SET "sentAt" = NOW(), "updated_at" = NOW()
+    WHERE id = ${invitationId} AND "sentAt" IS NULL
+  `;
+  return claimed > 0;
+}
+
+// Drains pending SurveyInvitation rows (sentAt IS NULL) up to a chunk cap,
+// throttling between sends to stay under SMTP-provider rate limits. Optionally
+// scoped to a single surveyId — the user-triggered fire-and-forget path uses
+// this to drain only the survey just enqueued; the cron path drains globally.
+//
+// Idempotent and safe to run concurrently with itself: each row is claimed
+// atomically before the SMTP call. Designed to be invoked both from the
+// post-enqueue fire-and-forget hook (so users see emails go out immediately
+// rather than waiting for the next cron tick) and from the periodic cron.
+export async function runPendingInvitationSends(args: {
+  surveyId?: string;
+  chunkSize?: number;
+  throttleMs?: number;
+}): Promise<{ sent: number; failed: number; remaining: number }> {
+  const { surveyId, chunkSize = EMAIL_SEND_CHUNK_SIZE, throttleMs = EMAIL_SEND_THROTTLE_MS } = args;
+
+  const pendingRows = await prisma.surveyInvitation.findMany({
+    where: {
+      sentAt: null,
+      respondedAt: null,
+      ...(surveyId ? { surveyId } : {}),
+    },
+    select: {
+      id: true,
+      surveyId: true,
+      recipientEmail: true,
+      recipientName: true,
+      recipientFirstName: true,
+      recipientLastName: true,
+      contactId: true,
+      linkToken: true,
+    },
+    orderBy: { createdAt: "asc" },
+    take: chunkSize,
+  });
+
+  if (pendingRows.length === 0) {
+    return { sent: 0, failed: 0, remaining: 0 };
+  }
+
+  // Group by surveyId so we look up survey + config + org name once per survey
+  // rather than once per recipient.
+  const bySurvey = new Map<string, typeof pendingRows>();
+  for (const row of pendingRows) {
+    const list = bySurvey.get(row.surveyId);
+    if (list) list.push(row);
+    else bySurvey.set(row.surveyId, [row]);
+  }
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const [sId, rows] of bySurvey.entries()) {
+    const survey = await prisma.survey.findUnique({
+      where: { id: sId },
+      select: { id: true, name: true, environmentId: true, invitationConfig: true },
+    });
+    if (!survey) {
+      logger.warn({ surveyId: sId, count: rows.length }, "Survey vanished while draining invitations");
+      continue;
+    }
+
+    const parsed = ZSurveyInvitationConfig.safeParse(survey.invitationConfig);
+    if (!parsed.success) {
+      logger.warn(
+        { surveyId: sId, count: rows.length },
+        "invitationConfig invalid/missing during drain — skipping"
+      );
+      continue;
+    }
+    const config = parsed.data;
+
+    const org = await getOrganizationByEnvironmentId(survey.environmentId);
+    const organizationName = org?.name ?? "";
+
+    for (const inv of rows) {
+      // Atomic claim. If another drainer beat us here, claimed === false and we
+      // skip silently — no log spam.
+      const claimed = await claimInvitationForSend(inv.id);
+      if (!claimed) continue;
+
+      try {
+        let surveyLink = inv.linkToken;
+        if (inv.contactId) {
+          const fresh = await getContactSurveyLink(inv.contactId, survey.id);
+          if (fresh.ok) surveyLink = fresh.data;
+        }
+
+        const vars = {
+          recipientName: inv.recipientName ?? "",
+          recipientFirstName: inv.recipientFirstName ?? "",
+          recipientLastName: inv.recipientLastName ?? "",
+          recipientEmail: inv.recipientEmail,
+          surveyName: survey.name,
+          surveyLink,
+          organizationName,
+        };
+        const subject = renderSubject(config.emailTemplates.invitation.subject, vars);
+        const body = renderTemplate(config.emailTemplates.invitation.body, vars);
+
+        await sendSurveyInvitationEmail({
+          to: inv.recipientEmail,
+          subject,
+          body,
+          surveyLink,
+        });
+        sent++;
+      } catch (error) {
+        // Roll back the claim so the next drainer tick retries this row. Any
+        // permanent failure (bad address, etc.) will keep cycling — acceptable
+        // for the current scale; can be capped with a sendAttempts column later.
+        logger.error(
+          { error, invitationId: inv.id, surveyId: sId },
+          "Invitation send failed; rolling back claim"
+        );
+        try {
+          await prisma.surveyInvitation.update({
+            where: { id: inv.id },
+            data: { sentAt: null },
+          });
+        } catch (rollbackError) {
+          logger.error(
+            { rollbackError, invitationId: inv.id },
+            "Failed to roll back sentAt after send failure"
+          );
+        }
+        failed++;
+      }
+
+      await sleep(throttleMs);
+    }
+  }
+
+  // Approximate `remaining` — anything still unsent for the same scope.
+  const remaining = await prisma.surveyInvitation.count({
+    where: {
+      sentAt: null,
+      respondedAt: null,
+      ...(surveyId ? { surveyId } : {}),
+    },
+  });
+
+  return { sent, failed, remaining };
 }
 
 // Called from the pipeline when a response finishes — marks the matching

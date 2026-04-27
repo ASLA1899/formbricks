@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { logger } from "@formbricks/logger";
 import { ResourceNotFoundError } from "@formbricks/types/errors";
 import { ZSurveyInvitationConfig } from "@formbricks/types/surveys/types";
 import { getOrganizationByEnvironmentId } from "@/lib/organization/service";
@@ -9,7 +10,11 @@ import { authenticatedActionClient } from "@/lib/utils/action-client";
 import { checkAuthorizationUpdated } from "@/lib/utils/action-client/action-client-middleware";
 import { getOrganizationIdFromSurveyId, getProjectIdFromSurveyId } from "@/lib/utils/helper";
 import { getSurvey } from "@/modules/survey/lib/survey";
-import { getInvitationSummary, sendInvitationsForSurvey } from "./lib/invitations";
+import {
+  enqueueInvitationsForSurvey,
+  getInvitationSummary,
+  runPendingInvitationSends,
+} from "./lib/invitations";
 import { sendManualReminders } from "./lib/reminders";
 
 const ZSurveyIdInput = z.object({ surveyId: z.string().cuid2() });
@@ -58,16 +63,25 @@ export const sendInvitationsAction = authenticatedActionClient
     const survey = await getSurvey(parsedInput.surveyId);
     if (!survey) throw new ResourceNotFoundError("Survey", parsedInput.surveyId);
 
-    const org = await getOrganizationByEnvironmentId(survey.environmentId);
-    const organizationName = org?.name ?? "";
-
-    const result = await sendInvitationsForSurvey({
+    // Enqueue-only: persist SurveyInvitation rows with sentAt=null and return
+    // immediately. Actual SMTP sends are throttled by the drainer to respect
+    // provider rate limits (Resend = 2-10 req/s) and to avoid blocking the user
+    // for the duration of a large send.
+    const result = await enqueueInvitationsForSurvey({
       surveyId: survey.id,
       environmentId: survey.environmentId,
-      organizationName,
-      surveyName: survey.name,
       config: parsedInput.config,
     });
+
+    // Kick the drainer in the background so users see the first batch go out
+    // immediately rather than waiting for the next cron tick. We deliberately
+    // don't await — long sends would block the action far past the user's
+    // patience and any HTTP timeout. Errors are logged inside the drainer.
+    if (result.enqueued > 0) {
+      void runPendingInvitationSends({ surveyId: survey.id }).catch((error) => {
+        logger.error({ error, surveyId: survey.id }, "Background invitation drainer failed");
+      });
+    }
 
     revalidatePath(`/environments/${survey.environmentId}/surveys/${survey.id}`);
     return result;

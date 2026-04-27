@@ -83,6 +83,8 @@ export const env = createEnv({
     SMTP_PASSWORD: z.string().min(1).optional(),
     SMTP_AUTHENTICATED: z.enum(["1", "0"]).optional(),
     SMTP_REJECT_UNAUTHORIZED_TLS: z.enum(["1", "0"]).optional(),
+    EMAIL_SEND_THROTTLE_MS: z.string().regex(/^\d+$/).optional(),
+    EMAIL_SEND_CHUNK_SIZE: z.string().regex(/^\d+$/).optional(),
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
     PUBLIC_URL: z
@@ -200,6 +202,8 @@ export const env = createEnv({
     SMTP_USER: process.env.SMTP_USER,
     SMTP_REJECT_UNAUTHORIZED_TLS: process.env.SMTP_REJECT_UNAUTHORIZED_TLS,
     SMTP_AUTHENTICATED: process.env.SMTP_AUTHENTICATED,
+    EMAIL_SEND_THROTTLE_MS: process.env.EMAIL_SEND_THROTTLE_MS,
+    EMAIL_SEND_CHUNK_SIZE: process.env.EMAIL_SEND_CHUNK_SIZE,
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
     PUBLIC_URL: process.env.PUBLIC_URL,
