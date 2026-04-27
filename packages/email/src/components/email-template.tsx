@@ -2,8 +2,9 @@ import { Body, Container, Html, Img, Link, Section, Tailwind, Text } from "@reac
 import { TEmailTemplateLegalProps } from "../types/email";
 import { TFunction } from "../types/translations";
 
-const fbLogoUrl = "https://app.formbricks.com/logo-transparent.png";
-const logoLink = "https://formbricks.com?utm_source=email_header&utm_medium=email";
+const aslaWordmarkUrl = "https://surveys.asla.org/asla-logo-email.png";
+
+const emailFontStack = "'Retina', 'Calibri', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif";
 
 interface EmailTemplateProps extends TEmailTemplateLegalProps {
   readonly children: React.ReactNode;
@@ -19,67 +20,113 @@ export function EmailTemplate({
   imprintUrl,
   imprintAddress,
 }: EmailTemplateProps): React.JSX.Element {
-  const isDefaultLogo = !logoUrl || logoUrl === fbLogoUrl;
+  // Per ASLA email guide: web fonts unreliable in email — system cascade only.
+  // Org-level custom logos still override the ASLA wordmark when configured.
+  const mastheadLogo = logoUrl ?? aslaWordmarkUrl;
+  const isCustomLogo = Boolean(logoUrl) && logoUrl !== aslaWordmarkUrl;
 
   return (
     <Html>
       <Tailwind>
         <Body
-          className="m-0 h-full w-full justify-center bg-slate-50 p-6 text-center text-sm text-slate-800"
+          className="m-0 h-full w-full p-0 text-sm"
           style={{
-            fontFamily: "'Jost', 'Helvetica Neue', 'Segoe UI', 'Helvetica', 'sans-serif'",
+            backgroundColor: "#FBF8F1",
+            fontFamily: emailFontStack,
+            color: "#1A1A1A",
           }}>
-          <Section>
-            {isDefaultLogo ? (
-              <Link href={logoLink} target="_blank">
-                <Img data-testid="default-logo-image" alt="Logo" className="mx-auto w-60" src={fbLogoUrl} />
-              </Link>
-            ) : (
+          <Container
+            className="mx-auto"
+            style={{ maxWidth: "640px", width: "100%", backgroundColor: "#FFFFFF" }}>
+            <Section
+              style={{
+                backgroundColor: "#003A49",
+                padding: "24px 36px",
+              }}>
               <Img
-                data-testid="logo-image"
-                alt="Logo"
-                className="mx-auto max-h-[100px] w-80 object-contain"
-                src={logoUrl}
+                data-testid={isCustomLogo ? "logo-image" : "default-logo-image"}
+                alt={isCustomLogo ? "Logo" : "American Society of Landscape Architects"}
+                src={mastheadLogo}
+                width={isCustomLogo ? 260 : 220}
+                height={isCustomLogo ? 60 : 56}
+                style={{
+                  display: "block",
+                  border: 0,
+                  outline: "none",
+                  textDecoration: "none",
+                  maxWidth: "100%",
+                  height: "auto",
+                }}
               />
-            )}
-          </Section>
-          <Container className="mx-auto my-8 max-w-xl rounded-md bg-white p-4 text-left">
-            {children}
-          </Container>
+            </Section>
 
-          <Section className="mt-4 text-center text-sm">
-            <Link
-              className="m-0 text-sm font-normal text-slate-500"
-              href="https://formbricks.com/?utm_source=email_header&utm_medium=email"
-              target="_blank"
-              rel="noopener noreferrer">
-              {t("emails.email_template_text_1")}
-            </Link>
-            {imprintAddress && (
-              <Text className="m-0 text-sm font-normal text-slate-500 opacity-50">{imprintAddress}</Text>
-            )}
-            <Text className="m-0 text-sm font-normal text-slate-500 opacity-50">
-              {imprintUrl && (
-                <Link
-                  href={imprintUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-slate-500">
-                  {t("emails.imprint")}
-                </Link>
+            <Container style={{ padding: "32px 36px 8px", backgroundColor: "#FFFFFF" }}>{children}</Container>
+
+            <Section
+              style={{
+                backgroundColor: "#1A1A1A",
+                padding: "24px 36px 28px",
+                color: "#FFFFFF",
+              }}>
+              <Link
+                href="https://asla.org"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: "#81BC00",
+                  fontFamily: emailFontStack,
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  letterSpacing: "0.04em",
+                  textDecoration: "none",
+                }}>
+                {t("emails.email_template_text_1")}
+              </Link>
+              {imprintAddress ? (
+                <Text
+                  className="m-0"
+                  style={{
+                    color: "rgba(255,255,255,0.6)",
+                    fontFamily: emailFontStack,
+                    fontSize: "11px",
+                    lineHeight: 1.6,
+                    marginTop: "8px",
+                  }}>
+                  {imprintAddress}
+                </Text>
+              ) : null}
+              {(imprintUrl || privacyUrl) && (
+                <Text
+                  className="m-0"
+                  style={{
+                    color: "rgba(255,255,255,0.6)",
+                    fontFamily: emailFontStack,
+                    fontSize: "11px",
+                    lineHeight: 1.6,
+                    marginTop: "6px",
+                  }}>
+                  {imprintUrl ? (
+                    <Link
+                      href={imprintUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#81BC00", textDecoration: "none", marginRight: "12px" }}>
+                      {t("emails.imprint")}
+                    </Link>
+                  ) : null}
+                  {privacyUrl ? (
+                    <Link
+                      href={privacyUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#81BC00", textDecoration: "none" }}>
+                      {t("emails.privacy_policy")}
+                    </Link>
+                  ) : null}
+                </Text>
               )}
-              {imprintUrl && privacyUrl && " • "}
-              {privacyUrl && (
-                <Link
-                  href={privacyUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-slate-500">
-                  {t("emails.privacy_policy")}
-                </Link>
-              )}
-            </Text>
-          </Section>
+            </Section>
+          </Container>
         </Body>
       </Tailwind>
     </Html>
