@@ -73,7 +73,7 @@ export function EmailTemplate({
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
-                  color: "#81BC00",
+                  color: "#FFFFFF",
                   fontFamily: emailFontStack,
                   fontSize: "12px",
                   fontWeight: 600,
