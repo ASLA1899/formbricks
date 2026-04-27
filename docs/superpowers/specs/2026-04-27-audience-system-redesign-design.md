@@ -42,6 +42,7 @@ The Q3+Q4 combination is the most important: **transient pulls and materialized 
 3. **Demographic provenance survives.** When an audience source carries demographics (Snowflake query columns, CSV columns), those values are captured on the resulting `SurveyInvitation` rows so analysts can join responses × demographics without back-tracking through Snowflake.
 4. **Identity is canonical.** Email is the Contact match key; member number is stored as an attribute when known. Email-based dedupe is enforced at import and send time.
 5. **Reuse is cheap.** "Send the next survey to everyone who responded to the last one" is a two-click operation, not a database query.
+6. **No-SQL slicing.** Once data is in Formbricks (via CSV upload, Snowflake materialization, or response capture), operators can build new audiences by clicking through demographic filters — no SQL or new query writing required for everyday slicing work.
 
 ## Non-Goals (for the work scoped in this spec)
 
@@ -144,6 +145,37 @@ A single table with a type discriminator and nullable type-specific columns. Pol
 | `segment` | Contacts matching the segment filter | Contact attributes |
 | `surveyDerived` | Contacts who got `sourceSurveyId` matching the status filter | Whatever demographics were snapshot on the prior `SurveyInvitation` rows |
 
+### Column Mapping (NEW — shared by CSV import + Snowflake materialization)
+
+When data flows in from a CSV upload or a materialized Snowflake query, source columns need to map onto existing `ContactAttributeKey`s (or create new ones). This logic is shared between both ingest paths.
+
+**Matching algorithm:**
+
+1. Normalize source header: lowercase, strip whitespace/underscores/dashes/parens/non-alphanumerics.
+   - `"Member ID"` → `"memberid"`
+   - `"member_id"` → `"memberid"`
+   - `"MemberID"` → `"memberid"`
+2. Compare normalized header against normalized existing attribute keys in the environment.
+3. **Exact normalized match** → auto-map (default selection in UI; user can still override).
+4. **No match** → flag column as "new"; user picks one of:
+   - Create a new `ContactAttributeKey` with this header as the key.
+   - Map to an existing key from a dropdown (override).
+   - Skip this column (don't import).
+
+**For Snowflake materialization:** mapping is configured once on the Audience at creation time and persists in the Audience config (so future refreshes use the same mapping without re-prompting).
+
+**For CSV upload:** mapping is interactive per-upload — modal step between "I selected a file" and "import." Subsequent uploads remember the last mapping for the same column-set as a default suggestion.
+
+**Built-in semantic aliases:** the matcher seeds with a small alias table for common columns the existing system already knows about:
+
+| Header variants | Maps to attribute key |
+|---|---|
+| email, e-mail, email_address, emailaddress | `email` |
+| firstname, first_name, first, givenname, given_name, fname | `firstName` |
+| lastname, last_name, last, surname, familyname, family_name, lname | `lastName` |
+
+(Already implemented in `recipients-card.tsx` for the existing limited CSV importer; gets pulled out into a shared module for reuse.)
+
 ### SurveyInvitation (existing — extended)
 
 - **New column** `audienceId String?` — provenance, FK to `Audience`. Nullable for backward compatibility with rows created before the migration.
@@ -183,17 +215,25 @@ These two columns make it possible to answer:
 3. Names it "Survey A non-responders."
 4. Survey B picks that audience. Sends.
 
-### Flow 4 — Evergreen materialized list (Q4-C use case) — **Phase 2**
+### Flow 4 — Evergreen materialized list (Q4-C use case)
 
-This flow is the Q4-C answer (segment-in-Formbricks over Snowflake-sourced data) and depends on the Snowflake-to-Contacts materialization import. It is **not** in Phase 1; it's documented here so the Phase 1 schema is designed compatibly.
+This flow is the Q4-C answer: segment-in-Formbricks over Snowflake-sourced data, no SQL needed for slicing. It is the headline experience users will judge the redesign on, so it ships in Phase 1.
 
 1. Operator goes to **Audiences** page → "New audience from Snowflake query" → picks `all-active-members` → toggles "Materialize into Contacts."
-2. Behind the scenes: Snowflake query runs, results upsert into Contacts (matched by email), all returned columns become attributes (`memberId`, `region`, `tenure`, etc.).
-3. The Audience now has type=`segment` (auto-generated segment "All members imported on 2026-04-27" matching the imported `memberId` set).
-4. Operator can now build *new* segments in the existing Segments UI ("members in CA with tenure >5 years") and wrap them as new Audiences without touching Snowflake again until refresh time.
-5. Refresh = manual "Re-import from source" button on the Audience detail page (Phase 2; v1 ships without refresh — re-import means new audience).
+2. The system runs the query, presents a **column mapping** step (see Column Mapping below) — confirm/override how source columns map to existing Contact attribute keys, with the option to create new keys for unmatched columns.
+3. On confirmation: rows upsert into Contacts (matched by email), mapped columns become attributes (`memberId`, `region`, `tenure`, etc.).
+4. The Audience is created with type=`segment`, pointing at an auto-generated Segment that matches the imported `memberId` set.
+5. Operator can now build *new* Segments in the existing Segments UI ("members in CA with tenure >5 years") and wrap them as new Audiences without touching Snowflake again until refresh time.
+6. Refresh = "Re-import from source" button on the Audience detail page. v1 ships with manual refresh; scheduled refresh is Phase 4.
 
-**Phase 1 fallback for this use case:** create a `snowflakeQuery`-type Audience pointing at `all-active-members` and just live with it being a transient pull-on-send (no in-Formbricks slicing). Phase 2 upgrades it to materialized.
+### Flow 5 — Slice an uploaded list by demographics in the UI
+
+This is the same no-SQL slicing experience for CSV-driven workflows.
+
+1. Operator uploads a CSV with columns like `email, firstName, region, tenure_years, member_type` via the new audience importer.
+2. Column mapping step: `email`/`firstName` auto-map to existing keys; `region`/`tenure_years`/`member_type` are flagged as new — operator confirms creating attribute keys (or maps to existing keys with different headings).
+3. On import: rows upsert into Contacts; mapped columns persist as attributes.
+4. Operator builds a Segment ("region = NE AND tenure_years > 5") in the Segments UI, wraps as an Audience, sends.
 
 ## UI Changes
 
@@ -240,24 +280,34 @@ This spec covers the full vision. The implementation plan that follows will scop
 
 ### Phase 1 (this implementation plan)
 
+**Schema:**
 - `Audience` table + migration (incl. backfill of existing surveys' audience configs).
 - `audienceId` + `demographicsSnapshot` on `SurveyInvitation`.
 - `audienceId` on `Survey`.
+
+**Ingest:**
+- Shared column-mapping module (normalization + alias table + new-key creation).
+- CSV importer extended to capture **arbitrary columns** as Contact attributes via column mapping (today only email/first/last are read).
+- Snowflake-to-Contacts materialization (the Q4-C use case): on Audience creation with the "Materialize" toggle, run the query, run column mapping, upsert Contacts.
+- Manual "Re-import from source" button on materialized Audiences (re-runs the query + mapping). Last-refreshed timestamp on the Audience.
+
+**Resolution:**
 - New audience resolver replacing `apps/web/modules/survey/invitations/lib/audience.ts`'s per-source logic.
+
+**UI:**
 - Audiences page (CRUD; list/detail/create flows for all four types).
 - Survey audience picker rewrite (single dropdown, inline-create flow).
 - Audience memberships section on Contact detail page.
 
 ### Phase 2
 
-- Snowflake-to-Contacts materialization import flow (Q4-C use case at full fidelity).
-- Audience refresh button + last-refreshed timestamp.
-- "Audiences using this contact" reverse lookup on Contact detail.
+- "Audiences using this contact" reverse lookup on Contact detail (small; could be pulled into Phase 1 if cheap).
+- Audience overlap detection ("these two audiences share 800 people").
 
 ### Phase 3
 
 - Demographics-aware reporting joins (Response × SurveyInvitation.demographicsSnapshot in the analysis UI).
-- Audience overlap detection ("these two audiences share 800 people").
+- Audiences-as-Segments-absorbed UI consolidation (if dual-page UX feels redundant in production use).
 
 ### Phase 4
 
@@ -270,6 +320,7 @@ This spec covers the full vision. The implementation plan that follows will scop
 1. **Email uniqueness on Contact** — currently enforced only by application-level `ensureContact` retry-on-conflict. Should we add a partial unique index (or migrate to a typed `email` column) as part of Phase 1, or defer? *Inclination: do it in Phase 1 — concurrency races already bite us at scale and the migration is small.*
 2. **Inline-audience-save naming** — auto-named as `"<survey name> recipients"` is fine, but it'll create a lot of low-value Audiences over time. Should there be a flag `Audience.transient: boolean` to hide auto-created ones from the main list unless promoted? *Inclination: yes, simple and reversible.*
 3. **`survey_derived` audience resolution at send time** — when sending Survey B to "non-responders of Survey A," do we resolve at send time (live snapshot) or pin at audience-creation time (frozen list)? *Inclination: resolve at send time. Pinned would require yet another table for the membership snapshot, and the dynamic semantics are what operators actually want.*
+4. **Auto-generated Segment representation for materialized Audiences** — the existing Segment filter UI is built around attribute predicates (equality, ranges, etc.) and may not cleanly express "this enumerated set of contact ids." Two options: (a) extend Segment with a "static membership" filter type, (b) skip the auto-generated Segment and let the Audience point directly at a contact-id list internally, only generating Segments when the user explicitly clicks "save filter as segment" after building a real filter. *Inclination: (b) — avoids stretching Segment, and the user-built filters that do get saved become natural Segments. But this reframes the data model slightly: the materialized Audience itself owns the contact-id list, not a synthetic Segment. Worth confirming during plan-writing.*
 
 ## Risks
 
@@ -287,3 +338,6 @@ After Phase 1, an operator can:
 - ✅ Run a multi-survey panel by reusing a single named audience.
 - ✅ Look at any past response and see which audience the recipient came from + the demographic snapshot at send time.
 - ✅ Look at any contact and see which audiences they're in.
+- ✅ **Materialize a Snowflake query into Contacts and slice them by demographics in the Segments UI without writing more SQL.**
+- ✅ **Upload a CSV with arbitrary demographic columns and slice on those fields in the Segments UI.**
+- ✅ **Refresh a materialized Snowflake-backed Audience on demand (one click) without recreating it.**
