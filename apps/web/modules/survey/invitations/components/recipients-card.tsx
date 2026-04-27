@@ -191,8 +191,14 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleCsvFile = async (file: File) => {
+    if (file.size > 512 * 1024) {
+      toast.error("CSV must be under 512 KB");
+      return;
+    }
     try {
-      const text = await file.text();
+      // Strip UTF-8 BOM (Excel "Save As CSV UTF-8" prepends U+FEFF, which
+      // would otherwise corrupt the first email and silently drop the row).
+      const text = (await file.text()).replace(/^﻿/, "");
       const parsed = csvToRecipients(text);
       if (parsed.length === 0) {
         toast.error("No valid emails found in CSV");
@@ -201,14 +207,21 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
       // Merge with whatever is already in the textarea, dedupe by email
       // (case-insensitive), new entries win on name fields.
       const existing = audience.source === "manualList" ? audience.recipients : [];
+      const existingEmails = new Set(existing.map((r) => r.email.toLowerCase()));
       const byEmail = new Map<string, TManualRecipient>();
       for (const r of existing) byEmail.set(r.email.toLowerCase(), r);
       for (const r of parsed) byEmail.set(r.email.toLowerCase(), r);
       const merged = Array.from(byEmail.values());
+      const added = parsed.filter((r) => !existingEmails.has(r.email.toLowerCase())).length;
+      const updated = parsed.length - added;
 
       setManualListRaw(recipientsToTextarea(merged));
       updateAudience({ source: "manualList", recipients: merged });
-      toast.success(`Imported ${parsed.length} recipient${parsed.length === 1 ? "" : "s"} from CSV`);
+      toast.success(
+        updated > 0
+          ? `Imported ${parsed.length} from CSV (${added} new, ${updated} updated)`
+          : `Imported ${added} recipient${added === 1 ? "" : "s"} from CSV`
+      );
     } catch {
       toast.error("Could not read CSV file");
     }
