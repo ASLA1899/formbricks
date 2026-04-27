@@ -13,6 +13,7 @@ import { GoBackButton } from "@/modules/ui/components/go-back-button";
 import { PageContentWrapper } from "@/modules/ui/components/page-content-wrapper";
 import { PageHeader } from "@/modules/ui/components/page-header";
 import { ResponseSection } from "./components/response-section";
+import { SurveyInvitationsSection } from "./components/survey-invitations-section";
 
 export const SingleContactPage = async (props: {
   params: Promise<{ environmentId: string; contactId: string }>;
@@ -55,7 +56,7 @@ export const SingleContactPage = async (props: {
     <PageContentWrapper>
       <GoBackButton url={`/environments/${params.environmentId}/contacts`} />
       <PageHeader pageTitle={getContactIdentifier(contactAttributes)} cta={getContactControlBar()} />
-      <section className="pt-6 pb-24">
+      <section className="pt-6">
         <div className="grid grid-cols-4 gap-x-8">
           <AttributesSection contactId={params.contactId} />
           <ResponseSection
@@ -64,6 +65,9 @@ export const SingleContactPage = async (props: {
             environmentTags={environmentTags}
           />
         </div>
+      </section>
+      <section className="pt-10 pb-24">
+        <SurveyInvitationsSection environmentId={params.environmentId} contactId={params.contactId} />
       </section>
     </PageContentWrapper>
   );

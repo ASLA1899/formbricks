@@ -13,6 +13,7 @@ import { getSurvey } from "@/modules/survey/lib/survey";
 import {
   enqueueInvitationsForSurvey,
   getInvitationSummary,
+  listInvitationsBySurveyId,
   runPendingInvitationSends,
 } from "./lib/invitations";
 import { sendManualReminders } from "./lib/reminders";
@@ -36,6 +37,25 @@ export const getInvitationSummaryAction = authenticatedActionClient
       ],
     });
     return getInvitationSummary(parsedInput.surveyId);
+  });
+
+export const listSurveyInvitationsAction = authenticatedActionClient
+  .schema(ZSurveyIdInput)
+  .action(async ({ ctx, parsedInput }) => {
+    const organizationId = await getOrganizationIdFromSurveyId(parsedInput.surveyId);
+    await checkAuthorizationUpdated({
+      userId: ctx.user.id,
+      organizationId,
+      access: [
+        { type: "organization", roles: ["owner", "manager"] },
+        {
+          type: "projectTeam",
+          projectId: await getProjectIdFromSurveyId(parsedInput.surveyId),
+          minPermission: "read",
+        },
+      ],
+    });
+    return listInvitationsBySurveyId(parsedInput.surveyId);
   });
 
 const ZSendInvitationsInput = z.object({

@@ -23,15 +23,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/modules/ui/components/select";
-import { getInvitationSummaryAction, sendInvitationsAction, sendRemindersAction } from "../actions";
+import {
+  getInvitationSummaryAction,
+  listSurveyInvitationsAction,
+  sendInvitationsAction,
+  sendRemindersAction,
+} from "../actions";
 import {
   DEFAULT_INVITATION_BODY,
   DEFAULT_INVITATION_SUBJECT,
   DEFAULT_REMINDER_BODY,
   DEFAULT_REMINDER_SUBJECT,
   MERGE_FIELDS,
+  type TInvitationRow,
   type TInvitationSummary,
 } from "../types/invitation";
+import { RecipientListTable } from "./recipient-list-table";
 
 // Loose draft type for the editor state. The canonical `TSurveyInvitationConfig`
 // requires a valid cuid2 segmentId and other non-empty fields, which the form
@@ -166,6 +173,7 @@ const emptyDraft: TInvitationConfigDraft = {
 export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: RecipientsCardProps) => {
   const [open, setOpen] = useState(false);
   const [summary, setSummary] = useState<TInvitationSummary | null>(null);
+  const [invitationRows, setInvitationRows] = useState<TInvitationRow[] | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isReminding, setIsReminding] = useState(false);
 
@@ -236,7 +244,25 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
       .catch(() => {
         /* first-run before save: no invitations yet — ignore */
       });
+    listSurveyInvitationsAction({ surveyId: localSurvey.id })
+      .then((res) => {
+        if (res?.data) setInvitationRows(res.data);
+      })
+      .catch(() => {
+        /* first-run: ignore — table just stays empty */
+      });
   }, [open, localSurvey.id]);
+
+  // Refresh both summary and invitee list. Used after manual sends/reminders so
+  // the user sees the new state without a page reload.
+  const refreshInvitations = async () => {
+    const [nextSummary, nextRows] = await Promise.all([
+      getInvitationSummaryAction({ surveyId: localSurvey.id }).catch(() => null),
+      listSurveyInvitationsAction({ surveyId: localSurvey.id }).catch(() => null),
+    ]);
+    if (nextSummary?.data) setSummary(nextSummary.data);
+    if (nextRows?.data) setInvitationRows(nextRows.data);
+  };
 
   const mirrorToSurvey = (nextDraft: TInvitationConfigDraft) => {
     const parsed = ZSurveyInvitationConfig.safeParse(nextDraft);
@@ -298,8 +324,7 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
       } else {
         toast.success("No recipients found in audience");
       }
-      const next = await getInvitationSummaryAction({ surveyId: localSurvey.id });
-      if (next?.data) setSummary(next.data);
+      await refreshInvitations();
     } else {
       toast.error(getFormattedErrorMessage(res) || "Failed to send invitations");
     }
@@ -313,8 +338,7 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
     setIsReminding(false);
     if (res?.data) {
       toast.success(`Reminded ${res.data.sent} (${res.data.failed} failed)`);
-      const next = await getInvitationSummaryAction({ surveyId: localSurvey.id });
-      if (next?.data) setSummary(next.data);
+      await refreshInvitations();
     } else {
       toast.error(getFormattedErrorMessage(res) || "Failed to send reminders");
     }
@@ -349,6 +373,13 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
               <Stat label="Responded" value={summary.responded} />
               <Stat label="Pending" value={summary.pending} />
             </div>
+          )}
+
+          {invitationRows && invitationRows.length > 0 && (
+            <section className="space-y-2">
+              <Label>Invitees</Label>
+              <RecipientListTable rows={invitationRows} />
+            </section>
           )}
 
           <section className="space-y-2">

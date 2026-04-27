@@ -7,7 +7,7 @@ import { EMAIL_SEND_CHUNK_SIZE, EMAIL_SEND_THROTTLE_MS } from "@/lib/constants";
 import { getOrganizationByEnvironmentId } from "@/lib/organization/service";
 import { getContactSurveyLink } from "@/modules/ee/contacts/lib/contact-survey-link";
 import { sendSurveyInvitationEmail } from "@/modules/email";
-import type { TInvitationSummary } from "../types/invitation";
+import type { TContactInvitationRow, TInvitationRow, TInvitationSummary } from "../types/invitation";
 import { type TAudienceMember, resolveAudience } from "./audience";
 import { sleep } from "./send-queue";
 import { renderSubject, renderTemplate } from "./template";
@@ -420,6 +420,69 @@ export async function linkResponseToInvitation(responseId: string): Promise<void
     where: { id: invitation.id },
     data: { respondedAt: new Date(), responseId: response.id },
   });
+}
+
+// Lists SurveyInvitation rows by surveyId or contactId. Caller MUST have already
+// authorized the predicate (this function is a thin DB query — auth lives in
+// the action layer or the server-component page that owns the predicate).
+// Returns rows with Date fields serialized to ISO strings so they can cross
+// the server-action boundary without further plumbing.
+export async function listInvitations(predicate: {
+  surveyId?: string;
+  contactId?: string;
+}): Promise<TContactInvitationRow[]> {
+  const { surveyId, contactId } = predicate;
+  if (!surveyId && !contactId) return [];
+
+  const rows = await prisma.surveyInvitation.findMany({
+    where: {
+      ...(surveyId ? { surveyId } : {}),
+      ...(contactId ? { contactId } : {}),
+    },
+    select: {
+      id: true,
+      surveyId: true,
+      survey: { select: { name: true } },
+      recipientEmail: true,
+      recipientName: true,
+      contactId: true,
+      sentAt: true,
+      respondedAt: true,
+      lastReminderAt: true,
+      reminderCount: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    surveyId: row.surveyId,
+    surveyName: row.survey.name,
+    recipientEmail: row.recipientEmail,
+    recipientName: row.recipientName,
+    contactId: row.contactId,
+    sentAt: row.sentAt ? row.sentAt.toISOString() : null,
+    respondedAt: row.respondedAt ? row.respondedAt.toISOString() : null,
+    lastReminderAt: row.lastReminderAt ? row.lastReminderAt.toISOString() : null,
+    reminderCount: row.reminderCount,
+  }));
+}
+
+// Survey-side view doesn't need the survey identity columns (the surveyId is
+// the predicate). Strip them so the type matches the existing TInvitationRow
+// scaffold.
+export async function listInvitationsBySurveyId(surveyId: string): Promise<TInvitationRow[]> {
+  const rows = await listInvitations({ surveyId });
+  return rows.map((row) => ({
+    id: row.id,
+    recipientEmail: row.recipientEmail,
+    recipientName: row.recipientName,
+    contactId: row.contactId,
+    sentAt: row.sentAt,
+    respondedAt: row.respondedAt,
+    lastReminderAt: row.lastReminderAt,
+    reminderCount: row.reminderCount,
+  }));
 }
 
 export async function getInvitationSummary(surveyId: string): Promise<TInvitationSummary> {

@@ -14,6 +14,14 @@ export const ZInvitationRow = z.object({
 
 export type TInvitationRow = z.infer<typeof ZInvitationRow>;
 
+// Per-contact view also needs the survey identity so each row can link out.
+export const ZContactInvitationRow = ZInvitationRow.extend({
+  surveyId: z.string().cuid2(),
+  surveyName: z.string(),
+});
+
+export type TContactInvitationRow = z.infer<typeof ZContactInvitationRow>;
+
 export const ZInvitationSummary = z.object({
   total: z.number().int(),
   sent: z.number().int(),
