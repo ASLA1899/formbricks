@@ -13,6 +13,16 @@ import {
 } from "@formbricks/types/surveys/types";
 import { cn } from "@/lib/cn";
 import { getFormattedErrorMessage } from "@/lib/utils/helper";
+import { listContactAttributeKeysAction } from "@/modules/contacts/actions";
+import {
+  type AttributeKeyOption,
+  CsvColumnMappingModal,
+} from "@/modules/contacts/components/csv-column-mapping-modal";
+import {
+  type ColumnMappingConfig,
+  type ColumnMatch,
+  matchColumns,
+} from "@/modules/contacts/lib/column-mapping";
 import { Button } from "@/modules/ui/components/button";
 import { Input } from "@/modules/ui/components/input";
 import { Label } from "@/modules/ui/components/label";
@@ -45,7 +55,20 @@ import { RecipientListTable } from "./recipient-list-table";
 // only has once the user fills it in. We validate on send rather than forcing
 // the editor to hold only canonical values (which would require `null`
 // placeholders that complicate every render).
-type TManualRecipient = { email: string; firstName?: string; lastName?: string };
+//
+// Tier 2 (Task 10): `attributes` carries arbitrary CSV-mapped attributes through
+// to the server, where ensureContact persists them on Contact create. `source`
+// distinguishes CSV-uploaded recipients (vs. typed-into-textarea = "manual")
+// so ContactSync's "preserve manual contacts" behavior knows which rows came
+// from this side of the boundary.
+type TManualRecipient = {
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  externalId?: string;
+  attributes?: { attributeKeyId: string; value: string }[];
+  source?: "manual" | "csv";
+};
 
 type TInvitationAudienceDraft =
   | { source: "segment"; segmentId: string }
@@ -109,51 +132,72 @@ const parseCsv = (text: string): string[][] => {
   return rows;
 };
 
-const HEADER_ALIASES: Record<"email" | "firstName" | "lastName", string[]> = {
-  email: ["email", "e-mail", "emailaddress", "email_address"],
-  firstName: ["firstname", "first_name", "first", "givenname", "given_name", "fname"],
-  lastName: ["lastname", "last_name", "last", "surname", "familyname", "family_name", "lname"],
+// Detect whether the first row looks like a header — i.e. contains at least
+// one cell that we recognize as a column name. We rely on `matchColumns` from
+// the shared module to do the actual mapping, but the header-vs-data decision
+// is local: a CSV with no header row should still be importable (positional
+// email/firstName/lastName fallback for the legacy 3-column format).
+const looksLikeHeaderRow = (firstRow: string[], attributeKeys: AttributeKeyOption[]): boolean => {
+  const matches = matchColumns(firstRow, attributeKeys);
+  return matches.some((m) => m.kind === "typed" || m.kind === "attribute");
 };
 
-// Parses CSV text into recipients. Auto-detects a header row when any cell in
-// the first row matches a known alias; otherwise treats columns positionally
-// as [email, firstName, lastName].
-const csvToRecipients = (csv: string): TManualRecipient[] => {
-  const rows = parseCsv(csv);
-  if (rows.length === 0) return [];
+// Project CSV rows + a resolved column mapping into TManualRecipient shape.
+// Headers in the mapping that resolve to `skip` are ignored; attribute mappings
+// produce entries in `attributes`; typed mappings populate the corresponding
+// top-level field.
+//
+// Each row is filtered out unless it has an email — invitations need an
+// address; everything else (firstName, externalId, attributes) is optional.
+const projectRowsToRecipients = (
+  rows: string[][],
+  headers: string[],
+  mapping: ColumnMappingConfig
+): TManualRecipient[] => {
+  const result: TManualRecipient[] = [];
+  for (const cols of rows) {
+    const recipient: TManualRecipient = { email: "", source: "csv" };
+    const attributes: { attributeKeyId: string; value: string }[] = [];
 
-  const norm = (s: string) =>
-    s
-      .trim()
-      .toLowerCase()
-      .replace(/[\s_-]/g, "");
-  const firstRow = rows[0].map(norm);
-  const looksLikeHeader = firstRow.some((cell) =>
-    Object.values(HEADER_ALIASES).some((aliases) => aliases.map(norm).includes(cell))
-  );
+    for (let i = 0; i < headers.length; i++) {
+      const header = headers[i];
+      const dest = mapping[header];
+      if (!dest || dest.kind === "skip") continue;
+      const raw = (cols[i] ?? "").trim();
+      if (!raw) continue;
 
-  let emailIdx = 0;
-  let firstIdx = 1;
-  let lastIdx = 2;
-  let dataStart = 0;
+      if (dest.kind === "typed") {
+        if (dest.column === "email") recipient.email = raw;
+        else if (dest.column === "externalId") recipient.externalId = raw;
+        else if (dest.column === "firstName") recipient.firstName = raw;
+        else if (dest.column === "lastName") recipient.lastName = raw;
+      } else if (dest.kind === "attribute") {
+        attributes.push({ attributeKeyId: dest.attributeKeyId, value: raw });
+      }
+    }
 
-  if (looksLikeHeader) {
-    dataStart = 1;
-    const findIdx = (aliases: string[]) => firstRow.findIndex((cell) => aliases.map(norm).includes(cell));
-    emailIdx = findIdx(HEADER_ALIASES.email);
-    firstIdx = findIdx(HEADER_ALIASES.firstName);
-    lastIdx = findIdx(HEADER_ALIASES.lastName);
-    if (emailIdx === -1) emailIdx = 0;
+    if (attributes.length > 0) recipient.attributes = attributes;
+    if (/.+@.+\..+/.test(recipient.email)) result.push(recipient);
   }
+  return result;
+};
 
-  return rows
-    .slice(dataStart)
-    .map((cols) => ({
-      email: (cols[emailIdx] ?? "").trim(),
-      firstName: firstIdx >= 0 ? (cols[firstIdx] ?? "").trim() || undefined : undefined,
-      lastName: lastIdx >= 0 ? (cols[lastIdx] ?? "").trim() || undefined : undefined,
-    }))
-    .filter((r) => /.+@.+\..+/.test(r.email));
+// Build a mapping from auto-detected matches that can be used directly
+// (modal skipped). firstName/lastName auto-detect handles route-via-attribute
+// when a key exists; otherwise that header lands as `unmapped` and the operator
+// has to confirm in the modal.
+const matchesToAutoMapping = (matches: ColumnMatch[]): ColumnMappingConfig => {
+  const out: ColumnMappingConfig = {};
+  for (const m of matches) {
+    if (m.kind === "typed") {
+      out[m.sourceHeader] = { kind: "typed", column: m.column };
+    } else if (m.kind === "attribute") {
+      out[m.sourceHeader] = { kind: "attribute", attributeKeyId: m.attributeKeyId };
+    } else {
+      out[m.sourceHeader] = { kind: "skip" };
+    }
+  }
+  return out;
 };
 
 const recipientsToTextarea = (recipients: TManualRecipient[]): string =>
@@ -198,6 +242,67 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
 
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Loaded lazily on first CSV upload — the recipients-card lives in the
+  // survey editor where most users never touch CSV import, so we don't
+  // pre-fetch on mount. `null` means "not loaded yet"; `[]` is a valid empty.
+  const [attributeKeys, setAttributeKeys] = useState<AttributeKeyOption[] | null>(null);
+
+  // CSV-import state machine. While `pendingCsv` is set we show the column-
+  // mapping modal; on confirm we apply the mapping and clear it.
+  const [pendingCsv, setPendingCsv] = useState<{
+    headers: string[];
+    rows: string[][];
+    matches: ColumnMatch[];
+  } | null>(null);
+
+  const ensureAttributeKeys = async (): Promise<AttributeKeyOption[]> => {
+    if (attributeKeys) return attributeKeys;
+    try {
+      const res = await listContactAttributeKeysAction({ environmentId: localSurvey.environmentId });
+      const keys = res?.data ?? [];
+      setAttributeKeys(keys);
+      return keys;
+    } catch {
+      // Fall through with empty list — the matcher still works against
+      // built-in typed aliases, just without attribute auto-detect.
+      setAttributeKeys([]);
+      return [];
+    }
+  };
+
+  // Apply a finalized column mapping to the staged CSV rows: produce
+  // TManualRecipient[], merge with any existing typed-into-textarea recipients,
+  // and update state + textarea preview.
+  const applyCsvMapping = (
+    headers: string[],
+    rows: string[][],
+    mapping: ColumnMappingConfig
+  ) => {
+    const parsed = projectRowsToRecipients(rows, headers, mapping);
+    if (parsed.length === 0) {
+      toast.error("No valid emails found in CSV");
+      return;
+    }
+    // Merge with whatever is already in the textarea, dedupe by email
+    // (case-insensitive). New entries win on overlapping fields.
+    const existing = audience.source === "manualList" ? audience.recipients : [];
+    const existingEmails = new Set(existing.map((r) => r.email.toLowerCase()));
+    const byEmail = new Map<string, TManualRecipient>();
+    for (const r of existing) byEmail.set(r.email.toLowerCase(), r);
+    for (const r of parsed) byEmail.set(r.email.toLowerCase(), r);
+    const merged = Array.from(byEmail.values());
+    const added = parsed.filter((r) => !existingEmails.has(r.email.toLowerCase())).length;
+    const updated = parsed.length - added;
+
+    setManualListRaw(recipientsToTextarea(merged));
+    updateAudience({ source: "manualList", recipients: merged });
+    toast.success(
+      updated > 0
+        ? `Imported ${parsed.length} from CSV (${added} new, ${updated} updated)`
+        : `Imported ${added} recipient${added === 1 ? "" : "s"} from CSV`
+    );
+  };
+
   const handleCsvFile = async (file: File) => {
     if (file.size > 512 * 1024) {
       toast.error("CSV must be under 512 KB");
@@ -207,29 +312,66 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
       // Strip UTF-8 BOM (Excel "Save As CSV UTF-8" prepends U+FEFF, which
       // would otherwise corrupt the first email and silently drop the row).
       const text = (await file.text()).replace(/^﻿/, "");
-      const parsed = csvToRecipients(text);
-      if (parsed.length === 0) {
-        toast.error("No valid emails found in CSV");
+      const allRows = parseCsv(text);
+      if (allRows.length === 0) {
+        toast.error("CSV is empty");
         return;
       }
-      // Merge with whatever is already in the textarea, dedupe by email
-      // (case-insensitive), new entries win on name fields.
-      const existing = audience.source === "manualList" ? audience.recipients : [];
-      const existingEmails = new Set(existing.map((r) => r.email.toLowerCase()));
-      const byEmail = new Map<string, TManualRecipient>();
-      for (const r of existing) byEmail.set(r.email.toLowerCase(), r);
-      for (const r of parsed) byEmail.set(r.email.toLowerCase(), r);
-      const merged = Array.from(byEmail.values());
-      const added = parsed.filter((r) => !existingEmails.has(r.email.toLowerCase())).length;
-      const updated = parsed.length - added;
 
-      setManualListRaw(recipientsToTextarea(merged));
-      updateAudience({ source: "manualList", recipients: merged });
-      toast.success(
-        updated > 0
-          ? `Imported ${parsed.length} from CSV (${added} new, ${updated} updated)`
-          : `Imported ${added} recipient${added === 1 ? "" : "s"} from CSV`
-      );
+      // Fetch attribute keys lazily — needed both for the auto-detect and for
+      // the modal's dropdown options.
+      const keys = await ensureAttributeKeys();
+
+      // Decide whether the first row is a header. If not, fall back to the
+      // legacy positional layout (email, firstName, lastName) and use
+      // synthetic header names so the rest of the pipeline can stay uniform.
+      const firstRow = allRows[0];
+      const isHeader = looksLikeHeaderRow(firstRow, keys);
+
+      let headers: string[];
+      let rows: string[][];
+      if (isHeader) {
+        headers = firstRow;
+        rows = allRows.slice(1);
+      } else {
+        // Synthesize headers using the canonical aliases the matcher knows
+        // about — auto-detect will pick up `email`/`firstName`/`lastName` and
+        // route them to the right typed/attribute targets without prompting.
+        const synth = ["email", "firstName", "lastName"];
+        headers = firstRow.map((_, i) => synth[i] ?? `col${i + 1}`);
+        rows = allRows;
+      }
+
+      const matches = matchColumns(headers, keys);
+
+      // Auto-skip the modal when the auto-detect is unambiguous:
+      //   - At least one column maps to typed:email (we have to be able to
+      //     invite somebody) — required.
+      //   - Every other column is either typed (email/externalId), attribute,
+      //     OR a firstName/lastName that landed `unmapped` because no
+      //     attribute key exists. We treat first/last unmapped as "fine, we
+      //     just won't persist them as attributes" — preserves the legacy
+      //     3-column UX.
+      const hasEmail = matches.some((m) => m.kind === "typed" && m.column === "email");
+      const allClean = matches.every((m) => {
+        if (m.kind === "typed" || m.kind === "attribute") return true;
+        // Unmapped is OK iff the source header is firstName/lastName — those
+        // are the "soft" auto-detect cases the matcher emits when no
+        // attribute key exists. Any other unmapped column means the operator
+        // has columns we don't recognize and should explicitly map.
+        const normalized = m.sourceHeader.toLowerCase().replace(/[^a-z0-9]/g, "");
+        return ["firstname", "first", "givenname", "fname", "lastname", "last", "surname", "lname"].includes(
+          normalized
+        );
+      });
+
+      if (hasEmail && allClean) {
+        applyCsvMapping(headers, rows, matchesToAutoMapping(matches));
+        return;
+      }
+
+      // Otherwise stage for the modal. The user must confirm/override.
+      setPendingCsv({ headers, rows, matches });
     } catch {
       toast.error("Could not read CSV file");
     }
@@ -345,13 +487,26 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
   };
 
   return (
-    <Collapsible.Root
-      open={open}
-      onOpenChange={setOpen}
-      className={cn(
-        open ? "" : "hover:bg-slate-50",
-        "w-full space-y-2 rounded-lg border border-slate-300 bg-white"
-      )}>
+    <>
+      {pendingCsv && (
+        <CsvColumnMappingModal
+          headers={pendingCsv.headers}
+          initialMatches={pendingCsv.matches}
+          attributeKeys={attributeKeys ?? []}
+          onConfirm={(mapping) => {
+            applyCsvMapping(pendingCsv.headers, pendingCsv.rows, mapping);
+            setPendingCsv(null);
+          }}
+          onCancel={() => setPendingCsv(null)}
+        />
+      )}
+      <Collapsible.Root
+        open={open}
+        onOpenChange={setOpen}
+        className={cn(
+          open ? "" : "hover:bg-slate-50",
+          "w-full space-y-2 rounded-lg border border-slate-300 bg-white"
+        )}>
       <Collapsible.CollapsibleTrigger asChild className="h-full w-full cursor-pointer">
         <div className="inline-flex px-4 py-4">
           <div className="flex items-center pr-5 pl-2">
@@ -656,8 +811,9 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
             </p>
           </div>
         </div>
-      </Collapsible.CollapsibleContent>
-    </Collapsible.Root>
+        </Collapsible.CollapsibleContent>
+      </Collapsible.Root>
+    </>
   );
 };
 

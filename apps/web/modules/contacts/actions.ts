@@ -179,3 +179,34 @@ export const importContactsAction = authenticatedActionClient
       message: `Successfully imported ${createdCount} contacts`,
     };
   });
+
+// Lightweight read-only listing of ContactAttributeKey rows. Used by the
+// recipients-card CSV importer (Phase 1a Task 10) to drive the column-mapping
+// auto-detect + dropdown options. Read access is gated on the same predicate
+// as the other contacts actions in this file (org owner/manager OR project
+// readWrite).
+const ZListAttributeKeys = z.object({ environmentId: ZId });
+
+export const listContactAttributeKeysAction = authenticatedActionClient
+  .schema(ZListAttributeKeys)
+  .action(async ({ ctx, parsedInput }) => {
+    await checkAuthorizationUpdated({
+      userId: ctx.user.id,
+      organizationId: await getOrganizationIdFromEnvironmentId(parsedInput.environmentId),
+      access: [
+        { type: "organization", roles: ["owner", "manager"] },
+        {
+          type: "projectTeam",
+          minPermission: "read",
+          projectId: await getProjectIdFromEnvironmentId(parsedInput.environmentId),
+        },
+      ],
+    });
+
+    const keys = await prisma.contactAttributeKey.findMany({
+      where: { environmentId: parsedInput.environmentId },
+      select: { id: true, key: true },
+      orderBy: { key: "asc" },
+    });
+    return keys;
+  });
