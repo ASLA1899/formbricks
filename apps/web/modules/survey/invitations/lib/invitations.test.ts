@@ -40,7 +40,7 @@ vi.mock("./template", () => ({
 
 describe("ensureContact", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   test("returns existing contact id when matched by typed email column", async () => {
