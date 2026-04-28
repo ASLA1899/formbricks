@@ -284,12 +284,36 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
       return;
     }
     // Merge with whatever is already in the textarea, dedupe by email
-    // (case-insensitive). New entries win on overlapping fields.
+    // (case-insensitive). For overlapping rows we shallow-merge: CSV-supplied
+    // fields win, but EMPTY CSV fields don't clobber existing typed values
+    // (e.g. uploading a CSV without firstName shouldn't erase a manually-typed
+    // firstName). Attributes are concatenated and deduped by attributeKeyId
+    // with the CSV value winning on collision.
     const existing = audience.source === "manualList" ? audience.recipients : [];
     const existingEmails = new Set(existing.map((r) => r.email.toLowerCase()));
     const byEmail = new Map<string, TManualRecipient>();
     for (const r of existing) byEmail.set(r.email.toLowerCase(), r);
-    for (const r of parsed) byEmail.set(r.email.toLowerCase(), r);
+    for (const r of parsed) {
+      const key = r.email.toLowerCase();
+      const prev = byEmail.get(key);
+      if (!prev) {
+        byEmail.set(key, r);
+        continue;
+      }
+      // Build the merged attributes list: existing first, then CSV overrides.
+      const attrMap = new Map<string, { attributeKeyId: string; value: string }>();
+      for (const a of prev.attributes ?? []) attrMap.set(a.attributeKeyId, a);
+      for (const a of r.attributes ?? []) attrMap.set(a.attributeKeyId, a);
+      const mergedAttrs = Array.from(attrMap.values());
+      byEmail.set(key, {
+        email: r.email,
+        firstName: r.firstName || prev.firstName,
+        lastName: r.lastName || prev.lastName,
+        externalId: r.externalId || prev.externalId,
+        source: r.source ?? prev.source,
+        attributes: mergedAttrs.length > 0 ? mergedAttrs : undefined,
+      });
+    }
     const merged = Array.from(byEmail.values());
     const added = parsed.filter((r) => !existingEmails.has(r.email.toLowerCase())).length;
     const updated = parsed.length - added;
@@ -372,7 +396,10 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
 
       // Otherwise stage for the modal. The user must confirm/override.
       setPendingCsv({ headers, rows, matches });
-    } catch {
+    } catch (e) {
+      // Log so a real bug (encoding / parser exception) is visible in
+      // production via the user's devtools — the toast alone is opaque.
+      console.error("CSV read/parse failed", e);
       toast.error("Could not read CSV file");
     }
   };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ColumnMappingConfig, ColumnMatch } from "@/modules/contacts/lib/column-mapping";
 import { Button } from "@/modules/ui/components/button";
 import {
@@ -101,6 +101,17 @@ export function CsvColumnMappingModal({
   const handleConfirm = () => {
     onConfirm(selectValuesToMapping(values));
   };
+
+  // Escape closes the modal — the inline overlay doesn't get this for free
+  // (radix Dialog would, but we deliberately avoided it to keep focus
+  // semantics simple inside the survey-editor form context).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onCancel]);
 
   return (
     // Inline overlay rather than the radix Dialog component — the Recipients
