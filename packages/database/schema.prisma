@@ -122,12 +122,24 @@ model Contact {
   updatedAt     DateTime           @updatedAt @map(name: "updated_at")
   environment   Environment        @relation(fields: [environmentId], references: [id], onDelete: Cascade)
   environmentId String
+  email         String?
+  externalId    String?
+  source        ContactSource      @default(manual)
+  inactive      Boolean            @default(false)
+  inactiveAt    DateTime?
   responses     Response[]
   attributes    ContactAttribute[]
   displays      Display[]
   invitations   SurveyInvitation[]
 
   @@index([environmentId])
+  @@index([environmentId, inactive])
+}
+
+enum ContactSource {
+  snowflake
+  manual
+  csv
 }
 
 /// Stores a user's response to a survey, including their answers and metadata.
