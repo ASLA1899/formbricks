@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
 import { executeConfiguredQueryAllRows } from "@/app/api/member-lookup/configurable-query-service";
-import type { ColumnMappingConfig } from "./column-mapping";
+import { parseColumnMappingConfig, type ColumnMappingConfig } from "./column-mapping";
 
 export interface SyncRunResult {
   rowsProcessed: number;
@@ -22,6 +22,9 @@ export async function runContactSync(syncId: string): Promise<SyncRunResult> {
   const sync = await prisma.contactSync.findUnique({ where: { id: syncId } });
   if (!sync) throw new Error(`ContactSync not found: ${syncId}`);
 
+  // TODO(phase 2): a "running" run that crashes mid-loop never gets finishedAt
+  // set. Add a sweeper that marks long-running runs (status='running' and
+  // startedAt older than e.g. 30 minutes) as failed with a "stale run" message.
   const run = await prisma.contactSyncRun.create({
     data: { syncId, status: "running" },
     select: { id: true },
@@ -35,7 +38,11 @@ export async function runContactSync(syncId: string): Promise<SyncRunResult> {
   };
 
   try {
-    const mapping = sync.columnMapping as ColumnMappingConfig;
+    // Parse the persisted JSON mapping defensively. A typo in `kind`, a stale
+    // attributeKeyId, or a non-string key would silently misroute data
+    // otherwise — and silent misroutes are irreversible without a re-run from
+    // a corrected mapping.
+    const mapping = parseColumnMappingConfig(sync.columnMapping);
     const rows = await executeConfiguredQueryAllRows(sync.snowflakeQueryId);
     const seenExternalIds: string[] = [];
 
@@ -82,7 +89,11 @@ export async function runContactSync(syncId: string): Promise<SyncRunResult> {
 
     return summary;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const rawMessage = error instanceof Error ? error.message : String(error);
+    // Truncate to keep ContactSyncRun rows compact — a 100KB stack trace bloats
+    // the run history without adding diagnostic value beyond the first frame.
+    // Full error is preserved in the structured log below.
+    const message = rawMessage.slice(0, 2000);
     logger.error({ syncId, error }, "Contact sync failed");
 
     await prisma.contactSyncRun.update({
@@ -105,6 +116,11 @@ export async function runContactSync(syncId: string): Promise<SyncRunResult> {
 
 // Project a Snowflake row through the column mapping to typed fields + attribute
 // assignments. Keys in mapping are the SOURCE headers (Snowflake column names).
+//
+// Assumes mapped columns are SQL string types. DATE / TIMESTAMP / BIGINT
+// columns would coerce to locale-formatted strings via String() — operators
+// who need to ingest those types should add a transform layer in the
+// Snowflake query itself (e.g. TO_CHAR(date_col, 'YYYY-MM-DD')).
 type ExtractedRow = {
   email: string | null;
   externalId: string | null;

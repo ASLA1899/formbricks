@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 // Shared column mapping for Contact ingest paths (Snowflake sync, CSV import).
 //
 // Source columns (from a CSV header row or a Snowflake result row) need to map
@@ -109,9 +111,33 @@ export function matchColumns(
 // Persisted shape of a column mapping (stored as JSON on ContactSync.columnMapping
 // or in audience CSV import config). Keys are SOURCE headers (preserving the
 // raw header from the CSV / query), values describe the destination.
-export type ColumnMappingConfig = Record<
-  string,
-  | { kind: "typed"; column: "email" | "externalId" | "firstName" | "lastName" }
-  | { kind: "attribute"; attributeKeyId: string }
-  | { kind: "skip" }
->;
+//
+// We define this both as a TS type (for compile-time consumers) and as a Zod
+// schema. Use `parseColumnMappingConfig(json)` at any persistence boundary
+// where untyped JSON enters the system — silent misroutes are irreversible
+// without a re-run from a corrected mapping, so a runtime parse is worth the
+// few extra lines.
+export const ZColumnMappingDest = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("typed"),
+    column: z.enum(["email", "externalId", "firstName", "lastName"]),
+  }),
+  z.object({
+    kind: z.literal("attribute"),
+    attributeKeyId: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal("skip"),
+  }),
+]);
+
+export const ZColumnMappingConfig = z.record(z.string(), ZColumnMappingDest);
+
+export type ColumnMappingConfig = z.infer<typeof ZColumnMappingConfig>;
+
+// Parse a saved JSON mapping. Throws a descriptive ZodError if the shape is
+// wrong (callers are expected to surface this clearly — a sync run with a
+// broken mapping should fail loudly rather than silently no-op).
+export function parseColumnMappingConfig(input: unknown): ColumnMappingConfig {
+  return ZColumnMappingConfig.parse(input);
+}
