@@ -14,32 +14,55 @@ import { renderSubject, renderTemplate } from "./template";
 
 const DEFAULT_ATTRIBUTE_KEYS = ["email", "firstName", "lastName"] as const;
 
-// Find-or-create a Contact row keyed on (environmentId, email). Schema has no
-// DB-level unique on email-per-environment, so we guard concurrent callers by:
-//  (a) trying a find first (happy path for existing contacts),
-//  (b) attempting create and catching the unique-violation on ContactAttribute
-//      which fires if another writer inserted the same email-attribute row,
-//  (c) re-fetching on conflict.
-// This avoids duplicate Contact rows when two sends race (e.g. a manual "Send
-// invitations" click and a scheduled reminder firing simultaneously).
-async function ensureContact(
+// Find-or-create a Contact row keyed on (environmentId, email).
+//
+// Lookup order:
+//   1. Typed Contact.email column (post-Phase-1a, partial-unique indexed at
+//      the DB layer — but Prisma can't express WHERE clauses on indexes, so
+//      we use findFirst rather than findUnique).
+//   2. Email-attribute fallback (catches legacy rows from before Phase 1a).
+//      If matched here, backfill the typed column.
+//   3. Create new Contact with both typed email AND email-attribute, source=manual.
+//
+// We keep the email-attribute write so segments built on `attribute.email`
+// continue to work without a Segment-side migration.
+//
+// Concurrency guard: on P2002 (raised by the partial-unique index when two
+// writers race) we re-query the typed column and return the winner's id.
+export async function ensureContact(
   environmentId: string,
   email: string,
   firstName: string | null,
   lastName: string | null
 ): Promise<string> {
-  const findExisting = () =>
-    prisma.contact.findFirst({
-      where: {
-        environmentId,
-        attributes: { some: { attributeKey: { key: "email" }, value: email } },
-      },
-      select: { id: true },
+  const normalizedEmail = email.trim().toLowerCase();
+
+  // Step 1: typed-column match.
+  const byEmail = await prisma.contact.findFirst({
+    where: { environmentId, email: normalizedEmail },
+    select: { id: true },
+  });
+  if (byEmail) return byEmail.id;
+
+  // Step 2: legacy email-attribute fallback. Backfills typed column on hit so
+  // future lookups take the fast path above.
+  const byAttribute = await prisma.contact.findFirst({
+    where: {
+      environmentId,
+      email: null,
+      attributes: { some: { attributeKey: { key: "email" }, value: normalizedEmail } },
+    },
+    select: { id: true },
+  });
+  if (byAttribute) {
+    await prisma.contact.update({
+      where: { id: byAttribute.id },
+      data: { email: normalizedEmail },
     });
+    return byAttribute.id;
+  }
 
-  const existing = await findExisting();
-  if (existing) return existing.id;
-
+  // Step 3: create.
   const keys = await prisma.contactAttributeKey.findMany({
     where: { environmentId, key: { in: [...DEFAULT_ATTRIBUTE_KEYS] } },
     select: { id: true, key: true },
@@ -48,7 +71,7 @@ async function ensureContact(
 
   const createAttributes: { attributeKeyId: string; value: string }[] = [];
   const emailKeyId = keyByName.get("email");
-  if (emailKeyId) createAttributes.push({ attributeKeyId: emailKeyId, value: email });
+  if (emailKeyId) createAttributes.push({ attributeKeyId: emailKeyId, value: normalizedEmail });
   const firstNameKeyId = keyByName.get("firstName");
   if (firstNameKeyId && firstName)
     createAttributes.push({ attributeKeyId: firstNameKeyId, value: firstName });
@@ -57,15 +80,24 @@ async function ensureContact(
 
   try {
     const created = await prisma.contact.create({
-      data: { environmentId, attributes: { create: createAttributes } },
+      data: {
+        environmentId,
+        email: normalizedEmail,
+        source: "manual",
+        attributes: { create: createAttributes },
+      },
       select: { id: true },
     });
     return created.id;
   } catch (error) {
-    // P2002 = unique constraint violation. Another concurrent writer likely
-    // created the contact between our find and our create; re-query and use theirs.
+    // P2002 = unique constraint violation. Another concurrent writer raced us
+    // and inserted the same (environmentId, email) first; re-query the typed
+    // column and return their id.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      const retry = await findExisting();
+      const retry = await prisma.contact.findFirst({
+        where: { environmentId, email: normalizedEmail },
+        select: { id: true },
+      });
       if (retry) return retry.id;
     }
     throw error;
