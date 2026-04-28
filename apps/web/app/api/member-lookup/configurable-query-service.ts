@@ -140,6 +140,37 @@ export async function executeConfiguredQuery(
 }
 
 /**
+ * Execute a configured query and return ALL rows with raw column names.
+ *
+ * Used by the Contact sync runner: unlike executeConfiguredQuery (which
+ * returns rows[0] mapped to the queryConfig.fields output schema), this
+ * variant returns the full result set with original SQL column names so
+ * callers can apply their own ColumnMapping. Cache is bypassed because
+ * sync runs always want live data.
+ */
+export async function executeConfiguredQueryAllRows(
+  queryId: string,
+  parameters: Record<string, unknown> = {}
+): Promise<Record<string, unknown>[]> {
+  const queryConfig = getQueryConfig(queryId);
+  const validation = validateQueryConfig(queryConfig);
+  if (!validation.valid) {
+    throw new Error(`Invalid query configuration: ${validation.errors.join(", ")}`);
+  }
+
+  // The sync use case typically uses parameter-less master queries; we still
+  // pass parameters through for flexibility.
+  const missingParams = queryConfig.parameters.filter((param) => !(param in parameters));
+  if (missingParams.length > 0) {
+    throw new Error(`Missing required parameters: ${missingParams.join(", ")}`);
+  }
+
+  const { sql, binds } = convertNamedParameters(queryConfig.sql, parameters);
+  const rows = await executeQuery<Record<string, unknown>>(sql, binds);
+  return rows;
+}
+
+/**
  * Convert named parameters to positional
  * :paramName -> ?
  */
