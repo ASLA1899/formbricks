@@ -142,6 +142,48 @@ enum ContactSource {
   csv
 }
 
+/// Configures the Snowflake → Formbricks Contact mirror for an environment.
+/// One per environment in v1; multiple syncs are Phase 4.
+model ContactSync {
+  id               String           @id @default(cuid())
+  createdAt        DateTime         @default(now()) @map(name: "created_at")
+  updatedAt        DateTime         @updatedAt @map(name: "updated_at")
+  environment      Environment      @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  environmentId    String           @unique
+  snowflakeQueryId String // refs query-config.json (existing registry)
+  /// [ContactSyncColumnMapping]
+  columnMapping    Json
+  intervalMinutes  Int              @default(60)
+  enabled          Boolean          @default(true)
+  lastRunAt        DateTime?
+  lastRunStatus    SyncStatus?
+  runs             ContactSyncRun[]
+}
+
+/// Audit record per ContactSync execution.
+model ContactSyncRun {
+  id              String      @id @default(cuid())
+  sync            ContactSync @relation(fields: [syncId], references: [id], onDelete: Cascade)
+  syncId          String
+  startedAt       DateTime    @default(now())
+  finishedAt      DateTime?
+  status          SyncStatus
+  rowsProcessed   Int         @default(0)
+  rowsCreated     Int         @default(0)
+  rowsUpdated     Int         @default(0)
+  rowsDeactivated Int         @default(0)
+  errorMessage    String?
+
+  @@index([syncId, startedAt])
+}
+
+enum SyncStatus {
+  pending
+  running
+  succeeded
+  failed
+}
+
 /// Stores a user's response to a survey, including their answers and metadata.
 /// Each response is linked to a specific survey and optionally to a contact.
 ///
@@ -650,6 +692,7 @@ model Environment {
   segments          Segment[]
   integration       Integration[]
   ApiKeyEnvironment ApiKeyEnvironment[]
+  contactSync       ContactSync?
 
   @@index([projectId])
 }
