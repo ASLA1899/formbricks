@@ -4,6 +4,7 @@ import { getEnvironmentAuth } from "@/modules/environments/lib/utils";
 import { PageContentWrapper } from "@/modules/ui/components/page-content-wrapper";
 import { PageHeader } from "@/modules/ui/components/page-header";
 import { SyncConfigForm } from "./components/sync-config-form";
+import { SyncStatusPanel } from "./components/sync-status-panel";
 
 export default async function SnowflakeSyncSettingsPage(props: {
   params: Promise<{ environmentId: string }>;
@@ -20,6 +21,23 @@ export default async function SnowflakeSyncSettingsPage(props: {
         columnMapping: true,
         intervalMinutes: true,
         enabled: true,
+        lastRunAt: true,
+        lastRunStatus: true,
+        runs: {
+          orderBy: { startedAt: "desc" },
+          take: 20,
+          select: {
+            id: true,
+            startedAt: true,
+            finishedAt: true,
+            status: true,
+            rowsProcessed: true,
+            rowsCreated: true,
+            rowsUpdated: true,
+            rowsDeactivated: true,
+            errorMessage: true,
+          },
+        },
       },
     }),
     prisma.contactAttributeKey.findMany({
@@ -30,6 +48,18 @@ export default async function SnowflakeSyncSettingsPage(props: {
   ]);
 
   const queryConfigs = listQueryConfigs();
+
+  // Narrow the form's prop to the config-only fields. The form doesn't read
+  // lastRunAt / lastRunStatus / runs and shouldn't have to know about them.
+  const formConfig = sync
+    ? {
+        id: sync.id,
+        snowflakeQueryId: sync.snowflakeQueryId,
+        columnMapping: sync.columnMapping,
+        intervalMinutes: sync.intervalMinutes,
+        enabled: sync.enabled,
+      }
+    : null;
 
   return (
     <PageContentWrapper>
@@ -43,10 +73,19 @@ export default async function SnowflakeSyncSettingsPage(props: {
 
         <SyncConfigForm
           environmentId={environmentId}
-          existingConfig={sync}
+          existingConfig={formConfig}
           attributeKeys={attributeKeys}
           availableQueries={queryConfigs}
         />
+
+        {sync && (
+          <SyncStatusPanel
+            environmentId={environmentId}
+            lastRunAt={sync.lastRunAt}
+            lastRunStatus={sync.lastRunStatus}
+            runs={sync.runs}
+          />
+        )}
       </div>
     </PageContentWrapper>
   );
