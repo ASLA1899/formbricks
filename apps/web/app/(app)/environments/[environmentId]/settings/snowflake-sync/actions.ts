@@ -6,8 +6,33 @@ import { prisma } from "@formbricks/database";
 import { ZId } from "@formbricks/types/common";
 import { executeConfiguredQueryAllRows } from "@/app/api/member-lookup/configurable-query-service";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
+import { checkAuthorizationUpdated } from "@/lib/utils/action-client/action-client-middleware";
+import { getOrganizationIdFromEnvironmentId, getProjectIdFromEnvironmentId } from "@/lib/utils/helper";
 import { ZColumnMappingConfig, parseColumnMappingConfig } from "@/modules/contacts/lib/column-mapping";
 import { runContactSync } from "@/modules/contacts/lib/sync";
+
+// Shared authorization gate for the three actions on this page. Each is
+// scoped to a single environmentId — `authenticatedActionClient` only proves
+// the request is authenticated, not that the user has access to the target
+// environment, so without this check a user from org A could submit an
+// environmentId belonging to org B and overwrite that environment's sync.
+async function requireEnvironmentAccess(userId: string, environmentId: string): Promise<void> {
+  await checkAuthorizationUpdated({
+    userId,
+    organizationId: await getOrganizationIdFromEnvironmentId(environmentId),
+    access: [
+      {
+        type: "organization",
+        roles: ["owner", "manager"],
+      },
+      {
+        type: "projectTeam",
+        projectId: await getProjectIdFromEnvironmentId(environmentId),
+        minPermission: "readWrite",
+      },
+    ],
+  });
+}
 
 // ---------------------------------------------------------------------------
 // saveSyncConfigAction — upserts the single ContactSync row per environment.
@@ -26,7 +51,9 @@ const ZSaveSyncConfig = z.object({
 
 export const saveSyncConfigAction = authenticatedActionClient
   .schema(ZSaveSyncConfig)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ ctx, parsedInput }) => {
+    await requireEnvironmentAccess(ctx.user.id, parsedInput.environmentId);
+
     // Defense-in-depth: even though the zod schema already validated, we
     // re-parse via the canonical parser. If a future caller skips schema
     // validation, parseColumnMappingConfig still catches a malformed JSON
@@ -72,7 +99,9 @@ const ZRunSyncNow = z.object({ environmentId: ZId });
 
 export const runSyncNowAction = authenticatedActionClient
   .schema(ZRunSyncNow)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ ctx, parsedInput }) => {
+    await requireEnvironmentAccess(ctx.user.id, parsedInput.environmentId);
+
     const sync = await prisma.contactSync.findUnique({
       where: { environmentId: parsedInput.environmentId },
       select: { id: true },
@@ -94,11 +123,19 @@ export const runSyncNowAction = authenticatedActionClient
 // LIMIT-injecting variant; for now the configured queries already cap at a
 // few thousand rows by design (member rosters), so the cost is acceptable.
 // ---------------------------------------------------------------------------
-const ZPreviewQuery = z.object({ snowflakeQueryId: z.string().min(1) });
+const ZPreviewQuery = z.object({
+  environmentId: ZId,
+  snowflakeQueryId: z.string().min(1),
+});
 
 export const previewSnowflakeQueryAction = authenticatedActionClient
   .schema(ZPreviewQuery)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ ctx, parsedInput }) => {
+    // Gate by environment access — running an arbitrary configured Snowflake
+    // query exposes member data and must not be reachable to users without
+    // access to this environment.
+    await requireEnvironmentAccess(ctx.user.id, parsedInput.environmentId);
+
     const rows = await executeConfiguredQueryAllRows(parsedInput.snowflakeQueryId);
     const sample = rows.slice(0, 5);
     const headers = sample.length > 0 ? Object.keys(sample[0]) : [];

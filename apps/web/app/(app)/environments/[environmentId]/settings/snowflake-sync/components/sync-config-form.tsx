@@ -143,12 +143,20 @@ export function SyncConfigForm({
       return;
     }
     startPreview(async () => {
-      const res = await previewSnowflakeQueryAction({ snowflakeQueryId });
+      const res = await previewSnowflakeQueryAction({ environmentId, snowflakeQueryId });
       if (!res?.data) {
         toast.error(getFormattedErrorMessage(res) || "Preview failed");
         return;
       }
       const { headers: previewHeaders, sample, totalRows } = res.data;
+      // Guard against transient zero-result responses wiping the operator's
+      // already-configured mapping. Show the empty result but leave existing
+      // header/mapping state alone.
+      if (previewHeaders.length === 0) {
+        setPreview({ headers: previewHeaders, sample, totalRows });
+        toast.error("Preview returned 0 rows — keeping existing mapping");
+        return;
+      }
       setPreview({ headers: previewHeaders, sample, totalRows });
       setHeaders(previewHeaders);
 
@@ -346,7 +354,12 @@ export function SyncConfigForm({
             min={5}
             max={1440}
             value={intervalMinutes}
-            onChange={(e) => setIntervalMinutes(Number(e.target.value))}
+            onChange={(e) => {
+              // valueAsNumber returns NaN for empty input. Clamp to the
+              // schema's min so save doesn't fail with a generic zod error.
+              const n = e.target.valueAsNumber;
+              setIntervalMinutes(Number.isFinite(n) && n > 0 ? n : 5);
+            }}
             className="w-32"
           />
           <p className="text-xs text-slate-500">
