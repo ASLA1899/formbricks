@@ -74,7 +74,12 @@ describe("rateLimitConfigs", () => {
 
     test("should have all action configurations", () => {
       const actionConfigs = Object.keys(rateLimitConfigs.actions);
-      expect(actionConfigs).toEqual(["emailUpdate", "surveyFollowUp", "sendLinkSurveyEmail"]);
+      expect(actionConfigs).toEqual([
+        "emailUpdate",
+        "accountDeletion",
+        "surveyFollowUp",
+        "sendLinkSurveyEmail",
+      ]);
     });
 
     test("should have all storage configurations", () => {
@@ -142,6 +147,7 @@ describe("rateLimitConfigs", () => {
         { config: rateLimitConfigs.api.client, identifier: "client-api-key" },
         { config: rateLimitConfigs.api.syncUserIdentification, identifier: "sync-user-id" },
         { config: rateLimitConfigs.actions.emailUpdate, identifier: "user-profile" },
+        { config: rateLimitConfigs.actions.accountDeletion, identifier: "user-account-delete" },
         { config: rateLimitConfigs.storage.upload, identifier: "storage-upload" },
         { config: rateLimitConfigs.storage.uploadPerEnvironment, identifier: "storage-upload-env" },
         { config: rateLimitConfigs.storage.delete, identifier: "storage-delete" },
