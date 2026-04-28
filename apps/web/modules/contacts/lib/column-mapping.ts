@@ -29,7 +29,10 @@ export const BUILTIN_ALIASES: Record<"email" | "externalId" | "firstName" | "las
     "customerid",
     "customernumber",
     "externalid",
-    "id", // intentionally last — too generic, but works as a final fallback
+    // NB: `id` was deliberately NOT included — it's too generic. ASLA's
+    // Snowflake queries routinely select `member.id`, `organization.id`,
+    // `survey.id`, etc. Auto-binding `id` to externalId would silently
+    // misroute. Operators must explicitly map a literal `id` column.
   ],
   firstName: ["firstname", "first", "givenname", "fname"],
   lastName: ["lastname", "last", "surname", "familyname", "lname"],
@@ -60,6 +63,13 @@ export function matchColumns(
 
   return sourceHeaders.map((sourceHeader): ColumnMatch => {
     const normalized = normalizeHeader(sourceHeader);
+
+    // Empty/whitespace-only headers can't safely match anything — bail out.
+    // (Without this guard, an attribute key whose `.key` also normalizes to
+    // empty would erroneously match.)
+    if (normalized === "") {
+      return { kind: "unmapped", sourceHeader };
+    }
 
     if (BUILTIN_ALIASES.email.includes(normalized)) {
       return { kind: "typed", column: "email", sourceHeader };

@@ -86,4 +86,21 @@ describe("matchColumns", () => {
     expect(matches[0].kind).toBe("typed");
     if (matches[0].kind === "typed") expect(matches[0].column).toBe("email");
   });
+
+  test("does NOT auto-map a literal 'id' column to externalId", () => {
+    // `id` is too generic — ASLA's Snowflake queries select `member.id`,
+    // `organization.id`, etc. Operators must explicitly map.
+    const matches = matchColumns(["id", "ID", "Id"], existingKeys);
+    for (const m of matches) {
+      expect(m.kind).toBe("unmapped");
+    }
+  });
+
+  test("treats empty / whitespace-only / symbol-only headers as unmapped", () => {
+    const matches = matchColumns(["", "   ", "---", "()"], existingKeys);
+    expect(matches).toHaveLength(4);
+    for (const m of matches) {
+      expect(m.kind).toBe("unmapped");
+    }
+  });
 });
