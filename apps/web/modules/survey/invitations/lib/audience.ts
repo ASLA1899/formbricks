@@ -13,6 +13,12 @@ export type TAudienceMember = {
   // If the audience comes from a Formbricks segment, we already have a Contact row.
   // Snowflake-sourced members get a Contact row created lazily at invitation-send time.
   existingContactId: string | null;
+  // Phase 1a Task 10: optional fields plumbed from the manualList CSV importer.
+  // ensureContact uses them at Contact-create time only; existing contacts are
+  // matched on email and don't get their attributes overwritten here.
+  externalId?: string;
+  attributes?: { attributeKeyId: string; value: string }[];
+  source?: "manual" | "csv" | "snowflake";
 };
 
 // Resolves a survey's configured audience into a flat list of recipient candidates.
@@ -29,7 +35,14 @@ export async function resolveAudience(audience: TInvitationAudience): Promise<TA
 }
 
 function resolveManualListAudience(
-  recipients: { email: string; firstName?: string; lastName?: string }[]
+  recipients: {
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    externalId?: string;
+    attributes?: { attributeKeyId: string; value: string }[];
+    source?: "manual" | "csv";
+  }[]
 ): TAudienceMember[] {
   const seen = new Set<string>();
   const out: TAudienceMember[] = [];
@@ -40,7 +53,19 @@ function resolveManualListAudience(
     const firstName = r.firstName?.trim() || null;
     const lastName = r.lastName?.trim() || null;
     const name = [firstName, lastName].filter(Boolean).join(" ") || null;
-    out.push({ email, name, firstName, lastName, existingContactId: null });
+    out.push({
+      email,
+      name,
+      firstName,
+      lastName,
+      existingContactId: null,
+      externalId: r.externalId?.trim() || undefined,
+      attributes: r.attributes,
+      // Default to "manual" — typed-into-textarea recipients arrive without
+      // a source field set. Only the CSV-import path explicitly tags rows
+      // with source="csv".
+      source: r.source ?? "manual",
+    });
   }
   return out;
 }

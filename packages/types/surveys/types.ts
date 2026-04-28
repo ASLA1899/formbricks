@@ -346,6 +346,12 @@ export const ZInvitationAudience = z.discriminatedUnion("source", [
   // this doesn't require the Formbricks EE Contacts license. Unlike Snowflake,
   // it works without any data-warehouse integration. First/last name are
   // optional per recipient — available as merge fields in email templates.
+  //
+  // Phase 1a Task 10: `externalId`, `attributes`, and `source` carry CSV-
+  // mapped enrichment through to ensureContact when the operator imports a
+  // CSV that has more than email/first/last. They're optional per recipient
+  // so typed-into-textarea entries (which only know email + first/last) still
+  // validate.
   z.object({
     source: z.literal("manualList"),
     recipients: z
@@ -354,6 +360,20 @@ export const ZInvitationAudience = z.discriminatedUnion("source", [
           email: z.string().email(),
           firstName: z.string().optional(),
           lastName: z.string().optional(),
+          externalId: z.string().optional(),
+          attributes: z
+            .array(
+              z.object({
+                attributeKeyId: z.string().min(1),
+                value: z.string(),
+              })
+            )
+            .optional(),
+          // "manual" = typed/pasted into the textarea; "csv" = uploaded via
+          // CSV import. Used at ensureContact-time to tag newly-created
+          // Contacts with the right source so the Snowflake sync runner's
+          // "preserve manual contacts" guard knows what's protected.
+          source: z.enum(["manual", "csv"]).optional(),
         })
       )
       .min(1),

@@ -22,20 +22,34 @@ const DEFAULT_ATTRIBUTE_KEYS = ["email", "firstName", "lastName"] as const;
 //      we use findFirst rather than findUnique).
 //   2. Email-attribute fallback (catches legacy rows from before Phase 1a).
 //      If matched here, backfill the typed column.
-//   3. Create new Contact with both typed email AND email-attribute, source=manual.
+//   3. Create new Contact with both typed email AND email-attribute, plus
+//      whatever extra attributes / externalId / source the caller supplied.
 //
 // We keep the email-attribute write so segments built on `attribute.email`
 // continue to work without a Segment-side migration.
 //
 // Concurrency guard: on P2002 (raised by the partial-unique index when two
 // writers race) we re-query the typed column and return the winner's id.
+//
+// Phase 1a Task 10: extra `attributes` (CSV-mapped to ContactAttributeKey ids)
+// and `externalId` are written on CREATE only — we don't update existing
+// Contacts here (the operator-attribute-update path is separate). `source`
+// defaults to "manual"; on existing-contact match, the stored source is
+// preserved (the Snowflake sync runner is the only path that converts a
+// match into source="snowflake", and only for its own ingest).
 export async function ensureContact(
   environmentId: string,
   email: string,
   firstName: string | null,
-  lastName: string | null
+  lastName: string | null,
+  options?: {
+    externalId?: string;
+    attributes?: { attributeKeyId: string; value: string }[];
+    source?: "manual" | "csv" | "snowflake";
+  }
 ): Promise<string> {
   const normalizedEmail = email.trim().toLowerCase();
+  const source = options?.source ?? "manual";
 
   // Step 1: typed-column match.
   const byEmail = await prisma.contact.findFirst({
@@ -78,12 +92,26 @@ export async function ensureContact(
   const lastNameKeyId = keyByName.get("lastName");
   if (lastNameKeyId && lastName) createAttributes.push({ attributeKeyId: lastNameKeyId, value: lastName });
 
+  // Append CSV-mapped attributes. Dedupe by attributeKeyId — if the caller
+  // already passed firstName as both a typed param AND in attributes, the
+  // first occurrence wins (we don't want Prisma's `create` array to violate
+  // the (contactId, attributeKeyId) unique constraint).
+  if (options?.attributes && options.attributes.length > 0) {
+    const seen = new Set(createAttributes.map((a) => a.attributeKeyId));
+    for (const attr of options.attributes) {
+      if (seen.has(attr.attributeKeyId)) continue;
+      seen.add(attr.attributeKeyId);
+      createAttributes.push(attr);
+    }
+  }
+
   try {
     const created = await prisma.contact.create({
       data: {
         environmentId,
         email: normalizedEmail,
-        source: "manual",
+        source,
+        ...(options?.externalId ? { externalId: options.externalId } : {}),
         attributes: { create: createAttributes },
       },
       select: { id: true },
@@ -138,7 +166,11 @@ export async function upsertInvitation(args: {
   // resolve Contact (create for Snowflake / manual-list audiences) and generate a fresh link.
   const contactId =
     member.existingContactId ??
-    (await ensureContact(environmentId, member.email, member.firstName, member.lastName));
+    (await ensureContact(environmentId, member.email, member.firstName, member.lastName, {
+      externalId: member.externalId,
+      attributes: member.attributes,
+      source: member.source,
+    }));
 
   const linkResult = await getContactSurveyLink(contactId, surveyId);
   if (!linkResult.ok) {

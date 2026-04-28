@@ -100,4 +100,54 @@ describe("ensureContact", () => {
       })
     );
   });
+
+  test("creates new contact with CSV-mapped attributes, externalId, and source=csv", async () => {
+    (prisma.contact.findFirst as any).mockResolvedValue(null);
+    (prisma.contactAttributeKey.findMany as any).mockResolvedValue([{ id: "k1", key: "email" }]);
+    (prisma.contact.create as any).mockResolvedValue({ id: "c4" });
+
+    const id = await ensureContact("env1", "csv@example.com", null, null, {
+      externalId: "MEM-12345",
+      attributes: [
+        { attributeKeyId: "k7", value: "Engineering" },
+        { attributeKeyId: "k8", value: "Senior" },
+      ],
+      source: "csv",
+    });
+
+    expect(id).toBe("c4");
+    expect(prisma.contact.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          environmentId: "env1",
+          email: "csv@example.com",
+          externalId: "MEM-12345",
+          source: "csv",
+          attributes: {
+            create: expect.arrayContaining([
+              { attributeKeyId: "k1", value: "csv@example.com" },
+              { attributeKeyId: "k7", value: "Engineering" },
+              { attributeKeyId: "k8", value: "Senior" },
+            ]),
+          },
+        }),
+        select: { id: true },
+      })
+    );
+  });
+
+  test("does not change source when matching an existing contact by typed email", async () => {
+    // Existing contact match — ensureContact should NOT issue any update
+    // touching source, even when the caller passes source="csv".
+    (prisma.contact.findFirst as any).mockResolvedValueOnce({ id: "c5" });
+
+    const id = await ensureContact("env1", "existing@example.com", null, null, {
+      source: "csv",
+      attributes: [{ attributeKeyId: "k9", value: "should not be written" }],
+    });
+
+    expect(id).toBe("c5");
+    expect(prisma.contact.update).not.toHaveBeenCalled();
+    expect(prisma.contact.create).not.toHaveBeenCalled();
+  });
 });
