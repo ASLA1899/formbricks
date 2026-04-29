@@ -165,7 +165,7 @@ describe("upsertBulkContacts", () => {
           },
         ],
       },
-    ]);
+    ] as any);
 
     // Execute the function
     const result = await upsertBulkContacts(mockContacts, mockEnvironmentId, mockParsedEmails);
@@ -389,7 +389,7 @@ describe("upsertBulkContacts", () => {
           },
         ],
       },
-    ]);
+    ] as any);
 
     // Mock the transaction
     const mockTransaction = {

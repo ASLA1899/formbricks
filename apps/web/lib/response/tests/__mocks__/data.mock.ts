@@ -37,6 +37,11 @@ export const mockContact = {
   createdAt: new Date(2000, 1, 1, 19),
   updatedAt: new Date(2000, 1, 1, 19),
   environmentId: mockEnvironmentId,
+  email: null,
+  externalId: null,
+  source: "manual" as const,
+  inactive: false,
+  inactiveAt: null,
   attributes: [],
 };
 
@@ -121,7 +126,11 @@ const getMockTags = (tags: string[]): { tag: TTag }[] => {
   }));
 };
 
-export const mockResponses: ResponseMock[] = [
+// `personAttributes` is a legacy field on these fixtures that doesn't exist on
+// Prisma's generated Response type. Cast to any to keep the fixtures readable
+// without rewriting them; tests that consume mockResponses don't read that
+// field, they just need the rest of the response shape.
+export const mockResponses: ResponseMock[] = ([
   {
     id: "clsk98dpd001qk8iuqllv486a",
     createdAt: new Date("2024-02-13T11:00:00.000Z"),
@@ -244,7 +253,7 @@ export const mockResponses: ResponseMock[] = [
     tags: getMockTags(["tag4", "tag5"]),
     language: null,
   },
-];
+] as any);
 
 export const getFilteredMockResponses = (
   fitlerCritera: TResponseFilterCriteria,

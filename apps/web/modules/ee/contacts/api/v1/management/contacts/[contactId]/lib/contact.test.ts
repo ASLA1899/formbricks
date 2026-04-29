@@ -33,7 +33,7 @@ describe("contact lib", () => {
 
   describe("getContact", () => {
     test("should return contact if found", async () => {
-      vi.mocked(prisma.contact.findUnique).mockResolvedValue(mockContact);
+      vi.mocked(prisma.contact.findUnique).mockResolvedValue(mockContact as any);
       const result = await getContact(mockContactId);
 
       expect(result).toEqual(mockContact);

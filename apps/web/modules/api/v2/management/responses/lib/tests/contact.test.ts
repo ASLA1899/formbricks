@@ -36,7 +36,7 @@ const expectedContactAttributes: TContactAttributes = {
 
 describe("getContactByUserId", () => {
   test("should return ok result with contact and attributes when found", async () => {
-    vi.mocked(prisma.contact.findFirst).mockResolvedValue(mockContactDbData);
+    vi.mocked(prisma.contact.findFirst).mockResolvedValue(mockContactDbData as any);
 
     const result = await getContactByUserId(environmentId, userId);
 
@@ -136,7 +136,7 @@ describe("getContactByUserId", () => {
       ],
     };
 
-    vi.mocked(prisma.contact.findFirst).mockResolvedValue(mockContactWithManyAttributes);
+    vi.mocked(prisma.contact.findFirst).mockResolvedValue(mockContactWithManyAttributes as any);
 
     const result = await getContactByUserId(environmentId, userId);
 
@@ -161,7 +161,7 @@ describe("getContactByUserId", () => {
       attributes: [],
     };
 
-    vi.mocked(prisma.contact.findFirst).mockResolvedValue(mockContactWithNoAttributes);
+    vi.mocked(prisma.contact.findFirst).mockResolvedValue(mockContactWithNoAttributes as any);
 
     const result = await getContactByUserId(environmentId, userId);
 

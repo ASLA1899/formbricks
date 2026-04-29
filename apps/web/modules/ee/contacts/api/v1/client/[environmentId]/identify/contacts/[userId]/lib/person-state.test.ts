@@ -120,7 +120,7 @@ describe("getPersonState", () => {
   test("should return person state if contact exists", async () => {
     vi.mocked(getEnvironment).mockResolvedValue(mockEnvironment as TEnvironment);
     vi.mocked(getOrganizationByEnvironmentId).mockResolvedValue(mockOrganization as TOrganization);
-    vi.mocked(getContactByUserId).mockResolvedValue(mockResolvedContactFromGetContactByUserId);
+    vi.mocked(getContactByUserId).mockResolvedValue(mockResolvedContactFromGetContactByUserId as any);
     vi.mocked(prisma.response.findMany).mockResolvedValue([]);
     vi.mocked(prisma.display.findMany).mockResolvedValue([]);
     vi.mocked(getPersonSegmentIds).mockResolvedValue([]);
@@ -187,7 +187,7 @@ describe("getPersonState", () => {
 
     vi.mocked(getEnvironment).mockResolvedValue(mockEnvironment as TEnvironment);
     vi.mocked(getOrganizationByEnvironmentId).mockResolvedValue(mockOrganization as TOrganization);
-    vi.mocked(getContactByUserId).mockResolvedValue(mockResolvedContactFromGetContactByUserId);
+    vi.mocked(getContactByUserId).mockResolvedValue(mockResolvedContactFromGetContactByUserId as any);
     vi.mocked(prisma.response.findMany).mockResolvedValue(mockResponses as any);
     vi.mocked(prisma.display.findMany).mockResolvedValue(mockDisplays as any);
     vi.mocked(getPersonSegmentIds).mockResolvedValue([]);

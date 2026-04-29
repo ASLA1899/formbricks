@@ -52,6 +52,11 @@ const mockContact = {
   userId,
   createdAt: new Date(),
   updatedAt: new Date(),
+  email: null,
+  externalId: null,
+  source: "manual" as const,
+  inactive: false,
+  inactiveAt: null,
 };
 
 const mockDisplay = {

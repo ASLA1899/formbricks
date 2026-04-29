@@ -35,7 +35,7 @@ describe("Contact API Lib", () => {
   describe("getContact", () => {
     test("should return contact if found", async () => {
       const mockContactData = { id: mockContactId };
-      vi.mocked(prisma.contact.findUnique).mockResolvedValue(mockContactData);
+      vi.mocked(prisma.contact.findUnique).mockResolvedValue(mockContactData as any);
 
       const contact = await getContact(mockContactId);
 
@@ -82,7 +82,7 @@ describe("Contact API Lib", () => {
           { attributeKey: { key: "email" }, value: "test@example.com" },
         ],
       };
-      vi.mocked(prisma.contact.findFirst).mockResolvedValue(mockContactData);
+      vi.mocked(prisma.contact.findFirst).mockResolvedValue(mockContactData as any);
 
       const contact = await getContactByUserId(mockEnvironmentId, mockUserId);
 

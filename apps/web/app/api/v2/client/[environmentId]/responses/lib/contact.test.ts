@@ -15,6 +15,14 @@ vi.mock("@formbricks/database", () => ({
 const contactId = "test-contact-id";
 const mockContact = {
   id: contactId,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  environmentId: "test-env-id",
+  email: null,
+  externalId: null,
+  source: "manual" as const,
+  inactive: false,
+  inactiveAt: null,
   attributes: [
     { attributeKey: { key: "email" }, value: "test@example.com" },
     { attributeKey: { key: "name" }, value: "Test User" },

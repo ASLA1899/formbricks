@@ -95,7 +95,7 @@ describe("contact.ts", () => {
         userId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      } as any);
 
       const result = await createContact(contactData);
 
@@ -125,7 +125,7 @@ describe("contact.ts", () => {
           userId: "user123",
           createdAt: new Date(),
           updatedAt: new Date(),
-        }); // Existing contact by userId
+        } as any); // Existing contact by userId
 
       const result = await createContact(contactData);
 
@@ -172,7 +172,7 @@ describe("contact.ts", () => {
 
       vi.mocked(prisma.contact.findFirst).mockResolvedValue(null);
       vi.mocked(prisma.contactAttributeKey.findMany).mockResolvedValue(existingAttributeKeys);
-      vi.mocked(prisma.contact.create).mockResolvedValue(contactWithAttributes);
+      vi.mocked(prisma.contact.create).mockResolvedValue(contactWithAttributes as any);
 
       const result = await createContact(contactData);
 
@@ -264,7 +264,7 @@ describe("contact.ts", () => {
 
       vi.mocked(prisma.contact.findFirst).mockResolvedValueOnce(null); // No existing contact by email
       vi.mocked(prisma.contactAttributeKey.findMany).mockResolvedValue(existingAttributeKeys);
-      vi.mocked(prisma.contact.create).mockResolvedValue(contactWithAttributes);
+      vi.mocked(prisma.contact.create).mockResolvedValue(contactWithAttributes as any);
 
       const result = await createContact(contactData);
 
@@ -329,7 +329,7 @@ describe("contact.ts", () => {
         ],
       };
 
-      vi.mocked(prisma.contact.create).mockResolvedValue(contactWithAttributes);
+      vi.mocked(prisma.contact.create).mockResolvedValue(contactWithAttributes as any);
 
       const result = await createContact(contactData);
 

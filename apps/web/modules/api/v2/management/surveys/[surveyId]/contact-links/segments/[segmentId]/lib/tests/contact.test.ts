@@ -101,7 +101,7 @@ describe("getContactsInSegment", () => {
     vi.mocked(prisma.contactAttributeKey.findMany).mockResolvedValue([{ key: "email" }, { key: "name" }]);
 
     vi.mocked(prisma.contact.count).mockResolvedValue(2);
-    vi.mocked(prisma.contact.findMany).mockResolvedValue(mockContacts);
+    vi.mocked(prisma.contact.findMany).mockResolvedValue(mockContacts as any);
   });
 
   afterEach(() => {

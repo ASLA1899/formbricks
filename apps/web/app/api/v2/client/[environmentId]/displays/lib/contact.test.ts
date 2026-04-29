@@ -28,7 +28,7 @@ describe("doesContactExist", () => {
   });
 
   test("should return true if contact exists", async () => {
-    vi.mocked(prisma.contact.findFirst).mockResolvedValue({ id: contactId });
+    vi.mocked(prisma.contact.findFirst).mockResolvedValue({ id: contactId } as any);
 
     const result = await doesContactExist(contactId);
 

@@ -506,7 +506,7 @@ describe("Service Functions", () => {
 
     test("returns the contact when found", async () => {
       const mockContact = { environmentId: "env123" };
-      vi.mocked(prisma.contact.findUnique).mockResolvedValue(mockContact);
+      vi.mocked(prisma.contact.findUnique).mockResolvedValue(mockContact as any);
 
       const result = await getContact(contactId);
       expect(validateInputs).toHaveBeenCalled();

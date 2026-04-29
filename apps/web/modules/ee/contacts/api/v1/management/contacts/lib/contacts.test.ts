@@ -41,7 +41,7 @@ describe("getContacts", () => {
   });
 
   test("should return contacts for given environmentIds", async () => {
-    vi.mocked(prisma.contact.findMany).mockResolvedValue(mockContacts);
+    vi.mocked(prisma.contact.findMany).mockResolvedValue(mockContacts as any);
 
     const result = await getContacts(mockEnvironmentIds);
 
@@ -75,7 +75,7 @@ describe("getContacts", () => {
   });
 
   test("should get contacts", async () => {
-    vi.mocked(prisma.contact.findMany).mockResolvedValue(mockContacts);
+    vi.mocked(prisma.contact.findMany).mockResolvedValue(mockContacts as any);
 
     await getContacts(mockEnvironmentIds);
   });
