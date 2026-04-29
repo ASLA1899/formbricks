@@ -1,5 +1,11 @@
 import fs from "fs";
 import path from "path";
+// Static import: bundles the JSON into the Next.js standalone build output so
+// loadQueryConfig() works regardless of process.cwd(). The previous
+// `path.join(process.cwd(), "apps/web/app/api/member-lookup/query-config.json")`
+// approach broke in the production-style standalone Docker image where cwd is
+// /home/nextjs and the source tree isn't on disk in the runtime container.
+import staticQueryConfig from "./query-config.json";
 
 /**
  * Query Configuration Loader
@@ -60,9 +66,19 @@ export function loadQueryConfig(): QueryConfigFile {
   }
 
   try {
-    const configPath = path.join(process.cwd(), "apps/web/app/api/member-lookup/query-config.json");
-    const configContent = fs.readFileSync(configPath, "utf-8");
-    const config: QueryConfigFile = JSON.parse(configContent);
+    // The bundled static config is the source of truth at runtime. We still
+    // try a process.cwd()-based filesystem read first so any hot edits to the
+    // JSON during dev (`pnpm dev`) take effect without a restart; if that
+    // fails (production / standalone Docker), we fall back to the bundled
+    // static import.
+    let config: QueryConfigFile;
+    try {
+      const configPath = path.join(process.cwd(), "apps/web/app/api/member-lookup/query-config.json");
+      const configContent = fs.readFileSync(configPath, "utf-8");
+      config = JSON.parse(configContent);
+    } catch {
+      config = staticQueryConfig as QueryConfigFile;
+    }
 
     // Interpolate environment variables
     const interpolated = interpolateEnvVars(config);
