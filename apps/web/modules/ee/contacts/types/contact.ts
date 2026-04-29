@@ -1,10 +1,19 @@
 import { z } from "zod";
 
+export const ZContactSource = z.enum(["snowflake", "manual", "csv"]);
+
+export type TContactSource = z.infer<typeof ZContactSource>;
+
 export const ZContact = z.object({
   id: z.string().cuid2(),
   createdAt: z.date(),
   updatedAt: z.date(),
   environmentId: z.string().cuid2(),
+  email: z.string().nullable(),
+  externalId: z.string().nullable(),
+  source: ZContactSource,
+  inactive: z.boolean(),
+  inactiveAt: z.date().nullable(),
 });
 
 const ZContactTableAttributeData = z.object({
@@ -35,6 +44,11 @@ export type TContact = z.infer<typeof ZContact>;
 export type TTransformPersonInput = {
   id: string;
   environmentId: string;
+  email: string | null;
+  externalId: string | null;
+  source: TContactSource;
+  inactive: boolean;
+  inactiveAt: Date | null;
   attributes: {
     value: string;
     attributeKey: {

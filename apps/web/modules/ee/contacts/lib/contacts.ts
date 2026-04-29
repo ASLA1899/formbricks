@@ -98,11 +98,17 @@ const selectContact = {
   createdAt: true,
   updatedAt: true,
   environmentId: true,
+  email: true,
+  externalId: true,
+  source: true,
+  inactive: true,
+  inactiveAt: true,
   attributes: {
     select: {
       value: true,
       attributeKey: {
         select: {
+          id: true,
           key: true,
           name: true,
         },
@@ -110,6 +116,13 @@ const selectContact = {
     },
   },
 } satisfies Prisma.ContactSelect;
+
+// Concrete shape returned by getContact / deleteContact — derived from the
+// Prisma select above so the typed columns (email/externalId/source/inactive)
+// and the attributes relation flow through to consumers without a separate
+// hand-maintained type. Callers that only need the legacy ZContact shape can
+// still narrow.
+export type TSelectedContact = Prisma.ContactGetPayload<{ select: typeof selectContact }>;
 
 export const buildContactWhereClause = (environmentId: string, search?: string): Prisma.ContactWhereInput => {
   const whereClause: Prisma.ContactWhereInput = { environmentId };
@@ -164,7 +177,7 @@ export const getContacts = reactCache(
   }
 );
 
-export const getContact = reactCache(async (contactId: string): Promise<TContact | null> => {
+export const getContact = reactCache(async (contactId: string): Promise<TSelectedContact | null> => {
   validateInputs([contactId, ZId]);
 
   try {
@@ -183,7 +196,7 @@ export const getContact = reactCache(async (contactId: string): Promise<TContact
   }
 });
 
-export const deleteContact = async (contactId: string): Promise<TContact | null> => {
+export const deleteContact = async (contactId: string): Promise<TSelectedContact | null> => {
   validateInputs([contactId, ZId]);
 
   try {

@@ -30,6 +30,11 @@ export const transformPrismaContact = (person: TTransformPersonInput): TContactW
     id: person.id,
     attributes,
     environmentId: person.environmentId,
+    email: person.email,
+    externalId: person.externalId,
+    source: person.source,
+    inactive: person.inactive,
+    inactiveAt: person.inactiveAt,
     createdAt: new Date(person.createdAt),
     updatedAt: new Date(person.updatedAt),
   };
