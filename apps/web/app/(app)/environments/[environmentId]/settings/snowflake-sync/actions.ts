@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@formbricks/database";
 import { ZId } from "@formbricks/types/common";
+import { InvalidInputError } from "@formbricks/types/errors";
 import { executeConfiguredQueryAllRows } from "@/app/api/member-lookup/configurable-query-service";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
 import { checkAuthorizationUpdated } from "@/lib/utils/action-client/action-client-middleware";
@@ -136,8 +137,19 @@ export const previewSnowflakeQueryAction = authenticatedActionClient
     // access to this environment.
     await requireEnvironmentAccess(ctx.user.id, parsedInput.environmentId);
 
-    const rows = await executeConfiguredQueryAllRows(parsedInput.snowflakeQueryId);
-    const sample = rows.slice(0, 5);
-    const headers = sample.length > 0 ? Object.keys(sample[0]) : [];
-    return { headers, sample, totalRows: rows.length };
+    try {
+      const rows = await executeConfiguredQueryAllRows(parsedInput.snowflakeQueryId);
+      const sample = rows.slice(0, 5);
+      const headers = sample.length > 0 ? Object.keys(sample[0]) : [];
+      return { headers, sample, totalRows: rows.length };
+    } catch (error) {
+      // Surface a useful message via InvalidInputError — the action client
+      // only echoes Formbricks error subclasses to the client; generic
+      // Error throws collapse to "Something went wrong while executing
+      // the operation." Common cause: the query has required parameters
+      // and is therefore not usable as a sync source — a parameter-less
+      // master query is required.
+      const message = error instanceof Error ? error.message : String(error);
+      throw new InvalidInputError(`Preview failed: ${message}`);
+    }
   });

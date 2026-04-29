@@ -113,13 +113,19 @@ export function getQueryConfig(queryId: string): QueryConfig {
 /**
  * List all available query configurations
  */
-export function listQueryConfigs(): Array<{ id: string; name: string; description?: string }> {
+export function listQueryConfigs(): Array<{
+  id: string;
+  name: string;
+  description?: string;
+  parameters: string[];
+}> {
   const config = loadQueryConfig();
 
   return Object.entries(config.queries).map(([id, query]) => ({
     id,
     name: query.name,
     description: query.description,
+    parameters: query.parameters ?? [],
   }));
 }
 

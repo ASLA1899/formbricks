@@ -37,7 +37,7 @@ import { previewSnowflakeQueryAction, runSyncNowAction, saveSyncConfigAction } f
 // ---------------------------------------------------------------------------
 
 type AttributeKeyOption = { id: string; key: string };
-type QueryConfigOption = { id: string; name: string; description?: string };
+type QueryConfigOption = { id: string; name: string; description?: string; parameters: string[] };
 
 interface SyncConfigFormProps {
   environmentId: string;

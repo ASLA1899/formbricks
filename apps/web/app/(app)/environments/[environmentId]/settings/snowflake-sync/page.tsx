@@ -47,7 +47,13 @@ export default async function SnowflakeSyncSettingsPage(props: {
     }),
   ]);
 
-  const queryConfigs = listQueryConfigs();
+  // Filter to parameter-less queries only — sync needs a master roster
+  // query that returns ALL contacts in one shot, not a per-member lookup
+  // (which is what the existing member-lookup queries take parameters for).
+  // Parameterized queries can't be used as a sync source.
+  const allQueryConfigs = listQueryConfigs();
+  const queryConfigs = allQueryConfigs.filter((q) => q.parameters.length === 0);
+  const hasParameterizedOnly = allQueryConfigs.length > 0 && queryConfigs.length === 0;
 
   // Narrow the form's prop to the config-only fields. The form doesn't read
   // lastRunAt / lastRunStatus / runs and shouldn't have to know about them.
@@ -70,6 +76,30 @@ export default async function SnowflakeSyncSettingsPage(props: {
           sliced in the Segments UI without writing SQL. Manual contacts (added by hand or via CSV import) are
           protected — sync never overwrites them.
         </p>
+
+        {hasParameterizedOnly && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <p className="font-medium">No master sync query is configured.</p>
+            <p className="mt-2">
+              The existing Snowflake queries in <code className="font-mono">query-config.json</code> all take
+              parameters (member ID, email, etc.) &mdash; they are per-record lookups, not sync sources. To enable
+              the Snowflake → Contact mirror, add a parameter-less query that returns ALL contacts you want
+              mirrored. Example:
+            </p>
+            <pre className="mt-2 overflow-auto rounded bg-amber-100 p-2 text-xs">
+              {`"member-roster-sync": {
+  "name": "Member Roster (Sync)",
+  "description": "All active members for Phase 1a sync",
+  "database": "{{SNOWFLAKE_DATABASE}}",
+  "schema": "{{SNOWFLAKE_SCHEMA}}",
+  "sql": "SELECT record_number, first_name, last_name, email FROM members",
+  "parameters": [],
+  "fields": {},
+  "cache": { "enabled": false }
+}`}
+            </pre>
+          </div>
+        )}
 
         <SyncConfigForm
           environmentId={environmentId}
