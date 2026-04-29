@@ -20,6 +20,11 @@ describe("ZContact", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       environmentId: "cld1234567890abcdef123456",
+      email: null,
+      externalId: null,
+      source: "manual" as const,
+      inactive: false,
+      inactiveAt: null,
     };
     const result = ZContact.parse(validContact);
     expect(result).toEqual(validContact);
@@ -83,6 +88,11 @@ describe("ZContactWithAttributes", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       environmentId: "cld1234567890abcdef123456",
+      email: null,
+      externalId: null,
+      source: "manual" as const,
+      inactive: false,
+      inactiveAt: null,
       attributes: {
         email: "test@example.com",
         firstName: "John",
