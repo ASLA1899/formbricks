@@ -9,6 +9,25 @@ import { findMatchingLocale } from "@/lib/utils/locale";
 import { createBrevoCustomer } from "@/modules/auth/lib/brevo";
 import { createUser, getUserByEmail, updateUser } from "@/modules/auth/lib/user";
 
+// ZUserName allows letters, marks, whitespace, apostrophe, digits, hyphen.
+// Microsoft Entra commonly returns names as "Last, First" or with periods
+// (e.g. middle initials). Normalize before handing to createUser so
+// validation doesn't reject and bounce the user back to the login page.
+const sanitizeMicrosoftName = (raw: string | null | undefined): string => {
+  if (!raw) return "";
+  const trimmed = raw.trim();
+  // "Last, First" → "First Last" (single comma, both sides non-empty)
+  const parts = trimmed.split(",");
+  const reordered =
+    parts.length === 2 && parts[0].trim() && parts[1].trim()
+      ? `${parts[1].trim()} ${parts[0].trim()}`
+      : trimmed;
+  return reordered
+    .replace(/[^\p{L}\p{M}\s'\d-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 export const handleMicrosoftCallback = async ({
   user,
   account,
@@ -77,8 +96,9 @@ export const handleMicrosoftCallback = async ({
     );
   }
 
+  const sanitizedName = sanitizeMicrosoftName(user.name);
   const newUser = await createUser({
-    name: user.name || user.email.split("@")[0],
+    name: sanitizedName || user.email.split("@")[0],
     email: user.email,
     emailVerified: new Date(),
     identityProvider: "azuread",

@@ -172,4 +172,33 @@ describe("handleMicrosoftCallback", () => {
     expect(prisma.organization.findFirst).toHaveBeenCalledWith({ orderBy: { createdAt: "asc" } });
     expect(createMembership).toHaveBeenCalledWith("org-1", "new-user-id", { role: "member", accepted: true });
   });
+
+  test.each([
+    ["SAIH, AYA", "AYA SAIH"],
+    ["Cohen, Greg", "Greg Cohen"],
+    ["  O'Brien,  Patrick  ", "Patrick O'Brien"],
+    ["John A. Smith", "John A Smith"],
+    ["Plain Name", "Plain Name"],
+    ["Anne-Marie Dupont", "Anne-Marie Dupont"],
+  ])("sanitizes Microsoft display name %j into %j", async (raw, expected) => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(getUserByEmail).mockResolvedValueOnce(null);
+    vi.mocked(createUser).mockResolvedValueOnce({ id: "new-user-id", email: mockUser.email } as any);
+    vi.mocked(prisma.organization.findFirst).mockResolvedValueOnce({ id: "org-1" } as any);
+
+    await handleMicrosoftCallback({ user: { ...mockUser, name: raw }, account });
+
+    expect(createUser).toHaveBeenCalledWith(expect.objectContaining({ name: expected }));
+  });
+
+  test("falls back to email local-part when Microsoft sends an empty or all-invalid name", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(getUserByEmail).mockResolvedValueOnce(null);
+    vi.mocked(createUser).mockResolvedValueOnce({ id: "new-user-id", email: mockUser.email } as any);
+    vi.mocked(prisma.organization.findFirst).mockResolvedValueOnce({ id: "org-1" } as any);
+
+    await handleMicrosoftCallback({ user: { ...mockUser, name: ",,," } as any, account });
+
+    expect(createUser).toHaveBeenCalledWith(expect.objectContaining({ name: mockUser.email.split("@")[0] }));
+  });
 });
