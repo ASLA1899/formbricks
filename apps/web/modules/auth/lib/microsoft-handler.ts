@@ -121,7 +121,13 @@ export const handleMicrosoftCallback = async ({
     // notifications from the org they're auto-joined to. Intentionally diverges
     // from the EE SSO handler, which appends the org to
     // notificationSettings.unsubscribedOrganizationIds.
-    await createMembership(firstOrg.id, newUser.id, { role: "member", accepted: true });
+    //
+    // Role is "owner" to match the non-EE convention: without an EE license,
+    // role assignment is gated by the access-control feature flag, so every
+    // invited user is already an owner. getUserProjects filters by team
+    // membership for non-owners, and this deployment has no teams configured,
+    // so a "member" here would land on the empty-workspaces screen.
+    await createMembership(firstOrg.id, newUser.id, { role: "owner", accepted: true });
   }
 
   return true;

@@ -170,7 +170,7 @@ describe("handleMicrosoftCallback", () => {
     expect(createAccount).toHaveBeenCalledWith({ ...account, userId: "new-user-id" });
     expect(createBrevoCustomer).toHaveBeenCalledWith({ id: "new-user-id", email: mockUser.email });
     expect(prisma.organization.findFirst).toHaveBeenCalledWith({ orderBy: { createdAt: "asc" } });
-    expect(createMembership).toHaveBeenCalledWith("org-1", "new-user-id", { role: "member", accepted: true });
+    expect(createMembership).toHaveBeenCalledWith("org-1", "new-user-id", { role: "owner", accepted: true });
   });
 
   test.each([
