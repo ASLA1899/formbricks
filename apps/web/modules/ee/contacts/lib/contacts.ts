@@ -166,14 +166,21 @@ export const getContacts = reactCache(
     validateInputs([environmentId, ZId], [offset, ZOptionalNumber], [searchValue, ZOptionalString]);
 
     try {
-      // Default behaviour: active contacts only. Pass filters.active === false to
-      // see inactive contacts, or omit the filter entirely (undefined) to keep
-      // the active-only default. Source filter is applied verbatim when set.
+      // Filters semantics:
+      //   - filters.source: applied verbatim when set, omitted otherwise.
+      //   - filters.active === true  → only show active   (inactive: false)
+      //   - filters.active === false → only show inactive (inactive: true)
+      //   - filters.active === undefined OR filters omitted → NO inactive
+      //     filter at all (returns both active and inactive contacts).
+      // The "default to active-only" behaviour is the *page's* responsibility,
+      // not the lib's — otherwise external callers (the management API,
+      // server actions, etc.) would silently lose visibility of inactive
+      // contacts.
       const baseWhere = buildContactWhereClause(environmentId, searchValue);
       const where: Prisma.ContactWhereInput = {
         ...baseWhere,
         ...(filters?.source ? { source: filters.source } : {}),
-        inactive: filters?.active === undefined ? false : !filters.active,
+        ...(filters?.active !== undefined ? { inactive: !filters.active } : {}),
       };
 
       const contacts = await prisma.contact.findMany({

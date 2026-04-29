@@ -267,15 +267,17 @@ describe("Contacts Lib", () => {
   });
 
   describe("getContacts", () => {
-    test("returns contacts without search or offset (default active-only)", async () => {
+    test("returns contacts without search or offset (no inactive filter applied by default)", async () => {
       vi.mocked(prisma.contact.findMany).mockResolvedValue([mockPrismaContact] as any);
       vi.mocked(transformPrismaContact).mockReturnValue(mockTransformedContact as any);
 
       const result = await getContacts(mockEnvironmentId);
 
       expect(result).toEqual([mockTransformedContact]);
+      // The lib does NOT default to inactive:false — that's the page's job.
+      // External callers (management API, server actions) get all contacts.
       expect(prisma.contact.findMany).toHaveBeenCalledWith({
-        where: { environmentId: mockEnvironmentId, inactive: false },
+        where: { environmentId: mockEnvironmentId },
         select: expect.any(Object),
         take: 30,
         skip: undefined,
@@ -291,7 +293,7 @@ describe("Contacts Lib", () => {
 
       expect(result).toEqual([mockTransformedContact]);
       expect(prisma.contact.findMany).toHaveBeenCalledWith({
-        where: { environmentId: mockEnvironmentId, inactive: false },
+        where: { environmentId: mockEnvironmentId },
         select: expect.any(Object),
         take: 30,
         skip: 30,
@@ -308,7 +310,7 @@ describe("Contacts Lib", () => {
 
       expect(result).toEqual([mockTransformedContact]);
       expect(prisma.contact.findMany).toHaveBeenCalledWith({
-        where: { ...buildContactWhereClause(mockEnvironmentId, searchValue), inactive: false },
+        where: buildContactWhereClause(mockEnvironmentId, searchValue),
         select: expect.any(Object),
         take: 30,
         skip: undefined,
@@ -323,7 +325,22 @@ describe("Contacts Lib", () => {
       await getContacts(mockEnvironmentId, undefined, undefined, { source: "snowflake" });
 
       expect(prisma.contact.findMany).toHaveBeenCalledWith({
-        where: { environmentId: mockEnvironmentId, source: "snowflake", inactive: false },
+        where: { environmentId: mockEnvironmentId, source: "snowflake" },
+        select: expect.any(Object),
+        take: 30,
+        skip: undefined,
+        orderBy: { createdAt: "desc" },
+      });
+    });
+
+    test("active=true filter shows active contacts only (page-driven default)", async () => {
+      vi.mocked(prisma.contact.findMany).mockResolvedValue([mockPrismaContact] as any);
+      vi.mocked(transformPrismaContact).mockReturnValue(mockTransformedContact as any);
+
+      await getContacts(mockEnvironmentId, undefined, undefined, { active: true });
+
+      expect(prisma.contact.findMany).toHaveBeenCalledWith({
+        where: { environmentId: mockEnvironmentId, inactive: false },
         select: expect.any(Object),
         take: 30,
         skip: undefined,
