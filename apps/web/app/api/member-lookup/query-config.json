@@ -4,10 +4,23 @@
   "queries": {
     "member-roster-sync": {
       "name": "Member Roster (Sync)",
-      "description": "All current members. Used as the source for the Phase 1a Snowflake → Contact mirror.",
+      "description": "All current members. Production source for the Phase 1a Snowflake → Contact mirror.",
       "database": "ASLA_DB",
       "schema": "SURVEYS",
       "sql": "SELECT * FROM ASLA_DB.SURVEYS.VW_CURRENT_MEMBERS",
+      "parameters": [],
+      "fields": {},
+      "cache": {
+        "enabled": false
+      }
+    },
+
+    "member-roster-sync-test": {
+      "name": "Member Roster (Sync, Test — 10 rows)",
+      "description": "Same view as member-roster-sync but limited to 10 rows. Use for local smoke testing — pick this one in the Sync settings to verify the create / update / deactivate cycle without flooding the DB. ORDER BY RECORDNUMBER + LIMIT N is deterministic so re-runs return the SAME rows; drop the LIMIT to fewer rows on subsequent runs to exercise the deactivation path.",
+      "database": "ASLA_DB",
+      "schema": "SURVEYS",
+      "sql": "SELECT * FROM ASLA_DB.SURVEYS.VW_CURRENT_MEMBERS ORDER BY RECORDNUMBER LIMIT 10",
       "parameters": [],
       "fields": {},
       "cache": {
