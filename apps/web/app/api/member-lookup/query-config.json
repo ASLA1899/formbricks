@@ -2,6 +2,19 @@
   "$schema": "./query-config.schema.json",
   "version": "1.0",
   "queries": {
+    "member-roster-sync": {
+      "name": "Member Roster (Sync)",
+      "description": "All current members. Used as the source for the Phase 1a Snowflake → Contact mirror.",
+      "database": "ASLA_DB",
+      "schema": "SURVEYS",
+      "sql": "SELECT * FROM ASLA_DB.SURVEYS.VW_CURRENT_MEMBERS",
+      "parameters": [],
+      "fields": {},
+      "cache": {
+        "enabled": false
+      }
+    },
+
     "member-basic": {
       "name": "Basic Member Info",
       "description": "Minimal member information for quick surveys",
