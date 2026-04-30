@@ -49,6 +49,12 @@ export const getContactsInSegment = reactCache(async (segmentId: string) => {
       where: whereClause,
       select: {
         id: true,
+        // Phase 1a: include the typed identity columns so we can mirror them
+        // into the flat attributes view below — sync-created contacts have
+        // the typed email but no email-attribute, so the segment audience
+        // resolver downstream wouldn't see their email otherwise.
+        email: true,
+        externalId: true,
         attributes: {
           where: {
             attributeKey: {
@@ -80,6 +86,9 @@ export const getContactsInSegment = reactCache(async (segmentId: string) => {
         },
         {} as Record<string, string>
       );
+      // Mirror typed identity columns into the flat attributes view.
+      if (contact.email && !attributes.email) attributes.email = contact.email;
+      if (contact.externalId && !attributes.externalId) attributes.externalId = contact.externalId;
       return {
         contactId: contact.id,
         attributes,
@@ -306,23 +315,28 @@ export const createContactsFromCSV = async (
     const csvEmails = Array.from(new Set(csvData.map((r) => r.email).filter(Boolean)));
     const csvUserIds = Array.from(new Set(csvData.map((r) => r.userId).filter(Boolean)));
 
-    // Fetch existing contacts by email
+    // Fetch existing contacts by email. Phase 1a: typed Contact.email is the
+    // source of truth, but pre-Phase-1a contacts may only have the legacy
+    // email-attribute. OR both clauses so the dedupe catches contacts from
+    // either era. Sync-created contacts hit the typed branch.
     const existingContactsByEmail = await prisma.contact.findMany({
       where: {
         environmentId,
-        attributes: {
-          some: {
-            attributeKey: {
-              key: "email",
-            },
-            value: {
-              in: csvEmails,
+        OR: [
+          { email: { in: csvEmails } },
+          {
+            attributes: {
+              some: {
+                attributeKey: { key: "email" },
+                value: { in: csvEmails },
+              },
             },
           },
-        },
+        ],
       },
       select: {
         id: true,
+        email: true,
         attributes: {
           select: {
             attributeKey: { select: { key: true, id: true } },
@@ -332,12 +346,14 @@ export const createContactsFromCSV = async (
       },
     });
 
-    // Map emails to existing contacts
+    // Map emails to existing contacts. Prefer the typed Contact.email column
+    // and fall back to the legacy email-attribute for pre-Phase-1a rows.
     const emailToContactMap = new Map<
       string,
       Prisma.ContactGetPayload<{
         select: {
           id: true;
+          email: true;
           attributes: {
             select: {
               attributeKey: { select: { key: true; id: true } };
@@ -348,9 +364,10 @@ export const createContactsFromCSV = async (
       }>
     >();
     existingContactsByEmail.forEach((contact) => {
-      const emailAttr = contact.attributes.find((attr) => attr.attributeKey.key === "email");
-      if (emailAttr) {
-        emailToContactMap.set(emailAttr.value, contact);
+      const canonical =
+        contact.email ?? contact.attributes.find((attr) => attr.attributeKey.key === "email")?.value;
+      if (canonical) {
+        emailToContactMap.set(canonical, contact);
       }
     });
 
@@ -570,6 +587,11 @@ export const generateBulkPersonalLinks = async (
       where: { environmentId },
       select: {
         id: true,
+        // Phase 1a: include the typed columns so we can fold them into the
+        // flat attributes view below. Sync-created contacts populate
+        // Contact.email but not the email-attribute.
+        email: true,
+        externalId: true,
         attributes: {
           where: {
             attributeKey: {
@@ -597,6 +619,8 @@ export const generateBulkPersonalLinks = async (
         },
         {} as Record<string, string>
       );
+      if (contact.email && !attributes.email) attributes.email = contact.email;
+      if (contact.externalId && !attributes.externalId) attributes.externalId = contact.externalId;
 
       const encryptedContactId = symmetricEncrypt(contact.id, ENCRYPTION_KEY);
       const encryptedSurveyId = symmetricEncrypt(surveyId, ENCRYPTION_KEY);

@@ -48,19 +48,28 @@ export const importContactsAction = authenticatedActionClient
     // Extract unique emails from CSV data
     const csvEmails = Array.from(new Set(contacts.map((r) => r.email).filter(Boolean)));
 
-    // Find existing contacts by email to skip duplicates
+    // Find existing contacts by email to skip duplicates. Phase 1a: typed
+    // Contact.email is the source of truth post-Phase-1a, but pre-Phase-1a
+    // contacts may only have the legacy email-attribute. OR both clauses
+    // so the dedupe catches contacts from either era.
     const existingContactsByEmail = await prisma.contact.findMany({
       where: {
         environmentId,
-        attributes: {
-          some: {
-            attributeKey: { key: "email" },
-            value: { in: csvEmails },
+        OR: [
+          { email: { in: csvEmails } },
+          {
+            attributes: {
+              some: {
+                attributeKey: { key: "email" },
+                value: { in: csvEmails },
+              },
+            },
           },
-        },
+        ],
       },
       select: {
         id: true,
+        email: true,
         attributes: {
           select: {
             attributeKey: { select: { key: true } },
@@ -70,11 +79,13 @@ export const importContactsAction = authenticatedActionClient
       },
     });
 
-    const existingEmails = new Set(
-      existingContactsByEmail.flatMap((c) =>
-        c.attributes.filter((a) => a.attributeKey.key === "email").map((a) => a.value)
-      )
-    );
+    const existingEmails = new Set<string>();
+    for (const c of existingContactsByEmail) {
+      // Prefer typed column; fall back to attribute for pre-Phase-1a rows.
+      const canonical =
+        c.email ?? c.attributes.find((a) => a.attributeKey.key === "email")?.value;
+      if (canonical) existingEmails.add(canonical);
+    }
 
     // Filter to only new contacts
     const newContacts = contacts.filter((c) => !existingEmails.has(c.email));

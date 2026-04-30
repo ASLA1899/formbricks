@@ -21,10 +21,27 @@ export const convertPrismaContactAttributes = (
 };
 
 export const transformPrismaContact = (person: TTransformPersonInput): TContactWithAttributes => {
-  const attributes = person.attributes.reduce((acc, attr) => {
-    acc[attr.attributeKey.key] = attr.value;
-    return acc;
-  }, {});
+  const attributes: Record<string, string> = person.attributes.reduce(
+    (acc, attr) => {
+      acc[attr.attributeKey.key] = attr.value;
+      return acc;
+    },
+    {} as Record<string, string>
+  );
+
+  // Phase 1a: typed Contact.email is the source of truth post-Phase-1a.
+  // Mirror it into the legacy flat-attributes view so consumers reading
+  // `contact.attributes.email` (segment filters, CSV exports, contacts list,
+  // analysis exports, etc.) keep working without each having to know about
+  // the typed column. Sync-created contacts populate the typed column but
+  // not the email-attribute, so without this merge they show up email-less
+  // in every legacy consumer. Same treatment for externalId.
+  if (person.email && !attributes.email) {
+    attributes.email = person.email;
+  }
+  if (person.externalId && !attributes.externalId) {
+    attributes.externalId = person.externalId;
+  }
 
   return {
     id: person.id,
