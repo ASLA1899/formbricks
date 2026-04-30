@@ -116,11 +116,8 @@ export async function runContactSync(syncId: string): Promise<SyncRunResult> {
 
 // Project a Snowflake row through the column mapping to typed fields + attribute
 // assignments. Keys in mapping are the SOURCE headers (Snowflake column names).
-//
-// Assumes mapped columns are SQL string types. DATE / TIMESTAMP / BIGINT
-// columns would coerce to locale-formatted strings via String() — operators
-// who need to ingest those types should add a transform layer in the
-// Snowflake query itself (e.g. TO_CHAR(date_col, 'YYYY-MM-DD')).
+// See coerceToString below for how non-string column types (Date, BigInt) are
+// rendered.
 type ExtractedRow = {
   email: string | null;
   externalId: string | null;
@@ -142,7 +139,7 @@ function extractFromRow(row: Record<string, unknown>, mapping: ColumnMappingConf
     if (dest.kind === "skip") continue;
     const raw = row[sourceHeader];
     if (raw === null || raw === undefined) continue;
-    const value = String(raw).trim();
+    const value = coerceToString(raw);
     if (!value) continue;
 
     if (dest.kind === "typed") {
@@ -156,6 +153,28 @@ function extractFromRow(row: Record<string, unknown>, mapping: ColumnMappingConf
   }
 
   return out;
+}
+
+// Type-aware string coercion for Snowflake column values.
+//
+// `String(date)` would render a Date as a locale-formatted string ("Mon Apr 28
+// 2026 12:34:56 GMT+0000 (Coordinated Universal Time)") which is unparseable
+// downstream and varies by container locale. ISO 8601 round-trips reliably.
+//
+// `String(bigint)` works fine but `String(buffer)` doesn't, so we explicitly
+// handle the cases we expect from the snowflake-sdk driver:
+//   - Date         → ISO 8601 (TIMESTAMP_NTZ / TIMESTAMP_LTZ / DATE columns)
+//   - bigint       → decimal string (NUMBER columns over 2^53)
+//   - everything else → String(...).trim()  (text, numeric, boolean)
+function coerceToString(raw: unknown): string {
+  if (raw instanceof Date) {
+    if (Number.isNaN(raw.getTime())) return "";
+    return raw.toISOString();
+  }
+  if (typeof raw === "bigint") {
+    return raw.toString();
+  }
+  return String(raw).trim();
 }
 
 async function upsertContact(

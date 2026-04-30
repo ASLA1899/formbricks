@@ -22,8 +22,11 @@ export const normalizeHeader = (header: string): string => header.toLowerCase().
 // (a typed Contact column key). Extending this list adds smarter auto-detection
 // without forcing operators to rename their CSV columns.
 export const BUILTIN_ALIASES: Record<"email" | "externalId" | "firstName" | "lastName", string[]> = {
-  email: ["email", "emailaddress", "emailaddr", "mail"],
+  // All entries are already in normalized form (lowercase, no separators) so
+  // `primary_email` / `Primary Email` / `PRIMARY_EMAIL` all match `primaryemail`.
+  email: ["email", "emailaddress", "emailaddr", "mail", "primaryemail"],
   externalId: [
+    "recordnumber", // ASLA's canonical member identifier (preferred over customerid)
     "memberid",
     "membernumber",
     "membernum",

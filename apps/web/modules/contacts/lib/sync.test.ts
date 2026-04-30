@@ -156,4 +156,62 @@ describe("runContactSync", () => {
       })
     );
   });
+
+  test("coerces Date values to ISO 8601 strings (TIMESTAMP_NTZ columns)", async () => {
+    // Sync config that maps a TIMESTAMP-typed source column to an attribute.
+    (prisma.contactSync.findUnique as any).mockResolvedValue({
+      ...baseSync,
+      columnMapping: {
+        EMAIL: { kind: "typed", column: "email" },
+        EFFECTIVEDATE: { kind: "attribute", attributeKeyId: "k_effective" },
+      },
+    });
+    (executeConfiguredQueryAllRows as any).mockResolvedValue([
+      {
+        EMAIL: "alice@example.com",
+        EFFECTIVEDATE: new Date("2026-04-28T12:34:56.000Z"),
+      },
+    ]);
+    (prisma.contact.findFirst as any).mockResolvedValue(null);
+    (prisma.contact.create as any).mockResolvedValue({ id: "c-iso" });
+
+    await runContactSync("sync1");
+
+    // The contactAttribute.upsert should receive the ISO 8601 string,
+    // NOT the JS Date.toString() locale form ("Tue Apr 28 2026...").
+    expect(prisma.contactAttribute.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          attributeKeyId: "k_effective",
+          value: "2026-04-28T12:34:56.000Z",
+        }),
+      })
+    );
+  });
+
+  test("coerces BigInt values to decimal strings (NUMBER columns over 2^53)", async () => {
+    (prisma.contactSync.findUnique as any).mockResolvedValue({
+      ...baseSync,
+      columnMapping: {
+        MEMBER_ID: { kind: "typed", column: "externalId" },
+        BIG_NUM: { kind: "attribute", attributeKeyId: "k_bignum" },
+      },
+    });
+    (executeConfiguredQueryAllRows as any).mockResolvedValue([
+      { MEMBER_ID: "M-bigint", BIG_NUM: 9007199254740993n },
+    ]);
+    (prisma.contact.findFirst as any).mockResolvedValue(null);
+    (prisma.contact.create as any).mockResolvedValue({ id: "c-big" });
+
+    await runContactSync("sync1");
+
+    expect(prisma.contactAttribute.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          attributeKeyId: "k_bignum",
+          value: "9007199254740993",
+        }),
+      })
+    );
+  });
 });

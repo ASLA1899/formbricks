@@ -19,11 +19,13 @@ describe("BUILTIN_ALIASES", () => {
   test("recognizes common email variants", () => {
     expect(BUILTIN_ALIASES.email).toContain("email");
     expect(BUILTIN_ALIASES.email).toContain("emailaddress");
+    expect(BUILTIN_ALIASES.email).toContain("primaryemail");
   });
 
   test("recognizes common externalId variants", () => {
     expect(BUILTIN_ALIASES.externalId).toContain("memberid");
     expect(BUILTIN_ALIASES.externalId).toContain("membernumber");
+    expect(BUILTIN_ALIASES.externalId).toContain("recordnumber");
   });
 });
 
@@ -56,6 +58,15 @@ describe("matchColumns", () => {
     expect(matches).toHaveLength(1);
     expect(matches[0].kind).toBe("typed");
     if (matches[0].kind === "typed") expect(matches[0].column).toBe("externalId");
+  });
+
+  test("auto-maps RECORDNUMBER and PRIMARY_EMAIL (ASLA conventions)", () => {
+    const matches = matchColumns(["RECORDNUMBER", "PRIMARY_EMAIL"], existingKeys);
+    expect(matches).toHaveLength(2);
+    expect(matches[0].kind).toBe("typed");
+    if (matches[0].kind === "typed") expect(matches[0].column).toBe("externalId");
+    expect(matches[1].kind).toBe("typed");
+    if (matches[1].kind === "typed") expect(matches[1].column).toBe("email");
   });
 
   test("flags unmapped columns as 'unmapped'", () => {
