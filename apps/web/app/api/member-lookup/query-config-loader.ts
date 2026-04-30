@@ -130,6 +130,54 @@ export function listQueryConfigs(): Array<{
 }
 
 /**
+ * Validate query configuration for sync use case (Phase 1a Contact mirror).
+ *
+ * Sync queries have fundamentally different requirements from per-row lookup
+ * queries — they MUST take zero parameters, they MUST return all rows (no
+ * WHERE / LIMIT requirement), and they don't need a `fields` mapping (sync
+ * applies its own ColumnMapping). This validator keeps the security checks
+ * that ARE universal (blocked keywords, SELECT-only, max query length) and
+ * skips the lookup-specific ones.
+ */
+export function validateSyncQueryConfig(queryConfig: QueryConfig): {
+  valid: boolean;
+  errors: string[];
+} {
+  const errors: string[] = [];
+
+  if (!queryConfig.sql) {
+    errors.push("SQL query is required");
+  }
+  if (queryConfig.parameters && queryConfig.parameters.length > 0) {
+    errors.push("Sync queries must take zero parameters (master roster query)");
+  }
+
+  const config = loadQueryConfig();
+  const security = config.security;
+  if (security && queryConfig.sql) {
+    const sqlUpper = queryConfig.sql.toUpperCase();
+
+    if (security.blockedKeywords) {
+      const blocked = security.blockedKeywords.find((keyword) => sqlUpper.includes(keyword));
+      if (blocked) errors.push(`Blocked keyword found: ${blocked}`);
+    }
+    if (security.allowedStatements) {
+      const hasAllowed = security.allowedStatements.some((stmt) => sqlUpper.trim().startsWith(stmt));
+      if (!hasAllowed) {
+        errors.push(`Query must start with one of: ${security.allowedStatements.join(", ")}`);
+      }
+    }
+    if (security.maxQueryLength && queryConfig.sql.length > security.maxQueryLength) {
+      errors.push(`Query exceeds maximum length of ${security.maxQueryLength}`);
+    }
+    // Deliberately NOT enforced for sync: requireWhereClause, requireLimit,
+    // maxRows. Sync needs to read all rows by definition.
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
  * Validate query configuration
  */
 export function validateQueryConfig(queryConfig: QueryConfig): { valid: boolean; errors: string[] } {

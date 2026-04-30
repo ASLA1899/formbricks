@@ -1,5 +1,5 @@
 import snowflake from "snowflake-sdk";
-import { getQueryConfig, validateQueryConfig } from "./query-config-loader";
+import { getQueryConfig, validateQueryConfig, validateSyncQueryConfig } from "./query-config-loader";
 
 /**
  * Configurable Query Service
@@ -153,13 +153,17 @@ export async function executeConfiguredQueryAllRows(
   parameters: Record<string, unknown> = {}
 ): Promise<Record<string, unknown>[]> {
   const queryConfig = getQueryConfig(queryId);
-  const validation = validateQueryConfig(queryConfig);
+  // Use the sync-specific validator (skips lookup-only requirements like
+  // requireWhereClause, requireLimit, maxRows, and the parameter/fields
+  // minimums — sync queries are master roster reads by definition).
+  const validation = validateSyncQueryConfig(queryConfig);
   if (!validation.valid) {
     throw new Error(`Invalid query configuration: ${validation.errors.join(", ")}`);
   }
 
-  // The sync use case typically uses parameter-less master queries; we still
-  // pass parameters through for flexibility.
+  // Sync queries take zero parameters by contract (validateSyncQueryConfig
+  // enforces this), but we keep the binding step for forward compat in case
+  // operators add e.g. an `:asOfDate` parameter for incremental syncs later.
   const missingParams = queryConfig.parameters.filter((param) => !(param in parameters));
   if (missingParams.length > 0) {
     throw new Error(`Missing required parameters: ${missingParams.join(", ")}`);
