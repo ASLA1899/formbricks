@@ -1,0 +1,103 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-30-audience-system-phase-1b.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 1: Audience schema migration + backfill",
+      "status": "pending",
+      "description": "**Goal:** Add Audience table, AudienceType enum, Survey.audienceId, SurveyInvitation.audienceId + demographicsSnapshot. Backfill segment/snowflake source surveys to permanent Audience rows; skip manualList.\n\n```json:metadata\n{\"files\": [\"packages/database/schema.prisma\", \"packages/database/migration/<TS>_add_audience_schema/migration.sql\"], \"verifyCommand\": \"docker compose -p formbricks-phase1a --env-file .env.docker -f docker-compose.local.yml exec postgres psql -U postgres -d formbricks -c '\\\\d \\\"Audience\\\"'\", \"acceptanceCriteria\": [\"Audience model with all spec fields\", \"AudienceType enum: static/segment/surveyDerived/snowflakeQuery\", \"Survey.audienceId added with FK\", \"SurveyInvitation.audienceId + demographicsSnapshot added\", \"Backfill creates one Audience per segment/snowflake survey\", \"manualList surveys skipped\", \"Idempotent on re-run\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 2: Audience Zod types",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** Define TAudience flat schema + ZAudienceCreate discriminated union + parseAudience helper in packages/types/audiences.ts.\n\n```json:metadata\n{\"files\": [\"packages/types/audiences.ts\"], \"verifyCommand\": \"cd /Users/gcohen/dev/formbricks-phase1a && pnpm exec tsc --noEmit -p packages/types/tsconfig.json\", \"acceptanceCriteria\": [\"ZAudienceType matches Prisma enum\", \"ZSurveyDerivedConfig + ZSnowflakeQueryConfig schemas\", \"ZAudience flat row schema\", \"ZAudienceCreate discriminated union by type\", \"ZAudienceUpdate partial schema\", \"parseAudience helper for read-side validation\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 3: Audience CRUD lib",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Single-source-of-truth CRUD service for Audience rows. All callers go through this module.\n\n```json:metadata\n{\"files\": [\"apps/web/modules/audiences/lib/audiences.ts\", \"apps/web/modules/audiences/lib/audiences.test.ts\"], \"verifyCommand\": \"cd /Users/gcohen/dev/formbricks-phase1a && pnpm --filter @formbricks/web vitest run modules/audiences/lib/audiences.test.ts\", \"acceptanceCriteria\": [\"getAudience / getAudiencesForEnvironment / createAudience / updateAudience / deleteAudience / promoteTransientAudience\", \"All writes validated via ZAudienceCreate / ZAudienceUpdate\", \"Default excludes transient unless includeTransient=true\", \"Tests cover happy paths + Zod rejection on per-type config mismatch\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 4: Audience resolver",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** Unified resolver with switch on AudienceType. Returns TAudienceMember[] with per-member demographicsSnapshot.\n\n```json:metadata\n{\"files\": [\"apps/web/modules/audiences/lib/resolver.ts\", \"apps/web/modules/audiences/lib/resolver.test.ts\"], \"verifyCommand\": \"cd /Users/gcohen/dev/formbricks-phase1a && pnpm --filter @formbricks/web vitest run modules/audiences/lib/resolver.test.ts\", \"acceptanceCriteria\": [\"Static: contact ids -> Contacts via prisma.findMany; demographics = attribute map\", \"Segment: delegates to getContactsInSegment; demographics = attribute map\", \"surveyDerived: SurveyInvitation rows filtered by status; demographics = prior snapshot\", \"snowflakeQuery: executeConfiguredQueryAllRows; demographics = raw row\", \"Deduplicates by lowercased email\", \"Tests cover all four types\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 5: Demographics snapshot wiring",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** upsertInvitation accepts audienceId + member.demographicsSnapshot and writes both to SurveyInvitation. First-write-wins for snapshot.\n\n```json:metadata\n{\"files\": [\"apps/web/modules/survey/invitations/lib/invitations.ts\", \"apps/web/modules/survey/invitations/lib/invitations.test.ts\"], \"verifyCommand\": \"cd /Users/gcohen/dev/formbricks-phase1a && pnpm --filter @formbricks/web vitest run modules/survey/invitations/lib/invitations.test.ts\", \"acceptanceCriteria\": [\"audienceId column written\", \"demographicsSnapshot written on fresh create\", \"demographicsSnapshot updated on un-sent existing\", \"demographicsSnapshot NOT overwritten on already-sent re-run\", \"Tests cover all three branches\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 6: Audiences list page + nav",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** Add Audiences tab to Contacts secondary nav. Build /environments/[envId]/audiences list with member counts (60s cache) and transient toggle.\n\n```json:metadata\n{\"files\": [\"apps/web/modules/ee/contacts/components/contacts-secondary-navigation.tsx\", \"apps/web/app/(app)/environments/[environmentId]/audiences/page.tsx\", \"apps/web/modules/audiences/components/audiences-list-table.tsx\", \"apps/web/modules/audiences/lib/member-count.ts\"], \"verifyCommand\": \"Open http://localhost:3001/environments/<env>/audiences and inspect\", \"acceptanceCriteria\": [\"4-tab nav with Audiences entry\", \"Lists non-transient audiences ordered by updatedAt DESC\", \"Each row: name, type icon, member count, last updated\", \"Show-transient toggle via URL param\", \"New audience CTA opens create modal\", \"Empty state when no audiences\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 7: Audience detail page",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** Per-audience detail at /environments/[envId]/audiences/[audienceId]. Shows config, member preview (first 50), surveys-using-this-audience.\n\n```json:metadata\n{\"files\": [\"apps/web/app/(app)/environments/[environmentId]/audiences/[audienceId]/page.tsx\", \"apps/web/modules/audiences/components/audience-detail-card.tsx\"], \"verifyCommand\": \"Click into an audience from the list and inspect\", \"acceptanceCriteria\": [\"Renders name, description, type, config summary\", \"Member preview shows first 50 resolved\", \"Surveys-using list with Survey.audienceId FK\", \"Promote-to-permanent button only when transient=true\", \"Delete button with confirm modal\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 8: Create audience — type picker + static + segment forms",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** Create-audience modal with 4-card type picker; static and segment forms wired to createAudienceAction.\n\n```json:metadata\n{\"files\": [\"apps/web/modules/audiences/components/create-audience-modal.tsx\", \"apps/web/modules/audiences/components/forms/static-form.tsx\", \"apps/web/modules/audiences/components/forms/segment-form.tsx\", \"apps/web/app/(app)/environments/[environmentId]/audiences/actions.ts\"], \"verifyCommand\": \"Open New audience modal -> pick Static -> create with 1 contact\", \"acceptanceCriteria\": [\"Type picker with 4 cards\", \"Static form: name + description + Contact multi-select\", \"Segment form: name + description + segment dropdown\", \"surveyDerived + snowflakeQuery cards stub for Task 9\", \"Server action validates via ZAudienceCreate\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 9: Create audience — surveyDerived + snowflakeQuery forms",
+      "status": "pending",
+      "blockedBy": [7],
+      "description": "**Goal:** Replace stubs from Task 8 with working forms for the remaining two audience types.\n\n```json:metadata\n{\"files\": [\"apps/web/modules/audiences/components/forms/survey-derived-form.tsx\", \"apps/web/modules/audiences/components/forms/snowflake-query-form.tsx\"], \"verifyCommand\": \"Create one of each type via the modal\", \"acceptanceCriteria\": [\"surveyDerived: source survey dropdown + status filter (all/responded/notResponded)\", \"snowflakeQuery: query dropdown + email column + name column\", \"Both submit via createAudienceAction\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 10: Edit / delete / promote-transient server actions",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** Add the remaining server actions referenced by audience-detail-card.tsx.\n\n```json:metadata\n{\"files\": [\"apps/web/app/(app)/environments/[environmentId]/audiences/actions.ts\"], \"verifyCommand\": \"From detail page: rename, promote-transient, delete each work end-to-end\", \"acceptanceCriteria\": [\"renameAudienceAction\", \"updateDescriptionAction\", \"promoteTransientAction\", \"deleteAudienceAction\", \"All check session + environment access\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 11: Recipients card audience picker rewrite",
+      "status": "pending",
+      "blockedBy": [3, 8],
+      "description": "**Goal:** Replace the 3-radio source picker on recipients-card with single AudiencePicker dropdown. Inline 'Create new' opens modal with transient=true preset.\n\n```json:metadata\n{\"files\": [\"apps/web/modules/audiences/components/audience-picker.tsx\", \"apps/web/modules/survey/invitations/components/recipients-card.tsx\", \"apps/web/app/api/v1/environments/[environmentId]/audiences/route.ts\", \"apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/edit/audience-actions.ts\", \"packages/types/surveys/types.ts\"], \"verifyCommand\": \"Open survey editor; only one picker visible; selection persists; inline-create works\", \"acceptanceCriteria\": [\"Single dropdown over all audiences in env\", \"Include-transient toggle\", \"Create new opens modal with defaultTransient=true\", \"Survey.audienceId persisted via setSurveyAudienceAction\", \"Old radios + sub-blocks removed\", \"ZSurveyInvitationConfig.audience optional\"]}\n```"
+    },
+    {
+      "id": 11,
+      "subject": "Task 12: Cut over invitation pipeline to use Survey.audienceId",
+      "status": "pending",
+      "blockedBy": [3, 10],
+      "description": "**Goal:** enqueueInvitationsForSurvey reads Survey.audienceId; deletes old per-source helpers in survey/invitations/lib/audience.ts.\n\n```json:metadata\n{\"files\": [\"apps/web/modules/survey/invitations/lib/invitations.ts\", \"apps/web/modules/survey/invitations/lib/audience.ts\"], \"verifyCommand\": \"cd /Users/gcohen/dev/formbricks-phase1a && pnpm --filter @formbricks/web vitest run modules/survey/invitations\", \"acceptanceCriteria\": [\"enqueueInvitationsForSurvey reads Survey.audienceId\", \"Resolves via getAudience + resolveAudience\", \"Old audience.ts deleted\", \"All TAudienceMember imports updated to new path\", \"Tests pass\"]}\n```"
+    },
+    {
+      "id": 12,
+      "subject": "Task 13: Audience memberships section on Contact detail",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** New section on Contact detail page listing audiences this contact has touched (static-list match OR SurveyInvitation.audienceId match).\n\n```json:metadata\n{\"files\": [\"apps/web/modules/audiences/lib/memberships.ts\", \"apps/web/modules/audiences/components/contact-audience-memberships.tsx\", \"apps/web/modules/ee/contacts/[contactId]/page.tsx\"], \"verifyCommand\": \"Visit a contact in a static audience; section appears with the audience listed\", \"acceptanceCriteria\": [\"getAudienceMembershipsForContact returns deduplicated audiences\", \"Section lists each with type icon + via-source label\", \"Section hidden when zero memberships\"]}\n```"
+    },
+    {
+      "id": 13,
+      "subject": "Task 14: Final verification + cleanup",
+      "status": "pending",
+      "blockedBy": [4, 5, 6, 9, 11, 12],
+      "description": "**Goal:** Run full test suite + tsc, smoke 8 spec criteria, scan for stubs/TODOs, update runbook.\n\n```json:metadata\n{\"files\": [\"PHASE_1A_CONTACT_MIRROR_RUNBOOK.md\"], \"verifyCommand\": \"cd /Users/gcohen/dev/formbricks-phase1a && pnpm --filter @formbricks/web vitest run && pnpm --filter @formbricks/web exec tsc --noEmit\", \"acceptanceCriteria\": [\"All tests pass\", \"tsc --noEmit clean\", \"All 8 Phase 1b smoke criteria pass\", \"No TODO/FIXME/STUB in modules/audiences/\", \"Old audience.ts deleted\", \"No new readers of invitationConfig.audience\", \"Runbook updated with Phase 1b section\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-30T00:00:00Z"
+}
