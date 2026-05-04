@@ -997,6 +997,9 @@ export const ZSurvey = z
     ),
     delay: z.number(),
     autoComplete: z.number().min(1, { message: "Response limit must be greater than 0" }).nullable(),
+    runOnDate: z.coerce.date().nullable(),
+    closeOnDate: z.coerce.date().nullable(),
+    scheduleTimezone: z.string().nullable(),
     projectOverwrites: ZSurveyProjectOverwrites.nullable(),
     styling: ZSurveyStyling.nullable(),
     showLanguageSwitch: z.boolean().nullable(),
@@ -3927,6 +3930,43 @@ const validateBlockLogic = (
 
   return [...logicIssues.flat(), ...(logicFallbackIssue ?? [])];
 };
+
+// ---------------------------------------------------------------------------
+// Survey schedule window helpers
+// ---------------------------------------------------------------------------
+
+export const isIanaTimezone = (tz: string): boolean => {
+  try {
+    return (Intl as any).supportedValuesOf?.("timeZone")?.includes(tz) ?? false;
+  } catch {
+    /* fall through */
+  }
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const ZScheduleWindow = z
+  .object({
+    runOnDate: z.coerce.date().nullable(),
+    closeOnDate: z.coerce.date().nullable(),
+    scheduleTimezone: z.string().nullable(),
+  })
+  .refine(
+    (s) => !s.runOnDate || !s.closeOnDate || s.closeOnDate.getTime() > s.runOnDate.getTime(),
+    { message: "closeOnDate must be after runOnDate", path: ["closeOnDate"] }
+  )
+  .refine(
+    (s) => !s.scheduleTimezone || isIanaTimezone(s.scheduleTimezone),
+    { message: "scheduleTimezone must be a valid IANA zone", path: ["scheduleTimezone"] }
+  )
+  .refine(
+    (s) => s.runOnDate || s.closeOnDate ? !!s.scheduleTimezone : true,
+    { message: "scheduleTimezone is required when runOnDate or closeOnDate is set", path: ["scheduleTimezone"] }
+  );
 
 // ZSurvey is a refinement, so to extend it to ZSurveyUpdateInput, we need to transform the innerType and then apply the same refinements.
 export const ZSurveyUpdateInput = ZSurvey.innerType()

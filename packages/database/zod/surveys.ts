@@ -131,6 +131,16 @@ const ZSurveyBase = z.object({
   autoComplete: z.number().nullable().openapi({
     description: "Auto complete time in seconds",
   }),
+  runOnDate: z.coerce.date().nullable().openapi({
+    description: "UTC instant when the survey should auto-open. Null = no scheduled open.",
+  }),
+  closeOnDate: z.coerce.date().nullable().openapi({
+    description: "UTC instant when the survey should auto-close. Null = no scheduled close.",
+  }),
+  scheduleTimezone: z.string().nullable().openapi({
+    description:
+      "IANA timezone (e.g. 'America/New_York') used to render the wall-clock back to the editor. Null when both timestamps are null.",
+  }),
   delay: z.number().openapi({
     description: "Delay before showing survey",
   }),

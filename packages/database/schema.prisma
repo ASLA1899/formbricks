@@ -369,6 +369,9 @@ model Survey {
   displays            Display[]
   autoClose           Int?
   autoComplete        Int?
+  runOnDate           DateTime?
+  closeOnDate         DateTime?
+  scheduleTimezone    String?
   delay               Int                     @default(0)
   /// [SurveyClosedMessage]
   surveyClosedMessage Json?
@@ -406,6 +409,8 @@ model Survey {
 
   @@index([environmentId, updatedAt])
   @@index([segmentId])
+  @@index([runOnDate])
+  @@index([closeOnDate])
 }
 
 /// Per-user access to a private survey. Bypassed for users with
