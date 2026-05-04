@@ -3,7 +3,7 @@
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { CheckIcon } from "lucide-react";
-import { KeyboardEventHandler, useEffect, useState } from "react";
+import { KeyboardEventHandler, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { TSurvey } from "@formbricks/types/surveys/types";
@@ -13,6 +13,112 @@ import { Alert, AlertTitle } from "@/modules/ui/components/alert";
 import { Input } from "@/modules/ui/components/input";
 import { Label } from "@/modules/ui/components/label";
 import { Slider } from "@/modules/ui/components/slider";
+
+function ScheduleRow({
+  mode,
+  survey,
+  setLocalSurvey,
+  tz,
+}: {
+  mode: "open" | "close";
+  survey: TSurvey;
+  setLocalSurvey: (s: TSurvey) => void;
+  tz: string;
+}) {
+  const { t } = useTranslation();
+  const fieldName = mode === "open" ? "runOnDate" : "closeOnDate";
+  const value: Date | null = (survey as any)[fieldName];
+  const enabled = value !== null;
+
+  const dateFmt = useMemo(
+    () => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }),
+    [tz]
+  );
+  const timeFmt = useMemo(
+    () => new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }),
+    [tz]
+  );
+  const previewFmt = useMemo(
+    () =>
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: tz,
+        dateStyle: "full",
+        timeStyle: "short",
+      }),
+    [tz]
+  );
+
+  // value -> wall-clock parts
+  const dateStr = value ? dateFmt.format(value) : ""; // YYYY-MM-DD
+  const timeStr = value ? timeFmt.format(value) : ""; // HH:MM
+
+  // wall-clock + tz -> UTC instant (round-trip via toLocaleString)
+  const updateFromWallClock = (date: string, time: string) => {
+    if (!date || !time) return;
+    const naive = new Date(`${date}T${time}:00`);
+    const tzOffsetMs = naive.getTime() - new Date(naive.toLocaleString("en-US", { timeZone: tz })).getTime();
+    const utc = new Date(naive.getTime() + tzOffsetMs);
+    setLocalSurvey({ ...survey, [fieldName]: utc } as TSurvey);
+  };
+
+  const checkboxId = `schedule-${mode}-enabled`;
+  const labelText = t(
+    mode === "open"
+      ? "environments.surveys.edit.schedule_open_label"
+      : "environments.surveys.edit.schedule_close_label"
+  );
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <input
+          id={checkboxId}
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) =>
+            setLocalSurvey({ ...survey, [fieldName]: e.target.checked ? new Date() : null } as TSurvey)
+          }
+        />
+        <label htmlFor={checkboxId} className="w-32 text-sm font-semibold text-slate-700">
+          {labelText}
+        </label>
+        <Input
+          type="date"
+          data-testid={`schedule-${mode}-date`}
+          value={dateStr}
+          disabled={!enabled}
+          onChange={(e) => updateFromWallClock(e.target.value, timeStr || "09:00")}
+          className="w-36"
+        />
+        <Input
+          type="time"
+          data-testid={`schedule-${mode}-time`}
+          value={timeStr}
+          disabled={!enabled}
+          onChange={(e) => updateFromWallClock(dateStr, e.target.value)}
+          className="w-24"
+        />
+      </div>
+      {enabled && value && (
+        <>
+          <p className="pl-32 text-xs text-slate-500">
+            {t(
+              mode === "open"
+                ? "environments.surveys.edit.schedule_preview_open"
+                : "environments.surveys.edit.schedule_preview_close",
+              { date: previewFmt.format(value) }
+            )}
+          </p>
+          {value.getTime() < Date.now() && (
+            <p className="pl-32 text-xs text-yellow-700">
+              {t("environments.surveys.edit.schedule_time_in_past")}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 interface ResponseOptionsCardProps {
   localSurvey: TSurvey;
@@ -179,6 +285,30 @@ export const ResponseOptionsCard = ({
   };
   const [parent] = useAutoAnimate();
 
+  const browserTz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+  const allTzs = useMemo<string[]>(() => {
+    try {
+      return (Intl as any).supportedValuesOf?.("timeZone") ?? [browserTz];
+    } catch {
+      return [browserTz];
+    }
+  }, [browserTz]);
+
+  const scheduleEnabled = !!(
+    localSurvey.runOnDate ||
+    localSurvey.closeOnDate ||
+    localSurvey.scheduleTimezone
+  );
+
+  const toggleSchedule = (next: boolean) => {
+    setLocalSurvey({
+      ...localSurvey,
+      runOnDate: null,
+      closeOnDate: null,
+      scheduleTimezone: next ? browserTz : null,
+    });
+  };
+
   const handleRecaptchaToggle = () => {
     if (!isSpamProtectionAllowed) return;
     if (recaptchaToggle) {
@@ -228,6 +358,58 @@ export const ResponseOptionsCard = ({
       <Collapsible.CollapsibleContent className="flex flex-col" ref={parent}>
         <hr className="py-1 text-slate-600" />
         <div className="p-3">
+          {/* Schedule survey window */}
+          <AdvancedOptionToggle
+            htmlId="scheduleSurveyWindow"
+            isChecked={scheduleEnabled}
+            onToggle={toggleSchedule}
+            title={t("environments.surveys.edit.schedule_survey_window_title")}
+            description={t("environments.surveys.edit.schedule_survey_window_description")}
+            childBorder={true}>
+            <div className="flex flex-col gap-3 bg-slate-50 p-4">
+              {/* Timezone dropdown */}
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="scheduleTimezoneSelect"
+                  className="w-32 text-sm font-semibold text-slate-700">
+                  {t("environments.surveys.edit.schedule_timezone_label")}
+                </label>
+                <select
+                  id="scheduleTimezoneSelect"
+                  value={localSurvey.scheduleTimezone ?? browserTz}
+                  onChange={(e) => setLocalSurvey({ ...localSurvey, scheduleTimezone: e.target.value })}
+                  className="rounded border border-slate-300 bg-white px-2 py-1 text-sm">
+                  {allTzs.map((tz) => (
+                    <option key={tz} value={tz}>
+                      {tz}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <ScheduleRow
+                mode="open"
+                survey={localSurvey}
+                setLocalSurvey={(s) => setLocalSurvey(s)}
+                tz={localSurvey.scheduleTimezone ?? browserTz}
+              />
+              <ScheduleRow
+                mode="close"
+                survey={localSurvey}
+                setLocalSurvey={(s) => setLocalSurvey(s)}
+                tz={localSurvey.scheduleTimezone ?? browserTz}
+              />
+
+              {localSurvey.runOnDate &&
+                localSurvey.closeOnDate &&
+                localSurvey.closeOnDate.getTime() <= localSurvey.runOnDate.getTime() && (
+                  <p className="text-sm text-red-600">
+                    {t("environments.surveys.edit.schedule_close_must_be_after_open")}
+                  </p>
+                )}
+            </div>
+          </AdvancedOptionToggle>
+
           {/* Close Survey on Limit */}
           <AdvancedOptionToggle
             htmlId="closeOnNumberOfResponse"
