@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
 import { ResourceNotFoundError } from "@formbricks/types/errors";
 import { ZSurveyInvitationConfig } from "@formbricks/types/surveys/types";
@@ -83,6 +84,15 @@ export const sendInvitationsAction = authenticatedActionClient
     const survey = await getSurvey(parsedInput.surveyId);
     if (!survey) throw new ResourceNotFoundError("Survey", parsedInput.surveyId);
 
+    // Persist the config used for this send back to the survey, so the
+    // editor sees what we actually sent next time it loads. Bypasses
+    // updateSurvey's full-shape Zod validation by writing only this field
+    // — SurveyInvitationConfig is its own validated input above.
+    await prisma.survey.update({
+      where: { id: survey.id },
+      data: { invitationConfig: parsedInput.config },
+    });
+
     // Enqueue-only: persist SurveyInvitation rows with sentAt=null and return
     // immediately. Actual SMTP sends are throttled by the drainer to respect
     // provider rate limits (Resend = 2-10 req/s) and to avoid blocking the user
@@ -132,6 +142,12 @@ export const sendRemindersAction = authenticatedActionClient
 
     const survey = await getSurvey(parsedInput.surveyId);
     if (!survey) throw new ResourceNotFoundError("Survey", parsedInput.surveyId);
+
+    // Same persist-on-send as sendInvitationsAction.
+    await prisma.survey.update({
+      where: { id: survey.id },
+      data: { invitationConfig: parsedInput.config },
+    });
 
     const org = await getOrganizationByEnvironmentId(survey.environmentId);
     const organizationName = org?.name ?? "";
