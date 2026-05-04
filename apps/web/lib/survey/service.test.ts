@@ -1020,3 +1020,63 @@ describe("updateSurveyDraftAction", () => {
     });
   });
 });
+
+describe("updateSurveyInternal — schedule window", () => {
+  beforeEach(() => {
+    vi.mocked(getActionClasses).mockResolvedValue([mockActionClass] as TActionClass[]);
+    vi.mocked(getOrganizationByEnvironmentId).mockResolvedValue(mockOrganizationOutput);
+    prisma.survey.findUnique.mockResolvedValue(mockSurveyOutput);
+    prisma.survey.update.mockResolvedValue(mockSurveyOutput);
+  });
+
+  test("rejects closeOnDate <= runOnDate", async () => {
+    await expect(
+      updateSurveyInternal({
+        ...updateSurveyInput,
+        runOnDate: new Date("2026-06-01T12:00:00Z"),
+        closeOnDate: new Date("2026-06-01T11:00:00Z"),
+        scheduleTimezone: "America/New_York",
+      })
+    ).rejects.toThrow(InvalidInputError);
+  });
+
+  test("rejects invalid scheduleTimezone", async () => {
+    await expect(
+      updateSurveyInternal({
+        ...updateSurveyInput,
+        runOnDate: new Date("2026-06-01T12:00:00Z"),
+        closeOnDate: null,
+        scheduleTimezone: "Mars/Olympus",
+      })
+    ).rejects.toThrow(InvalidInputError);
+  });
+
+  test("auto-clears scheduleTimezone when both timestamps are null", async () => {
+    const result = await updateSurveyInternal({
+      ...updateSurveyInput,
+      runOnDate: null,
+      closeOnDate: null,
+      scheduleTimezone: "America/New_York", // caller mistakenly passed
+    });
+    expect(result.scheduleTimezone).toBeNull();
+  });
+
+  test("accepts a valid open+close window", async () => {
+    const surveyWithWindow = {
+      ...updateSurveyInput,
+      runOnDate: new Date("2026-06-01T13:00:00Z"),
+      closeOnDate: new Date("2026-06-08T13:00:00Z"),
+      scheduleTimezone: "America/New_York",
+    };
+    prisma.survey.update.mockResolvedValueOnce({
+      ...mockSurveyOutput,
+      runOnDate: new Date("2026-06-01T13:00:00Z"),
+      closeOnDate: new Date("2026-06-08T13:00:00Z"),
+      scheduleTimezone: "America/New_York",
+    });
+    const result = await updateSurveyInternal(surveyWithWindow);
+    expect(result.runOnDate).toEqual(new Date("2026-06-01T13:00:00Z"));
+    expect(result.closeOnDate).toEqual(new Date("2026-06-08T13:00:00Z"));
+    expect(result.scheduleTimezone).toBe("America/New_York");
+  });
+});

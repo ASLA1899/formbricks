@@ -225,6 +225,9 @@ const baseSurveyProperties = {
   isVerifyEmailEnabled: false,
   isSingleResponsePerEmailEnabled: false,
   attributeFilters: [],
+  runOnDate: null,
+  closeOnDate: null,
+  scheduleTimezone: null,
   ...commonMockProperties,
 };
 

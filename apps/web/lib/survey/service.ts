@@ -6,7 +6,13 @@ import { logger } from "@formbricks/logger";
 import { ZId, ZOptionalNumber } from "@formbricks/types/common";
 import { DatabaseError, InvalidInputError, ResourceNotFoundError } from "@formbricks/types/errors";
 import { TSegment, ZSegmentFilters } from "@formbricks/types/segment";
-import { TSurvey, TSurveyCreateInput, ZSurvey, ZSurveyCreateInput } from "@formbricks/types/surveys/types";
+import {
+  TSurvey,
+  TSurveyCreateInput,
+  ZScheduleWindow,
+  ZSurvey,
+  ZSurveyCreateInput,
+} from "@formbricks/types/surveys/types";
 import {
   getOrganizationByEnvironmentId,
   subscribeOrganizationMembersToSurveyResponses,
@@ -309,6 +315,23 @@ export const updateSurveyInternal = async (
 
     const { triggers, environmentId, segment, questions, languages, type, followUps, ...surveyData } =
       updatedSurvey;
+
+    // Auto-clear scheduleTimezone when no dates are set
+    if (surveyData.runOnDate === null && surveyData.closeOnDate === null) {
+      surveyData.scheduleTimezone = null;
+    }
+
+    // Validate schedule window cross-field rules
+    if (!skipValidation) {
+      const scheduleResult = ZScheduleWindow.safeParse({
+        runOnDate: surveyData.runOnDate,
+        closeOnDate: surveyData.closeOnDate,
+        scheduleTimezone: surveyData.scheduleTimezone,
+      });
+      if (!scheduleResult.success) {
+        throw new InvalidInputError(scheduleResult.error.errors[0]?.message ?? "Invalid schedule window");
+      }
+    }
 
     if (!skipValidation) {
       checkForInvalidImagesInQuestions(questions);
