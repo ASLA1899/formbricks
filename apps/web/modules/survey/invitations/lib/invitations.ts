@@ -315,6 +315,8 @@ export async function runPendingInvitationSends(args: {
           subject,
           body,
           surveyLink,
+          buttonLabel: config.emailTemplates.invitation.buttonLabel,
+          fromName: config.fromName,
         });
         sent++;
       } catch (error) {

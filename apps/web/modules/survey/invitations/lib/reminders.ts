@@ -80,6 +80,8 @@ export async function sendManualReminders(args: {
         subject,
         body,
         surveyLink,
+        buttonLabel: config.emailTemplates.reminder.buttonLabel,
+        fromName: config.fromName,
       });
 
       await prisma.surveyInvitation.update({

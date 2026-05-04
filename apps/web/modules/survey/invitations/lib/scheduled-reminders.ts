@@ -123,6 +123,8 @@ export async function runScheduledReminders(): Promise<{
             subject,
             body,
             surveyLink,
+            buttonLabel: config.emailTemplates.reminder.buttonLabel,
+            fromName: config.fromName,
           });
           sent++;
         } catch (error) {

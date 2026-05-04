@@ -58,6 +58,7 @@ interface SendEmailDataProps {
   subject: string;
   text?: string;
   html: string;
+  fromName?: string;
 }
 
 export const sendEmail = async (emailData: SendEmailDataProps): Promise<boolean> => {
@@ -86,10 +87,13 @@ export const sendEmail = async (emailData: SendEmailDataProps): Promise<boolean>
       debug: DEBUG,
     } as SMTPTransport.Options);
 
+    const { fromName, ...rest } = emailData;
+    const fromAddress = MAIL_FROM ?? "noreply@formbricks.com";
+    const fromDisplayName = (fromName?.trim() || MAIL_FROM_NAME) ?? "Formbricks";
     const emailDefaults = {
-      from: `${MAIL_FROM_NAME ?? "Formbricks"} <${MAIL_FROM ?? "noreply@formbricks.com"}>`,
+      from: `${fromDisplayName} <${fromAddress}>`,
     };
-    await transporter.sendMail({ ...emailDefaults, ...emailData });
+    await transporter.sendMail({ ...emailDefaults, ...rest });
 
     return true;
   } catch (error) {
@@ -305,6 +309,8 @@ export const sendSurveyInvitationEmail = async (data: {
   body: string;
   surveyLink: string;
   logoUrl?: string;
+  buttonLabel?: string;
+  fromName?: string;
 }): Promise<boolean> => {
   const t = await getTranslate();
   const html = await renderInvitationEmail({
@@ -312,6 +318,7 @@ export const sendSurveyInvitationEmail = async (data: {
     body: data.body,
     surveyLink: data.surveyLink,
     logoUrl: data.logoUrl,
+    buttonLabel: data.buttonLabel?.trim() || undefined,
     t,
     ...legalProps,
   });
@@ -319,6 +326,7 @@ export const sendSurveyInvitationEmail = async (data: {
     to: data.to,
     subject: data.subject,
     html,
+    fromName: data.fromName,
   });
 };
 

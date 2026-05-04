@@ -373,6 +373,7 @@ export type TReminderSchedule = z.infer<typeof ZReminderSchedule>;
 export const ZInvitationEmailTemplate = z.object({
   subject: z.string().min(1).max(500),
   body: z.string(),
+  buttonLabel: z.string().max(100).optional(),
 });
 
 export const ZInvitationEmailTemplates = z.object({
@@ -386,6 +387,7 @@ export const ZSurveyInvitationConfig = z.object({
   audience: ZInvitationAudience,
   reminderSchedule: ZReminderSchedule,
   emailTemplates: ZInvitationEmailTemplates,
+  fromName: z.string().max(100).optional(),
 });
 
 export type TSurveyInvitationConfig = z.infer<typeof ZSurveyInvitationConfig>;
