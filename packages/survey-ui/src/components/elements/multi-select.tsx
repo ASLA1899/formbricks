@@ -11,6 +11,7 @@ import {
 import { ElementError } from "@/components/general/element-error";
 import { ElementHeader } from "@/components/general/element-header";
 import { Input } from "@/components/general/input";
+import { renderInlineMarkdown } from "@/lib/inline-markdown";
 import { cn } from "@/lib/utils";
 
 /**
@@ -173,7 +174,7 @@ function DropdownVariant({
                     handleOptionToggle(option.id);
                   }}
                   disabled={disabled}>
-                  <span className={optionLabelClassName}>{option.label}</span>
+                  <span className={optionLabelClassName}>{renderInlineMarkdown(option.label)}</span>
                 </DropdownMenuCheckboxItem>
               );
             })}
@@ -189,7 +190,7 @@ function DropdownVariant({
                 }
               }}
               disabled={disabled}>
-              <span className={optionLabelClassName}>{otherOptionLabel}</span>
+              <span className={optionLabelClassName}>{renderInlineMarkdown(otherOptionLabel)}</span>
             </DropdownMenuCheckboxItem>
           ) : null}
           {options
@@ -207,7 +208,7 @@ function DropdownVariant({
                     handleOptionToggle(option.id);
                   }}
                   disabled={disabled}>
-                  <span className={optionLabelClassName}>{option.label}</span>
+                  <span className={optionLabelClassName}>{renderInlineMarkdown(option.label)}</span>
                 </DropdownMenuCheckboxItem>
               );
             })}
@@ -312,7 +313,7 @@ function ListVariant({
                   <span
                     className={cn("mr-3 ml-3", optionLabelClassName)}
                     style={{ fontSize: "var(--fb-option-font-size)" }}>
-                    {option.label}
+                    {renderInlineMarkdown(option.label)}
                   </span>
                 </span>
               </label>
@@ -344,7 +345,7 @@ function ListVariant({
                 <span
                   className={cn("mr-3 ml-3 grow", optionLabelClassName)}
                   style={{ fontSize: "var(--fb-option-font-size)" }}>
-                  {otherOptionLabel}
+                  {renderInlineMarkdown(otherOptionLabel)}
                 </span>
               </span>
               {isOtherSelected ? (
@@ -393,7 +394,7 @@ function ListVariant({
                   <span
                     className={cn("mr-3 ml-3", optionLabelClassName)}
                     style={{ fontSize: "var(--fb-option-font-size)" }}>
-                    {option.label}
+                    {renderInlineMarkdown(option.label)}
                   </span>
                 </span>
               </label>

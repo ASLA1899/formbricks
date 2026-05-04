@@ -12,6 +12,7 @@ import { ElementError } from "@/components/general/element-error";
 import { ElementHeader } from "@/components/general/element-header";
 import { Input } from "@/components/general/input";
 import { RadioGroup, RadioGroupItem } from "@/components/general/radio-group";
+import { renderInlineMarkdown } from "@/lib/inline-markdown";
 import { cn } from "@/lib/utils";
 
 /**
@@ -162,7 +163,9 @@ function SingleSelect({
                   className="rounded-input w-full justify-between"
                   aria-invalid={Boolean(errorMessage)}
                   aria-label={headline}>
-                  <span className={cn("truncate", !selectedOption && !isOtherSelected && "opacity-50")}>{displayText}</span>
+                  <span className={cn("truncate", !selectedOption && !isOtherSelected && "opacity-50")}>
+                    {displayText}
+                  </span>
                   <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </DropdownMenuTrigger>
@@ -181,7 +184,7 @@ function SingleSelect({
                           value={option.id}
                           id={optionId}
                           disabled={disabled}>
-                          <span className={optionLabelClassName}>{option.label}</span>
+                          <span className={optionLabelClassName}>{renderInlineMarkdown(option.label)}</span>
                         </DropdownMenuRadioItem>
                       );
                     })}
@@ -190,7 +193,9 @@ function SingleSelect({
                       value={otherOptionId}
                       id={`${inputId}-${otherOptionId}`}
                       disabled={disabled}>
-                      <span className={optionLabelClassName}>{otherValue || otherOptionLabel}</span>
+                      <span className={optionLabelClassName}>
+                        {otherValue || renderInlineMarkdown(otherOptionLabel)}
+                      </span>
                     </DropdownMenuRadioItem>
                   ) : null}
                   {options
@@ -204,7 +209,7 @@ function SingleSelect({
                           value={option.id}
                           id={optionId}
                           disabled={disabled}>
-                          <span className={optionLabelClassName}>{option.label}</span>
+                          <span className={optionLabelClassName}>{renderInlineMarkdown(option.label)}</span>
                         </DropdownMenuRadioItem>
                       );
                     })}
@@ -257,7 +262,7 @@ function SingleSelect({
                         <span
                           className={cn("mr-3 ml-3 grow", optionLabelClassName)}
                           style={{ fontSize: "var(--fb-option-font-size)" }}>
-                          {option.label}
+                          {renderInlineMarkdown(option.label)}
                         </span>
                       </span>
                     </label>
@@ -277,7 +282,7 @@ function SingleSelect({
                     <span
                       className={cn("mr-3 ml-3 grow", optionLabelClassName)}
                       style={{ fontSize: "var(--fb-option-font-size)" }}>
-                      {otherOptionLabel}
+                      {renderInlineMarkdown(otherOptionLabel)}
                     </span>
                   </span>
                   {isOtherSelected ? (
@@ -316,7 +321,7 @@ function SingleSelect({
                         <span
                           className={cn("mr-3 ml-3 grow", optionLabelClassName)}
                           style={{ fontSize: "var(--fb-option-font-size)" }}>
-                          {option.label}
+                          {renderInlineMarkdown(option.label)}
                         </span>
                       </span>
                     </label>
