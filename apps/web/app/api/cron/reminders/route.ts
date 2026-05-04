@@ -3,6 +3,7 @@ import { logger } from "@formbricks/logger";
 import { CRON_SECRET } from "@/lib/constants";
 import { runPendingInvitationSends } from "@/modules/survey/invitations/lib/invitations";
 import { runScheduledReminders } from "@/modules/survey/invitations/lib/scheduled-reminders";
+import { runDueSchedules } from "@/modules/survey/schedule/lib/run-due-schedules";
 
 // POST /api/cron/reminders
 // Auth: header `x-api-key: $CRON_SECRET` (same convention as /api/(internal)/pipeline).
@@ -20,7 +21,14 @@ export const POST = async (request: Request) => {
   try {
     const invitations = await runPendingInvitationSends({});
     const reminders = await runScheduledReminders();
-    return Response.json({ ok: true, invitations, reminders });
+    let schedules: { opened: number; closed: number } | { error: string } = { opened: 0, closed: 0 };
+    try {
+      schedules = await runDueSchedules();
+    } catch (error) {
+      logger.error({ error, url: request.url }, "schedule drain failed");
+      schedules = { error: "schedule_drain_failed" };
+    }
+    return Response.json({ ok: true, invitations, reminders, schedules });
   } catch (error) {
     logger.error({ error, url: request.url }, "cron drain failed");
     return Response.json({ ok: false, error: "internal_server_error" }, { status: 500 });
