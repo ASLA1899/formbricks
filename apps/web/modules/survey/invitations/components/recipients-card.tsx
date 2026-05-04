@@ -56,6 +56,7 @@ interface TInvitationConfigDraft {
   audience: TInvitationAudienceDraft;
   reminderSchedule: TReminderSchedule;
   emailTemplates: TSurveyInvitationConfig["emailTemplates"];
+  fromName?: string;
 }
 
 interface RecipientsCardProps {
