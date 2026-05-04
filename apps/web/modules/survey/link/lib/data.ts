@@ -41,6 +41,9 @@ export const getSurveyWithMetadata = reactCache(async (surveyId: string) => {
         delay: true,
         displayPercentage: true,
         autoComplete: true,
+        runOnDate: true,
+        closeOnDate: true,
+        scheduleTimezone: true,
 
         // Authentication & access
         isVerifyEmailEnabled: true,
