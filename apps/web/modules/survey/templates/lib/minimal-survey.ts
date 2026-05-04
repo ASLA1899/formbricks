@@ -26,6 +26,9 @@ export const getMinimalSurvey = (t: TFunction): TSurvey => ({
   delay: 0, // No delay
   displayPercentage: null,
   autoComplete: null,
+  runOnDate: null,
+  closeOnDate: null,
+  scheduleTimezone: null,
   surveyClosedMessage: {
     enabled: false,
   },

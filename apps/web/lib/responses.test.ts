@@ -239,6 +239,9 @@ describe("Response Processing", () => {
       displayLimit: null,
       autoClose: null,
       autoComplete: null,
+      runOnDate: null,
+      closeOnDate: null,
+      scheduleTimezone: null,
       recontactDays: null,
       welcomeCard: {
         enabled: false,
