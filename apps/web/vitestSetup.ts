@@ -195,6 +195,7 @@ vi.mock("@/lib/constants", () => ({
   AZUREAD_CLIENT_ID: "test-azuread-client-id",
   AZUREAD_CLIENT_SECRET: "test-azure",
   AZUREAD_TENANT_ID: "test-azuread-tenant-id",
+  AZURE_OAUTH_ENABLED: true,
   OIDC_DISPLAY_NAME: "test-oidc-display-name",
   OIDC_CLIENT_ID: "test-oidc-client-id",
   OIDC_ISSUER: "test-oidc-issuer",

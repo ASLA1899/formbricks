@@ -838,6 +838,7 @@ export const getElementSummary = async (
         // Build set of known row labels across all languages for "other" detection
         const knownRowLabels = new Set<string>();
         regularMatrixRows.forEach((row) => {
+          if (!row.label || typeof row.label !== "object") return;
           Object.values(row.label).forEach((label) => {
             if (typeof label === "string" && label) knownRowLabels.add(label);
           });
