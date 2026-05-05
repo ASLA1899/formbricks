@@ -117,9 +117,11 @@ export async function runScheduledReminders(): Promise<{
           };
           const subject = renderSubject(config.emailTemplates.reminder.subject, vars);
           const body = renderTemplate(config.emailTemplates.reminder.body, vars);
-          const heading = config.emailTemplates.reminder.headingText
-            ? renderTemplate(config.emailTemplates.reminder.headingText, vars)
-            : undefined;
+          // Preserve undefined-vs-empty so the email template can distinguish
+          // "use default" (undefined) from "no heading" ("").
+          const headingTemplate = config.emailTemplates.reminder.headingText;
+          const heading =
+            headingTemplate === undefined ? undefined : renderTemplate(headingTemplate, vars);
 
           await sendSurveyInvitationEmail({
             to: inv.recipientEmail,

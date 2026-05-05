@@ -309,9 +309,11 @@ export async function runPendingInvitationSends(args: {
         };
         const subject = renderSubject(config.emailTemplates.invitation.subject, vars);
         const body = renderTemplate(config.emailTemplates.invitation.body, vars);
-        const heading = config.emailTemplates.invitation.headingText
-          ? renderTemplate(config.emailTemplates.invitation.headingText, vars)
-          : undefined;
+        // Preserve undefined-vs-empty so the email template can distinguish
+        // "use default" (undefined) from "no heading" ("").
+        const headingTemplate = config.emailTemplates.invitation.headingText;
+        const heading =
+          headingTemplate === undefined ? undefined : renderTemplate(headingTemplate, vars);
 
         await sendSurveyInvitationEmail({
           to: inv.recipientEmail,

@@ -43,19 +43,30 @@ export function InvitationEmail({
         }}>
         {t("emails.invitation_eyebrow")}
       </Text>
-      <Heading
-        as="h1"
-        style={{
-          fontFamily: emailFontStack,
-          fontSize: "26px",
-          fontWeight: 700,
-          letterSpacing: "-0.01em",
-          lineHeight: 1.2,
-          color: "#1A1A1A",
-          margin: "0 0 16px",
-        }}>
-        {heading?.trim() || t("emails.invitation_heading")}
-      </Heading>
+      {(() => {
+        // Three-state semantics:
+        //   heading === undefined  → render the default translation
+        //   heading === ""         → render no heading at all
+        //   heading === "X"        → render X
+        // Whitespace-only is treated as empty (no heading).
+        if (heading !== undefined && heading.trim() === "") return null;
+        const text = heading ?? t("emails.invitation_heading");
+        return (
+          <Heading
+            as="h1"
+            style={{
+              fontFamily: emailFontStack,
+              fontSize: "26px",
+              fontWeight: 700,
+              letterSpacing: "-0.01em",
+              lineHeight: 1.2,
+              color: "#1A1A1A",
+              margin: "0 0 16px",
+            }}>
+            {text}
+          </Heading>
+        );
+      })()}
       {/* Body is plain text with merge fields already substituted. Preserve newlines
           via CSS so we don't need to inject HTML (avoids XSS surface). */}
       <Text

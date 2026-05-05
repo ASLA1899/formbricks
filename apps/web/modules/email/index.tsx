@@ -320,7 +320,8 @@ export const sendSurveyInvitationEmail = async (data: {
     surveyLink: data.surveyLink,
     logoUrl: data.logoUrl,
     buttonLabel: data.buttonLabel?.trim() || undefined,
-    heading: data.heading?.trim() || undefined,
+    // Pass through as-is: undefined = use default heading, "" = suppress, text = override.
+    heading: data.heading,
     t,
     ...legalProps,
   });

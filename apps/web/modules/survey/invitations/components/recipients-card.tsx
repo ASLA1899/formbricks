@@ -579,18 +579,14 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
               }
               placeholder="Button text (default: Take the survey)"
             />
-            <Input
-              value={config.emailTemplates.invitation.headingText ?? ""}
-              onChange={(e) =>
+            <HeadingControl
+              value={config.emailTemplates.invitation.headingText}
+              onChange={(headingText) =>
                 updateTemplates({
                   ...config.emailTemplates,
-                  invitation: {
-                    ...config.emailTemplates.invitation,
-                    headingText: e.target.value,
-                  },
+                  invitation: { ...config.emailTemplates.invitation, headingText },
                 })
               }
-              placeholder="Heading (default: We’d value your input.)"
             />
             <MergeFieldHints />
           </section>
@@ -691,18 +687,14 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
               }
               placeholder="Button text (default: Take the survey)"
             />
-            <Input
-              value={config.emailTemplates.reminder.headingText ?? ""}
-              onChange={(e) =>
+            <HeadingControl
+              value={config.emailTemplates.reminder.headingText}
+              onChange={(headingText) =>
                 updateTemplates({
                   ...config.emailTemplates,
-                  reminder: {
-                    ...config.emailTemplates.reminder,
-                    headingText: e.target.value,
-                  },
+                  reminder: { ...config.emailTemplates.reminder, headingText },
                 })
               }
-              placeholder="Heading (default: We’d value your input.)"
             />
           </section>
 
@@ -745,3 +737,59 @@ const MergeFieldHints = () => (
     ))}
   </p>
 );
+
+// Tri-state control for the email heading. Maps three UI modes to the
+// canonical `headingText` shape on the survey:
+//   "default" → undefined (omits the field; renders the i18n default)
+//   "custom"  → "<text>"  (renders the override)
+//   "none"    → ""        (suppresses the heading entirely)
+//
+// `mode` is local state so the user can switch to "custom" before typing
+// without the saved empty string flipping the derived mode back to "none".
+type HeadingMode = "default" | "custom" | "none";
+
+const deriveHeadingMode = (value: string | undefined): HeadingMode => {
+  if (value === undefined) return "default";
+  if (value === "") return "none";
+  return "custom";
+};
+
+const HeadingControl = ({
+  value,
+  onChange,
+}: {
+  value: string | undefined;
+  onChange: (next: string | undefined) => void;
+}) => {
+  const [mode, setMode] = useState<HeadingMode>(() => deriveHeadingMode(value));
+
+  const setModeAndPersist = (next: HeadingMode) => {
+    setMode(next);
+    if (next === "default") onChange(undefined);
+    else if (next === "none") onChange("");
+    else onChange(value && value.length > 0 ? value : "");
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label>Heading</Label>
+      <Select value={mode} onValueChange={(v) => setModeAndPersist(v as HeadingMode)}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="default">Default (“We’d value your input.”)</SelectItem>
+          <SelectItem value="custom">Custom text</SelectItem>
+          <SelectItem value="none">No heading</SelectItem>
+        </SelectContent>
+      </Select>
+      {mode === "custom" && (
+        <Input
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Custom heading text"
+        />
+      )}
+    </div>
+  );
+};
