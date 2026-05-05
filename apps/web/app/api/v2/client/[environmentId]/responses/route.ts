@@ -11,7 +11,6 @@ import { sendToPipeline } from "@/app/lib/pipelines";
 import { getSurvey } from "@/lib/survey/service";
 import { getElementsFromBlocks } from "@/lib/survey/utils";
 import { validateOtherOptionLengthForMultipleChoice } from "@/modules/api/v2/lib/element";
-import { getIsContactsEnabled } from "@/modules/ee/license-check/lib/utils";
 import { createQuotaFullObject } from "@/modules/ee/quotas/lib/helpers";
 import { createResponseWithQuotaEvaluation } from "./lib/response";
 import { TResponseInputV2, ZResponseInputV2 } from "./types/response";
@@ -73,12 +72,10 @@ export const POST = async (request: Request, context: Context): Promise<Response
 
   const responseInputData = responseInputValidation.data;
 
-  if (responseInputData.contactId) {
-    const isContactsEnabled = await getIsContactsEnabled();
-    if (!isContactsEnabled) {
-      return responses.forbiddenResponse("User identification is only available for enterprise users.", true);
-    }
-  }
+  // ASLA fork: allow contactId without EE license — our invitation flow stores
+  // contactId on responses (non-EE) so /c/<jwt> can detect already-responded.
+  // Upstream gates this behind EE Contacts; that gate blocks 100% of invitation
+  // submissions in our deployment.
 
   // get and check survey
   const survey = await getSurvey(responseInputData.surveyId);
