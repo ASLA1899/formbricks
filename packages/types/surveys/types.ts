@@ -374,6 +374,7 @@ export const ZInvitationEmailTemplate = z.object({
   subject: z.string().min(1).max(500),
   body: z.string(),
   buttonLabel: z.string().max(100).optional(),
+  headingText: z.string().max(200).optional(),
 });
 
 export const ZInvitationEmailTemplates = z.object({
@@ -3957,18 +3958,18 @@ export const ZScheduleWindow = z
     closeOnDate: z.coerce.date().nullable(),
     scheduleTimezone: z.string().nullable(),
   })
-  .refine(
-    (s) => !s.runOnDate || !s.closeOnDate || s.closeOnDate.getTime() > s.runOnDate.getTime(),
-    { message: "closeOnDate must be after runOnDate", path: ["closeOnDate"] }
-  )
-  .refine(
-    (s) => !s.scheduleTimezone || isIanaTimezone(s.scheduleTimezone),
-    { message: "scheduleTimezone must be a valid IANA zone", path: ["scheduleTimezone"] }
-  )
-  .refine(
-    (s) => s.runOnDate || s.closeOnDate ? !!s.scheduleTimezone : true,
-    { message: "scheduleTimezone is required when runOnDate or closeOnDate is set", path: ["scheduleTimezone"] }
-  );
+  .refine((s) => !s.runOnDate || !s.closeOnDate || s.closeOnDate.getTime() > s.runOnDate.getTime(), {
+    message: "closeOnDate must be after runOnDate",
+    path: ["closeOnDate"],
+  })
+  .refine((s) => !s.scheduleTimezone || isIanaTimezone(s.scheduleTimezone), {
+    message: "scheduleTimezone must be a valid IANA zone",
+    path: ["scheduleTimezone"],
+  })
+  .refine((s) => (s.runOnDate || s.closeOnDate ? !!s.scheduleTimezone : true), {
+    message: "scheduleTimezone is required when runOnDate or closeOnDate is set",
+    path: ["scheduleTimezone"],
+  });
 
 // ZSurvey is a refinement, so to extend it to ZSurveyUpdateInput, we need to transform the innerType and then apply the same refinements.
 export const ZSurveyUpdateInput = ZSurvey.innerType()

@@ -310,6 +310,7 @@ export const sendSurveyInvitationEmail = async (data: {
   surveyLink: string;
   logoUrl?: string;
   buttonLabel?: string;
+  heading?: string;
   fromName?: string;
 }): Promise<boolean> => {
   const t = await getTranslate();
@@ -319,6 +320,7 @@ export const sendSurveyInvitationEmail = async (data: {
     surveyLink: data.surveyLink,
     logoUrl: data.logoUrl,
     buttonLabel: data.buttonLabel?.trim() || undefined,
+    heading: data.heading?.trim() || undefined,
     t,
     ...legalProps,
   });

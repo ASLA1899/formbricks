@@ -74,6 +74,9 @@ export async function sendManualReminders(args: {
       };
       const subject = renderSubject(config.emailTemplates.reminder.subject, vars);
       const body = renderTemplate(config.emailTemplates.reminder.body, vars);
+      const heading = config.emailTemplates.reminder.headingText
+        ? renderTemplate(config.emailTemplates.reminder.headingText, vars)
+        : undefined;
 
       await sendSurveyInvitationEmail({
         to: inv.recipientEmail,
@@ -81,6 +84,7 @@ export async function sendManualReminders(args: {
         body,
         surveyLink,
         buttonLabel: config.emailTemplates.reminder.buttonLabel,
+        heading,
         fromName: config.fromName,
       });
 

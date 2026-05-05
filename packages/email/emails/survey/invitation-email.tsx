@@ -15,6 +15,7 @@ export interface InvitationEmailProps extends TEmailTemplateLegalProps {
   readonly body: string;
   readonly surveyLink: string;
   readonly buttonLabel?: string;
+  readonly heading?: string;
   readonly logoUrl?: string;
   readonly t?: TFunction;
 }
@@ -23,6 +24,7 @@ export function InvitationEmail({
   body,
   surveyLink,
   buttonLabel,
+  heading,
   logoUrl,
   t = mockT,
   ...legalProps
@@ -52,7 +54,7 @@ export function InvitationEmail({
           color: "#1A1A1A",
           margin: "0 0 16px",
         }}>
-        {t("emails.invitation_heading")}
+        {heading?.trim() || t("emails.invitation_heading")}
       </Heading>
       {/* Body is plain text with merge fields already substituted. Preserve newlines
           via CSS so we don't need to inject HTML (avoids XSS surface). */}

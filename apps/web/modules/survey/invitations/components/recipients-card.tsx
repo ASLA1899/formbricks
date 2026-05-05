@@ -540,8 +540,7 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
               placeholder="Leave blank to use the system default"
             />
             <p className="text-xs text-slate-500">
-              Friendly name shown alongside the sender email address. The email address itself is
-              not changed.
+              Friendly name shown alongside the sender email address. The email address itself is not changed.
             </p>
           </section>
 
@@ -579,6 +578,19 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
                 })
               }
               placeholder="Button text (default: Take the survey)"
+            />
+            <Input
+              value={config.emailTemplates.invitation.headingText ?? ""}
+              onChange={(e) =>
+                updateTemplates({
+                  ...config.emailTemplates,
+                  invitation: {
+                    ...config.emailTemplates.invitation,
+                    headingText: e.target.value,
+                  },
+                })
+              }
+              placeholder="Heading (default: We’d value your input.)"
             />
             <MergeFieldHints />
           </section>
@@ -679,6 +691,19 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
               }
               placeholder="Button text (default: Take the survey)"
             />
+            <Input
+              value={config.emailTemplates.reminder.headingText ?? ""}
+              onChange={(e) =>
+                updateTemplates({
+                  ...config.emailTemplates,
+                  reminder: {
+                    ...config.emailTemplates.reminder,
+                    headingText: e.target.value,
+                  },
+                })
+              }
+              placeholder="Heading (default: We’d value your input.)"
+            />
           </section>
 
           <div className="flex flex-wrap gap-2">
@@ -693,8 +718,7 @@ export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: Recipi
               {isReminding ? "Reminding…" : "Send reminders to non-responders"}
             </Button>
             <p className="self-center text-xs text-slate-500">
-              Sending also saves the current invitation/reminder text and reminder schedule on the
-              survey.
+              Sending also saves the current invitation/reminder text and reminder schedule on the survey.
             </p>
           </div>
         </div>

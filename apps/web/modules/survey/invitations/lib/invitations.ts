@@ -309,6 +309,9 @@ export async function runPendingInvitationSends(args: {
         };
         const subject = renderSubject(config.emailTemplates.invitation.subject, vars);
         const body = renderTemplate(config.emailTemplates.invitation.body, vars);
+        const heading = config.emailTemplates.invitation.headingText
+          ? renderTemplate(config.emailTemplates.invitation.headingText, vars)
+          : undefined;
 
         await sendSurveyInvitationEmail({
           to: inv.recipientEmail,
@@ -316,6 +319,7 @@ export async function runPendingInvitationSends(args: {
           body,
           surveyLink,
           buttonLabel: config.emailTemplates.invitation.buttonLabel,
+          heading,
           fromName: config.fromName,
         });
         sent++;
