@@ -4,13 +4,14 @@ import { ZAttributes } from "./attributes";
 import { ZId } from "./common";
 import { ZProject } from "./project";
 import { ZResponseHiddenFieldValue, ZResponseUpdate } from "./responses";
+import { ZJsEnvironmentStateSegment } from "./segment";
 import { ZUploadFileConfig } from "./storage";
 import { ZSurvey } from "./surveys/types";
 
 export const ZJsEnvironmentStateSurvey = ZSurvey.innerType()
   .pick({
     id: true,
-    name: true,
+    // name intentionally omitted — internal label, not needed by the SDK / public client API
     welcomeCard: true,
     questions: true,
     blocks: true,
@@ -22,7 +23,7 @@ export const ZJsEnvironmentStateSurvey = ZSurvey.innerType()
     autoClose: true,
     styling: true,
     status: true,
-    segment: true,
+    // segment intentionally omitted from pick — replaced with minimal shape below
     recontactDays: true,
     displayLimit: true,
     displayOption: true,
@@ -36,6 +37,12 @@ export const ZJsEnvironmentStateSurvey = ZSurvey.innerType()
     snowflakeSync: true,
     recaptcha: true,
     externalDataSources: true,
+  })
+  .extend({
+    // Only expose what the SDK needs: segment ID for membership check + whether any filters exist.
+    // Full filter logic (titles, descriptions, conditions) is evaluated server-side and must not
+    // be sent to the browser to avoid leaking sensitive targeting data.
+    segment: ZJsEnvironmentStateSegment.nullable(),
   })
   .superRefine(ZSurvey._def.effect.type === "refinement" ? ZSurvey._def.effect.refinement : () => null);
 

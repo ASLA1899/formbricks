@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { TProjectStyling } from "@formbricks/types/project";
 import { TResponseData } from "@formbricks/types/responses";
 import { TSurvey, TSurveyStyling } from "@formbricks/types/surveys/types";
+import { toJsEnvironmentStateSurvey } from "@/lib/survey/client-utils";
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
 import { LinkSurveyWrapper } from "@/modules/survey/link/components/link-survey-wrapper";
 import { getPrefillValue } from "@/modules/survey/link/lib/prefill";
@@ -150,7 +151,7 @@ export const SurveyClientWrapper = ({
         appUrl={publicDomain}
         environmentId={survey.environmentId}
         isPreviewMode={isPreview}
-        survey={survey}
+        survey={toJsEnvironmentStateSurvey(survey)}
         styling={styling}
         languageCode={languageCode}
         isBrandingEnabled={project.linkSurveyBranding}
