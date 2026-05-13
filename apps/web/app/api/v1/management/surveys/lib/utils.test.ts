@@ -1,4 +1,5 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import type { TAuthenticationApiKey } from "@formbricks/types/auth";
 import { TOrganization } from "@formbricks/types/organizations";
 import {
   TSurveyCreateInputWithEnvironmentId,
@@ -7,7 +8,8 @@ import {
 import { responses } from "@/app/lib/api/response";
 import { getIsSpamProtectionEnabled, getMultiLanguagePermission } from "@/modules/ee/license-check/lib/utils";
 import { getSurveyFollowUpsPermission } from "@/modules/survey/follow-ups/lib/utils";
-import { checkFeaturePermissions } from "./utils";
+import { getEnvironmentIdsByOrganizationId } from "./environment";
+import { checkFeaturePermissions, getReadableEnvironmentIds } from "./utils";
 
 // Mock dependencies
 vi.mock("@/app/lib/api/response", () => ({
@@ -23,6 +25,10 @@ vi.mock("@/modules/ee/license-check/lib/utils", () => ({
 
 vi.mock("@/modules/survey/follow-ups/lib/utils", () => ({
   getSurveyFollowUpsPermission: vi.fn(),
+}));
+
+vi.mock("./environment", () => ({
+  getEnvironmentIdsByOrganizationId: vi.fn(),
 }));
 
 const mockOrganization: TOrganization = {
@@ -99,6 +105,109 @@ const baseSurveyData: TSurveyCreateInputWithEnvironmentId = {
   welcomeCard: { enabled: false, showResponseCount: false, timeToFinish: false },
   followUps: [],
 };
+
+const baseAuthentication = {
+  type: "apiKey" as const,
+  apiKeyId: "api-key-id",
+  organizationId: "org-id",
+  organizationAccess: {
+    accessControl: {
+      read: false,
+      write: false,
+    },
+  },
+  environmentPermissions: [],
+};
+
+const environmentPermission = (
+  environmentId: string,
+  permission: "read" | "write" | "manage"
+): TAuthenticationApiKey["environmentPermissions"][number] => ({
+  environmentId,
+  permission,
+  environmentType: "development",
+  projectId: `project-${environmentId}`,
+  projectName: `Project ${environmentId}`,
+});
+
+describe("getReadableEnvironmentIds", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("returns all organization environments when API key has organization read access", async () => {
+    vi.mocked(getEnvironmentIdsByOrganizationId).mockResolvedValue(["env-1", "env-2"]);
+
+    const result = await getReadableEnvironmentIds({
+      ...baseAuthentication,
+      organizationAccess: {
+        accessControl: {
+          read: true,
+          write: false,
+        },
+      },
+    });
+
+    expect(result).toEqual(["env-1", "env-2"]);
+    expect(getEnvironmentIdsByOrganizationId).toHaveBeenCalledWith("org-id");
+  });
+
+  test("returns an empty list when an organization-read API key belongs to an organization without environments", async () => {
+    vi.mocked(getEnvironmentIdsByOrganizationId).mockResolvedValue([]);
+
+    const result = await getReadableEnvironmentIds({
+      ...baseAuthentication,
+      organizationAccess: {
+        accessControl: {
+          read: true,
+          write: false,
+        },
+      },
+    });
+
+    expect(result).toEqual([]);
+    expect(getEnvironmentIdsByOrganizationId).toHaveBeenCalledWith("org-id");
+  });
+
+  test("returns all organization environments when API key has organization write access", async () => {
+    vi.mocked(getEnvironmentIdsByOrganizationId).mockResolvedValue(["env-1"]);
+
+    const result = await getReadableEnvironmentIds({
+      ...baseAuthentication,
+      organizationAccess: {
+        accessControl: {
+          read: false,
+          write: true,
+        },
+      },
+    });
+
+    expect(result).toEqual(["env-1"]);
+    expect(getEnvironmentIdsByOrganizationId).toHaveBeenCalledWith("org-id");
+  });
+
+  test("returns de-duplicated environment permissions that allow GET without organization access", async () => {
+    const result = await getReadableEnvironmentIds({
+      ...baseAuthentication,
+      environmentPermissions: [
+        environmentPermission("env-1", "read"),
+        environmentPermission("env-2", "write"),
+        environmentPermission("env-3", "manage"),
+        environmentPermission("env-1", "read"),
+      ],
+    });
+
+    expect(result).toEqual(["env-1", "env-2", "env-3"]);
+    expect(getEnvironmentIdsByOrganizationId).not.toHaveBeenCalled();
+  });
+
+  test("returns null when the API key has no readable access", async () => {
+    const result = await getReadableEnvironmentIds(baseAuthentication);
+
+    expect(result).toBeNull();
+    expect(getEnvironmentIdsByOrganizationId).not.toHaveBeenCalled();
+  });
+});
 
 describe("checkFeaturePermissions", () => {
   test("should return null if no restricted features are used", async () => {
