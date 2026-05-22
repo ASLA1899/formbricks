@@ -299,7 +299,39 @@ export const BlockCard = ({
               <div className="flex h-full items-center justify-between px-4 py-2">
                 <div className="flex items-center gap-2">
                   <div>
-                    <h4 className="text-sm font-medium text-slate-700">{block.name}</h4>
+                    <input
+                      type="text"
+                      value={block.name}
+                      onChange={(e) => {
+                        const nextName = e.target.value;
+                        setLocalSurvey({
+                          ...localSurvey,
+                          blocks: localSurvey.blocks.map((b, i) =>
+                            i === blockIdx ? { ...b, name: nextName } : b
+                          ),
+                        });
+                      }}
+                      onBlur={(e) => {
+                        if (e.target.value.trim() === "") {
+                          const fallback = `Block ${blockIdx + 1}`;
+                          setLocalSurvey({
+                            ...localSurvey,
+                            blocks: localSurvey.blocks.map((b, i) =>
+                              i === blockIdx ? { ...b, name: fallback } : b
+                            ),
+                          });
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === "Enter") {
+                          (e.target as HTMLInputElement).blur();
+                        }
+                      }}
+                      aria-label="Block name"
+                      className="w-full min-w-0 rounded border-none bg-transparent p-0 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:bg-white focus:ring-1 focus:ring-slate-300 focus:outline-none"
+                    />
                     <p className="text-xs text-slate-500">
                       {blockElementsCount} {blockElementsCountText}
                     </p>

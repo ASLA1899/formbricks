@@ -90,11 +90,11 @@ const createMockSurvey = (blocks: TSurveyBlock[] = []): TSurvey => ({
 });
 
 describe("renumberBlocks", () => {
-  test("should renumber blocks sequentially starting from 1", () => {
+  test("should renumber blocks with auto-generated names sequentially", () => {
     const blocks = [
-      createMockBlock("block-1", "Old Name 1"),
-      createMockBlock("block-2", "Old Name 2"),
-      createMockBlock("block-3", "Old Name 3"),
+      createMockBlock("block-1", "Block 5"),
+      createMockBlock("block-2", "Block 7"),
+      createMockBlock("block-3", "Block 9"),
     ];
 
     const result = renumberBlocks(blocks);
@@ -105,10 +105,24 @@ describe("renumberBlocks", () => {
     expect(result[2].name).toBe("Block 3");
   });
 
+  test("should preserve custom block names and only renumber auto-generated ones", () => {
+    const blocks = [
+      createMockBlock("block-1", "Block 1"),
+      createMockBlock("block-2", "Demographics"),
+      createMockBlock("block-3", "Block 3"),
+    ];
+
+    const result = renumberBlocks(blocks);
+
+    expect(result[0].name).toBe("Block 1");
+    expect(result[1].name).toBe("Demographics");
+    expect(result[2].name).toBe("Block 3");
+  });
+
   test("should preserve block IDs and other properties", () => {
     const blocks = [
-      createMockBlock("block-1", "Old Name 1", [createMockElement("q1")]),
-      createMockBlock("block-2", "Old Name 2", [createMockElement("q2")]),
+      createMockBlock("block-1", "Block 1", [createMockElement("q1")]),
+      createMockBlock("block-2", "Block 2", [createMockElement("q2")]),
     ];
 
     const result = renumberBlocks(blocks);
@@ -125,7 +139,7 @@ describe("renumberBlocks", () => {
   });
 
   test("should handle single block", () => {
-    const blocks = [createMockBlock("block-1", "Old Name")];
+    const blocks = [createMockBlock("block-1", "Block 7")];
     const result = renumberBlocks(blocks);
 
     expect(result).toHaveLength(1);
@@ -232,8 +246,9 @@ describe("addBlock", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.blocks).toHaveLength(3);
-      expect(result.data.blocks[1].name).toBe("Block 2");
       expect(result.data.blocks[0].name).toBe("Block 1");
+      // Custom name (does not match /^Block \d+$/) is preserved
+      expect(result.data.blocks[1].name).toBe("Block 1.5");
       expect(result.data.blocks[2].name).toBe("Block 3");
     }
   });

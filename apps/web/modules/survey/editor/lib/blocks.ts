@@ -52,17 +52,19 @@ export const findElementLocation = (
 // BLOCK OPERATIONS
 // ============================================
 
+const AUTO_BLOCK_NAME_REGEX = /^Block \d+$/;
+
 /**
- * Renumbers all blocks sequentially (Block 1, Block 2, Block 3, etc.)
- * This ensures block names stay in sync with their positions
- * @param blocks - Array of blocks to renumber
- * @returns Array of blocks with updated sequential names
+ * Renumbers blocks sequentially, but only for blocks whose name still looks
+ * auto-generated (matches /^Block \d+$/). Custom block names are preserved.
  */
 export const renumberBlocks = (blocks: TSurveyBlock[]): TSurveyBlock[] => {
-  return blocks.map((block, index) => ({
-    ...block,
-    name: `Block ${index + 1}`,
-  }));
+  return blocks.map((block, index) => {
+    if (!block.name || AUTO_BLOCK_NAME_REGEX.test(block.name)) {
+      return { ...block, name: `Block ${index + 1}` };
+    }
+    return block;
+  });
 };
 
 /**
