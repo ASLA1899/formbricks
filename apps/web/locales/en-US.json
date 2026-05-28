@@ -1061,7 +1061,8 @@
         "unlock_two_factor_authentication": "Unlock two-factor authentication with a higher plan",
         "update_personal_info": "Update your personal information",
         "warning_cannot_delete_account": "You are the only owner of this organization. Please transfer ownership to another member first.",
-        "warning_cannot_undo": "This cannot be undone"
+        "warning_cannot_undo": "This cannot be undone",
+        "wrong_password": "Wrong password"
       },
       "teams": {
         "add_members_description": "Add members to the team and determine their role.",
@@ -1536,6 +1537,7 @@
         "save_as_list": "Save as list",
         "save_list": "Save",
         "saved_lists": "Saved Lists",
+        "scale": "Scale",
         "schedule_close_label": "Close survey on",
         "schedule_close_must_be_after_open": "Close time must be after open time",
         "schedule_open_label": "Open survey on",
@@ -1545,7 +1547,6 @@
         "schedule_survey_window_title": "Schedule survey window",
         "schedule_time_in_past": "This time is in the past — the schedule will fire on the next cron tick (within 5 minutes)",
         "schedule_timezone_label": "Timezone",
-        "scale": "Scale",
         "search_for_images": "Search for images",
         "seconds_after_trigger_the_survey_will_be_closed_if_no_response": "seconds after trigger the survey will be closed if no response",
         "seconds_before_showing_the_survey": "seconds before showing the survey.",

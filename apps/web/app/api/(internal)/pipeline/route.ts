@@ -14,6 +14,7 @@ import { getOrganizationByEnvironmentId } from "@/lib/organization/service";
 import { getResponseCountBySurveyId } from "@/lib/response/service";
 import { getSurvey, updateSurvey } from "@/lib/survey/service";
 import { convertDatesInObject } from "@/lib/time";
+import { validateWebhookUrl } from "@/lib/utils/validate-webhook-url";
 import { queueAuditEvent } from "@/modules/ee/audit-logs/lib/handler";
 import { TAuditStatus, UNKNOWN_DATA } from "@/modules/ee/audit-logs/types/audit-log";
 import { sendResponseFinishedEmail } from "@/modules/email";
@@ -94,26 +95,30 @@ export const POST = async (request: Request) => {
   };
 
   const webhookPromises = webhooks.map((webhook) =>
-    fetchWithTimeout(webhook.url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        webhookId: webhook.id,
-        event,
-        data: {
-          ...response,
-          survey: {
-            title: survey.name,
-            type: survey.type,
-            status: survey.status,
-            createdAt: survey.createdAt,
-            updatedAt: survey.updatedAt,
-          },
-        },
-      }),
-    }).catch((error) => {
-      logger.error({ error, url: request.url }, `Webhook call to ${webhook.url} failed`);
-    })
+    validateWebhookUrl(webhook.url)
+      .then(() =>
+        fetchWithTimeout(webhook.url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            webhookId: webhook.id,
+            event,
+            data: {
+              ...response,
+              survey: {
+                title: survey.name,
+                type: survey.type,
+                status: survey.status,
+                createdAt: survey.createdAt,
+                updatedAt: survey.updatedAt,
+              },
+            },
+          }),
+        })
+      )
+      .catch((error) => {
+        logger.error({ error, url: request.url }, `Webhook call to ${webhook.url} failed`);
+      })
   );
 
   if (event === "responseFinished") {

@@ -41,6 +41,7 @@ import { RESPONSES_PER_PAGE } from "@/lib/constants";
 import { getDisplayCountBySurveyId } from "@/lib/display/service";
 import { getLocalizedValue } from "@/lib/i18n/utils";
 import { buildWhereClause } from "@/lib/response/utils";
+import { toJsEnvironmentStateSurvey } from "@/lib/survey/client-utils";
 import { getSurvey } from "@/lib/survey/service";
 import { findElementLocation, getElementsFromBlocks } from "@/lib/survey/utils";
 import { evaluateLogic, performActions } from "@/lib/surveyLogic/utils";
@@ -120,9 +121,17 @@ const evaluateLogicAndGetNextElementId = (
 
   if (currentBlock?.logic && currentBlock.logic.length > 0) {
     for (const logic of currentBlock.logic) {
-      if (evaluateLogic(localSurvey, data, localVariables, logic.conditions, selectedLanguage ?? "default")) {
+      if (
+        evaluateLogic(
+          toJsEnvironmentStateSurvey(localSurvey),
+          data,
+          localVariables,
+          logic.conditions,
+          selectedLanguage ?? "default"
+        )
+      ) {
         const { jumpTarget, requiredElementIds, calculations } = performActions(
-          updatedSurvey,
+          toJsEnvironmentStateSurvey(updatedSurvey),
           logic.actions,
           data,
           updatedVariables

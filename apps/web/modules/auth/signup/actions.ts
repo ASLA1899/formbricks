@@ -4,7 +4,7 @@ import { z } from "zod";
 import { InvalidInputError, UnknownError } from "@formbricks/types/errors";
 import { ZUser, ZUserEmail, ZUserLocale, ZUserName, ZUserPassword } from "@formbricks/types/user";
 import { hashPassword } from "@/lib/auth";
-import { IS_TURNSTILE_CONFIGURED, TURNSTILE_SECRET_KEY } from "@/lib/constants";
+import { EMAIL_VERIFICATION_DISABLED, IS_TURNSTILE_CONFIGURED, TURNSTILE_SECRET_KEY } from "@/lib/constants";
 import { verifyInviteToken } from "@/lib/jwt";
 import { createMembership } from "@/lib/membership/service";
 import { createOrganization } from "@/lib/organization/service";
@@ -36,7 +36,6 @@ const ZCreateUserAction = z.object({
   password: ZUserPassword,
   inviteToken: z.string().optional(),
   userLocale: ZUserLocale.optional(),
-  emailVerificationDisabled: z.boolean().optional(),
   turnstileToken: z
     .string()
     .optional()
@@ -154,8 +153,7 @@ async function handleOrganizationCreation(ctx: ActionClientCtx, user: TCreatedUs
 async function handlePostUserCreation(
   ctx: ActionClientCtx,
   user: TCreatedUser,
-  inviteToken: string | undefined,
-  emailVerificationDisabled: boolean | undefined
+  inviteToken: string | undefined
 ): Promise<void> {
   if (inviteToken) {
     await handleInviteAcceptance(ctx, inviteToken, user);
@@ -163,7 +161,7 @@ async function handlePostUserCreation(
     await handleOrganizationCreation(ctx, user);
   }
 
-  if (!emailVerificationDisabled) {
+  if (!EMAIL_VERIFICATION_DISABLED) {
     await sendVerificationEmail(user);
   }
 }
@@ -185,12 +183,7 @@ export const createUserAction = actionClient.schema(ZCreateUserAction).action(
       );
 
       if (!userAlreadyExisted && user) {
-        await handlePostUserCreation(
-          ctx,
-          user,
-          parsedInput.inviteToken,
-          parsedInput.emailVerificationDisabled
-        );
+        await handlePostUserCreation(ctx, user, parsedInput.inviteToken);
       }
 
       if (user) {

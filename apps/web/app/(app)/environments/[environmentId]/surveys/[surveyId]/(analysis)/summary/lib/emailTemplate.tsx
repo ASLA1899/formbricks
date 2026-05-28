@@ -1,5 +1,6 @@
 import { getPublicDomain } from "@/lib/getPublicUrl";
 import { getProjectByEnvironmentId } from "@/lib/project/service";
+import { toJsEnvironmentStateSurvey } from "@/lib/survey/client-utils";
 import { getSurvey } from "@/lib/survey/service";
 import { getStyling } from "@/lib/utils/styling";
 import { getTranslate } from "@/lingodotdev/server";
@@ -16,7 +17,7 @@ export const getEmailTemplateHtml = async (surveyId: string, locale: string) => 
     throw new Error("Workspace not found");
   }
 
-  const styling = getStyling(project, survey);
+  const styling = getStyling(project, toJsEnvironmentStateSurvey(survey));
   const surveyUrl = getPublicDomain() + "/s/" + survey.id;
   const html = await getPreviewEmailTemplateHtml(survey, surveyUrl, styling, locale, t);
   const doctype =

@@ -222,6 +222,14 @@ export const handleSsoCallback = async ({
       "License and instance configuration checked"
     );
 
+    if (!isFirstUser && !isMultiOrgEnabled && SKIP_INVITE_FOR_SSO && !DEFAULT_TEAM_ID) {
+      contextLogger.error(
+        { reason: "missing_default_team_id" },
+        "SSO callback rejected: AUTH_SKIP_INVITE_FOR_SSO is enabled but AUTH_SSO_DEFAULT_TEAM_ID is not configured. Refusing to auto-provision new SSO user into an arbitrary organization."
+      );
+      return false;
+    }
+
     // Additional security checks for self-hosted instances without auto-provisioning and no multi-org enabled
     if (!isFirstUser && !SKIP_INVITE_FOR_SSO && !isMultiOrgEnabled) {
       if (!callbackUrl) {

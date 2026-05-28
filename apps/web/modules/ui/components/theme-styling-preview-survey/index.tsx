@@ -5,6 +5,7 @@ import { Variants, motion } from "framer-motion";
 import { Fragment, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TSurvey, TSurveyType } from "@formbricks/types/surveys/types";
+import { toJsEnvironmentStateSurvey } from "@/lib/survey/client-utils";
 import { ClientLogo } from "@/modules/ui/components/client-logo";
 import { MediaBackground } from "@/modules/ui/components/media-background";
 import { Modal } from "@/modules/ui/components/preview-survey/components/modal";
@@ -170,7 +171,7 @@ export const ThemeStylingPreviewSurvey = ({
                 <SurveyInline
                   appUrl={publicDomain}
                   isPreviewMode={true}
-                  survey={{ ...survey, type: "app" }}
+                  survey={toJsEnvironmentStateSurvey({ ...survey, type: "app" })}
                   isBrandingEnabled={project.inAppSurveyBranding}
                   isRedirectDisabled={true}
                   onFileUpload={async (file) => file.name}
@@ -197,7 +198,7 @@ export const ThemeStylingPreviewSurvey = ({
                 <SurveyInline
                   appUrl={publicDomain}
                   isPreviewMode={true}
-                  survey={{ ...survey, type: "link" }}
+                  survey={toJsEnvironmentStateSurvey({ ...survey, type: "link" })}
                   isBrandingEnabled={project.linkSurveyBranding}
                   isRedirectDisabled={true}
                   onFileUpload={async (file) => file.name}

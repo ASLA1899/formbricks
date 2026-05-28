@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { TProjectStyling } from "@formbricks/types/project";
 import { TSurvey, TSurveyStyling } from "@formbricks/types/surveys/types";
 import { cn } from "@/lib/cn";
+import { toJsEnvironmentStateSurvey } from "@/lib/survey/client-utils";
 import { ClientLogo } from "@/modules/ui/components/client-logo";
 import { MediaBackground } from "@/modules/ui/components/media-background";
 import { ResetProgressButton } from "@/modules/ui/components/reset-progress-button";
@@ -248,7 +249,7 @@ export const PreviewSurvey = ({
                   <SurveyInline
                     appUrl={publicDomain}
                     isPreviewMode={true}
-                    survey={survey}
+                    survey={toJsEnvironmentStateSurvey(survey)}
                     isBrandingEnabled={project.inAppSurveyBranding}
                     isRedirectDisabled={true}
                     languageCode={languageCode}
@@ -280,7 +281,7 @@ export const PreviewSurvey = ({
                     <SurveyInline
                       appUrl={publicDomain}
                       isPreviewMode={true}
-                      survey={{ ...survey, type: "link" }}
+                      survey={toJsEnvironmentStateSurvey({ ...survey, type: "link" })}
                       isBrandingEnabled={project.linkSurveyBranding}
                       languageCode={languageCode}
                       responseCount={42}
@@ -355,7 +356,7 @@ export const PreviewSurvey = ({
                 <SurveyInline
                   appUrl={publicDomain}
                   isPreviewMode={true}
-                  survey={survey}
+                  survey={toJsEnvironmentStateSurvey(survey)}
                   isBrandingEnabled={project.inAppSurveyBranding}
                   isRedirectDisabled={true}
                   languageCode={languageCode}
@@ -391,7 +392,7 @@ export const PreviewSurvey = ({
                   <SurveyInline
                     appUrl={publicDomain}
                     isPreviewMode={true}
-                    survey={{ ...survey, type: "link" }}
+                    survey={toJsEnvironmentStateSurvey({ ...survey, type: "link" })}
                     isBrandingEnabled={project.linkSurveyBranding}
                     isRedirectDisabled={true}
                     languageCode={languageCode}

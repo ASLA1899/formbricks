@@ -1,9 +1,11 @@
 "use server";
 
 import { z } from "zod";
+import { logger } from "@formbricks/logger";
 import { ZId } from "@formbricks/types/common";
 import { OperationNotAllowedError, ResourceNotFoundError, UnknownError } from "@formbricks/types/errors";
 import { getEmailTemplateHtml } from "@/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/lib/emailTemplate";
+import { deleteSurveyResponsesBySurveyId } from "@/app/api/member-lookup/snowflake-service";
 import { getSurvey, updateSurvey } from "@/lib/survey/service";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
 import { checkAuthorizationUpdated } from "@/lib/utils/action-client/action-client-middleware";
@@ -15,8 +17,6 @@ import { generatePersonalLinks } from "@/modules/ee/contacts/lib/contacts";
 import { getIsContactsEnabled } from "@/modules/ee/license-check/lib/utils";
 import { getOrganizationLogoUrl } from "@/modules/ee/whitelabel/email-customization/lib/organization";
 import { sendEmbedSurveyPreviewEmail } from "@/modules/email";
-import { deleteSurveyResponsesBySurveyId } from "@/app/api/member-lookup/snowflake-service";
-import { logger } from "@formbricks/logger";
 import { deleteResponsesAndDisplaysForSurvey } from "./lib/survey";
 
 const ZSendEmbedSurveyPreviewEmailAction = z.object({
@@ -81,9 +81,11 @@ export const resetSurveyAction = authenticatedActionClient.schema(ZResetSurveyAc
       ctx: AuthenticatedActionClientCtx;
       parsedInput: z.infer<typeof ZResetSurveyAction>;
     }) => {
+      const organizationId = await getOrganizationIdFromSurveyId(parsedInput.surveyId);
+      const projectId = await getProjectIdFromSurveyId(parsedInput.surveyId);
       await checkAuthorizationUpdated({
         userId: ctx.user.id,
-        organizationId: parsedInput.organizationId,
+        organizationId,
         access: [
           {
             type: "organization",
@@ -92,12 +94,12 @@ export const resetSurveyAction = authenticatedActionClient.schema(ZResetSurveyAc
           {
             type: "projectTeam",
             minPermission: "readWrite",
-            projectId: parsedInput.projectId,
+            projectId,
           },
         ],
       });
 
-      ctx.auditLoggingCtx.organizationId = parsedInput.organizationId;
+      ctx.auditLoggingCtx.organizationId = organizationId;
       ctx.auditLoggingCtx.surveyId = parsedInput.surveyId;
       ctx.auditLoggingCtx.oldObject = null;
 
