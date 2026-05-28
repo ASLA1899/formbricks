@@ -183,6 +183,20 @@ function FormField({
                   disabled={disabled}
                   dir={dir}
                   aria-invalid={Boolean(errorMessage) || undefined}
+                  {...(inputType === "number"
+                    ? {
+                        min: 0,
+                        inputMode: "numeric" as const,
+                        onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+                          if (["-", "+", "e", "E"].includes(e.key)) {
+                            e.preventDefault();
+                          }
+                        },
+                        onWheel: (e: React.WheelEvent<HTMLInputElement>) => {
+                          (e.target as HTMLInputElement).blur();
+                        },
+                      }
+                    : {})}
                 />
               )}
             </div>
