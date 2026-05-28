@@ -101,10 +101,10 @@ const handleI18nCheckForContactAndAddressFields = (
     return true;
   });
 
-  // Also validate custom field placeholders for contact info
+  // Also validate custom field placeholders for contact info (placeholder is optional — skip if empty)
   if (element.type === "contactInfo") {
     const customFieldsValid = (element.customFields ?? []).every((cf) => {
-      if (cf.show) {
+      if (cf.show && cf.placeholder?.["default"]?.trim()) {
         return isLabelValidForAllLanguages(cf.placeholder, languages);
       }
       return true;
