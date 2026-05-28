@@ -24,9 +24,9 @@ import { WelcomeCard } from "@/components/general/welcome-card";
 import { AutoCloseWrapper } from "@/components/wrappers/auto-close-wrapper";
 import { StackedCardsContainer } from "@/components/wrappers/stacked-cards-container";
 import { ApiClient } from "@/lib/api-client";
+import { computeConfiguredPrefill } from "@/lib/compound-prefill";
 import { callExternalAPI } from "@/lib/external-api-client";
 import { evaluateLogic, performActions } from "@/lib/logic";
-import { computeConfiguredPrefill } from "@/lib/compound-prefill";
 import { parseRecallInformation } from "@/lib/recall";
 import { ResponseQueue } from "@/lib/response-queue";
 import { SurveyState } from "@/lib/survey-state";
@@ -80,6 +80,8 @@ export function Survey({
   isSpamProtectionEnabled,
   dir = "auto",
   setDir,
+  resumedResponse,
+  onResponseIdReceived,
 }: SurveyContainerProps) {
   let apiClient: ApiClient | null = null;
 
@@ -92,13 +94,31 @@ export function Survey({
 
   const surveyState = useMemo(() => {
     if (appUrl && environmentId) {
+      const initialResponseId = resumedResponse?.id ?? null;
+      let state: SurveyState;
       if (mode === "inline") {
-        return new SurveyState(survey.id, singleUseId, singleUseResponseId, userId, contactId);
+        state = new SurveyState(
+          survey.id,
+          singleUseId,
+          initialResponseId ?? singleUseResponseId,
+          userId,
+          contactId
+        );
+      } else {
+        state = new SurveyState(survey.id, null, initialResponseId, userId, contactId);
       }
-
-      return new SurveyState(survey.id, null, null, userId, contactId);
+      if (resumedResponse) {
+        state.responseAcc = {
+          finished: false,
+          data: resumedResponse.data,
+          ttc: resumedResponse.ttc,
+          variables: resumedResponse.variables,
+        };
+      }
+      return state;
     }
     return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resumedResponse intentionally captured only on initial mount; it does not change for a given session
   }, [appUrl, environmentId, mode, survey.id, userId, singleUseId, singleUseResponseId, contactId]);
 
   // Update the responseQueue to use the stored responseId
@@ -110,6 +130,7 @@ export function Survey({
 
   const responseQueue = useMemo(() => {
     if (appUrl && environmentId && surveyState) {
+      let lastSeenResponseId: string | null = surveyState.responseId;
       return new ResponseQueue(
         {
           appUrl,
@@ -137,13 +158,26 @@ export function Survey({
               setBlockId(quotaInfo.endingCardId);
             }
           },
+          setSurveyState: (state) => {
+            if (state.responseId && state.responseId !== lastSeenResponseId) {
+              lastSeenResponseId = state.responseId;
+              onResponseIdReceived?.(state.responseId);
+            }
+          },
         },
         surveyState
       );
     }
 
     return null;
-  }, [appUrl, environmentId, getSetIsError, getSetIsResponseSendingFinished, surveyState]);
+  }, [
+    appUrl,
+    environmentId,
+    getSetIsError,
+    getSetIsResponseSendingFinished,
+    surveyState,
+    onResponseIdReceived,
+  ]);
 
   const questions = useMemo(() => getElementsFromSurveyBlocks(localSurvey.blocks), [localSurvey.blocks]);
 
@@ -164,12 +198,14 @@ export function Survey({
   }, [survey]);
 
   useEffect(() => {
-    setCurrentVariables(
-      survey.variables.reduce<TResponseVariables>((acc, variable) => {
+    setCurrentVariables({
+      ...survey.variables.reduce<TResponseVariables>((acc, variable) => {
         acc[variable.id] = variable.value;
         return acc;
-      }, {})
-    );
+      }, {}),
+      ...(resumedResponse?.variables ?? {}),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resumedResponse is captured only on mount; reseeding from it on every change would clobber later edits
   }, [survey.variables]);
 
   const autoFocusEnabled = autoFocus ?? window.self === window.top;
@@ -180,7 +216,21 @@ export function Survey({
       // If starting at a specific question, find its parent block
       const startBlock = findBlockByElementId(localSurvey.blocks, startAtQuestionId);
       return startBlock?.id || localSurvey.blocks[0]?.id;
-    } else if (localSurvey.welcomeCard.enabled) {
+    }
+
+    if (resumedResponse) {
+      // Resume on the first block that has at least one unanswered element.
+      // Note: this ignores branching logic, so a resumed user may briefly land
+      // on a question that would normally have been skipped — the runtime will
+      // re-evaluate logic on the next submit and route correctly.
+      const answered = new Set(Object.keys(resumedResponse.data));
+      const resumeBlock = localSurvey.blocks.find((b) => b.elements.some((el) => !answered.has(el.id)));
+      if (resumeBlock) return resumeBlock.id;
+      // Everything answered — fall through to first ending
+      if (localSurvey.endings.length > 0) return localSurvey.endings[0].id;
+    }
+
+    if (localSurvey.welcomeCard.enabled) {
       return "start";
     }
 
@@ -197,10 +247,13 @@ export function Survey({
   const [selectedLanguage, setSelectedLanguage] = useState(languageCode);
   const [loadingElement, setLoadingElement] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
-  const [responseData, setResponseData] = useState<TResponseData>(hiddenFieldsRecord ?? {});
+  const [responseData, setResponseData] = useState<TResponseData>({
+    ...(hiddenFieldsRecord ?? {}),
+    ...(resumedResponse?.data ?? {}),
+  });
   const [_variableStack, setVariableStack] = useState<VariableStackEntry[]>([]);
 
-  const [ttc, setTtc] = useState<TResponseTtc>({});
+  const [ttc, setTtc] = useState<TResponseTtc>(resumedResponse?.ttc ?? {});
   const cardArrangement = useMemo(() => {
     if (localSurvey.type === "link") {
       return styling.cardArrangement?.linkSurveys ?? "straight";
