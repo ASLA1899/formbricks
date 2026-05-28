@@ -2,7 +2,8 @@
 
 import { Project } from "@prisma/client";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { TResumedResponse } from "@formbricks/types/formbricks-surveys";
 import { TProjectStyling } from "@formbricks/types/project";
 import { TResponseData } from "@formbricks/types/responses";
 import { TSurvey, TSurveyStyling } from "@formbricks/types/surveys/types";
@@ -11,6 +12,48 @@ import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
 import { LinkSurveyWrapper } from "@/modules/survey/link/components/link-survey-wrapper";
 import { getPrefillValue } from "@/modules/survey/link/lib/prefill";
 import { SurveyInline } from "@/modules/ui/components/survey";
+
+const RESUME_STORAGE_PREFIX = "formbricks-resume-";
+
+interface StoredResume {
+  responseId: string;
+  updatedAt: number;
+}
+
+function readStoredResume(surveyId: string): StoredResume | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(RESUME_STORAGE_PREFIX + surveyId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredResume;
+    if (!parsed.responseId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredResume(surveyId: string, responseId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      RESUME_STORAGE_PREFIX + surveyId,
+      JSON.stringify({ responseId, updatedAt: Date.now() })
+    );
+  } catch {
+    // localStorage may be disabled (private mode, quota); ignore — feature
+    // degrades gracefully to no resume
+  }
+}
+
+function clearStoredResume(surveyId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(RESUME_STORAGE_PREFIX + surveyId);
+  } catch {
+    // ignore
+  }
+}
 
 interface SurveyClientWrapperProps {
   survey: TSurvey;
@@ -105,6 +148,75 @@ export const SurveyClientWrapper = ({
     }
   }, []);
 
+  // Resume support for shared-URL link surveys: we stash the responseId in
+  // localStorage on first submit and try to rehydrate it on revisit. Resume is
+  // intentionally skipped for previews, contact-survey flows (server already
+  // dedupes via contactId), and single-use surveys (server tracks via suId).
+  const isResumeEligible = !isPreview && !contactId && !singleUseId;
+  const [resumeStatus, setResumeStatus] = useState<"loading" | "ready">(
+    isResumeEligible ? "loading" : "ready"
+  );
+  const [resumedResponse, setResumedResponse] = useState<TResumedResponse | undefined>(undefined);
+
+  useEffect(() => {
+    if (!isResumeEligible) return;
+    const stored = readStoredResume(survey.id);
+    if (!stored) {
+      setResumeStatus("ready");
+      return;
+    }
+    let cancelled = false;
+    const url = `/api/v2/client/${survey.environmentId}/responses/${stored.responseId}?surveyId=${survey.id}`;
+    fetch(url, { method: "GET" })
+      .then(async (res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          // 404 / 410 — response gone or already finished. Clear and start fresh.
+          clearStoredResume(survey.id);
+          setResumeStatus("ready");
+          return;
+        }
+        const body = (await res.json()) as {
+          data?: {
+            id: string;
+            data: TResponseData;
+            ttc: Record<string, number>;
+            variables: Record<string, string | number>;
+          };
+        };
+        if (body?.data?.id) {
+          setResumedResponse({
+            id: body.data.id,
+            data: body.data.data ?? {},
+            ttc: body.data.ttc ?? {},
+            variables: body.data.variables ?? {},
+          });
+        } else {
+          clearStoredResume(survey.id);
+        }
+        setResumeStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setResumeStatus("ready");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isResumeEligible, survey.id, survey.environmentId]);
+
+  const handleResponseIdReceived = useCallback(
+    (responseId: string) => {
+      if (!isResumeEligible) return;
+      writeStoredResume(survey.id, responseId);
+    },
+    [isResumeEligible, survey.id]
+  );
+
+  const handleFinished = useCallback(() => {
+    clearStoredResume(survey.id);
+  }, [survey.id]);
+
   // Extract hidden fields from URL parameters
   const hiddenFieldsRecord = useMemo(() => {
     const fieldsRecord: Record<string, string> = {};
@@ -130,7 +242,15 @@ export const SurveyClientWrapper = ({
       setBlockId(survey.blocks[0].id);
     }
     setResponseData({});
+    clearStoredResume(survey.id);
   };
+
+  // Block the survey from mounting until we've decided whether to resume —
+  // otherwise the runtime initializes with empty state and the resume fetch
+  // result would be discarded.
+  if (resumeStatus === "loading") {
+    return null;
+  }
 
   return (
     <LinkSurveyWrapper
@@ -180,6 +300,9 @@ export const SurveyClientWrapper = ({
         contactId={contactId}
         recaptchaSiteKey={recaptchaSiteKey}
         isSpamProtectionEnabled={isSpamProtectionEnabled}
+        resumedResponse={resumedResponse}
+        onResponseIdReceived={handleResponseIdReceived}
+        onFinished={handleFinished}
       />
     </LinkSurveyWrapper>
   );

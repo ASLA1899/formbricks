@@ -1,8 +1,21 @@
 import type { TJsEnvironmentStateSurvey, TJsFileUploadParams } from "./js";
 import type { TProjectStyling } from "./project";
-import type { TResponseData, TResponseHiddenFieldValue, TResponseUpdate } from "./responses";
+import type {
+  TResponseData,
+  TResponseHiddenFieldValue,
+  TResponseTtc,
+  TResponseUpdate,
+  TResponseVariables,
+} from "./responses";
 import type { TUploadFileConfig } from "./storage";
 import type { TSurveyStyling } from "./surveys/types";
+
+export interface TResumedResponse {
+  id: string;
+  data: TResponseData;
+  ttc: TResponseTtc;
+  variables: TResponseVariables;
+}
 
 export interface SurveyBaseProps {
   survey: TJsEnvironmentStateSurvey;
@@ -67,4 +80,6 @@ export interface SurveyContainerProps extends Omit<SurveyBaseProps, "onFileUploa
   isSpamProtectionEnabled?: boolean;
   recaptchaSiteKey?: string;
   getRecaptchaToken?: () => Promise<string | null>;
+  resumedResponse?: TResumedResponse;
+  onResponseIdReceived?: (responseId: string) => void;
 }

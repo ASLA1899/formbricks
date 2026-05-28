@@ -57,6 +57,37 @@
   color: var(--fb-subheading-color) !important;
 }
 
+/* Restore list markers stripped by Tailwind preflight so bullet/numbered lists
+   authored in the rich-text editor (welcome message, subheaders, etc.) render. */
+#fbjs .htmlbody ul {
+  list-style: disc outside;
+  padding-left: 1.5rem;
+  margin: 0.25rem 0;
+}
+
+#fbjs .htmlbody ol {
+  list-style: decimal outside;
+  padding-left: 1.5rem;
+  margin: 0.25rem 0;
+}
+
+#fbjs .htmlbody li {
+  display: list-item;
+}
+
+/* Hide native up/down spinner buttons on number inputs in surveys.
+   They invite negative values via mouse-wheel/click and are rarely wanted
+   in survey contexts (contact info, quantities, IDs). */
+#fbjs input[type="number"]::-webkit-inner-spin-button,
+#fbjs input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#fbjs input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* without this, it wont override the color */
 #fbjs p.editor-paragraph {
   overflow-wrap: break-word;

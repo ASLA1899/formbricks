@@ -1367,9 +1367,9 @@ export const ZSurvey = z
             }
           });
 
-          // Validate custom field placeholders
+          // Validate custom field placeholders (placeholder is optional — skip if empty)
           (question.customFields ?? []).forEach((cf) => {
-            if (cf.show) {
+            if (cf.show && cf.placeholder?.["default"]?.trim()) {
               const multiLangIssue = validateQuestionLabels(
                 `Label for custom field ${cf.label}`,
                 cf.placeholder,
@@ -1844,9 +1844,9 @@ export const ZSurvey = z
               }
             });
 
-            // Validate custom field placeholders
+            // Validate custom field placeholders (placeholder is optional — skip if empty)
             (element.customFields ?? []).forEach((cf) => {
-              if (cf.show) {
+              if (cf.show && cf.placeholder?.["default"]?.trim()) {
                 const multiLangIssueInPlaceholder = validateElementLabels(
                   `Label for custom field ${cf.label}`,
                   cf.placeholder,
