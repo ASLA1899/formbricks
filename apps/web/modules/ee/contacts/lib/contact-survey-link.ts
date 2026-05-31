@@ -79,8 +79,11 @@ export const verifyContactSurveyToken = (
   }
 
   try {
-    // Verify the token
-    const decoded = jwt.verify(token, ENCRYPTION_KEY) as {
+    // Verify the token, pinning the algorithm to HS256 to match how it is
+    // signed (see getContactSurveyLink). Without this, jsonwebtoken accepts any
+    // of its secret-key defaults (HS256/HS384/HS512), allowing algorithm
+    // downgrade/confusion on attacker-supplied tokens.
+    const decoded = jwt.verify(token, ENCRYPTION_KEY, { algorithms: ["HS256"] }) as {
       contactId: string;
       surveyId: string;
     };

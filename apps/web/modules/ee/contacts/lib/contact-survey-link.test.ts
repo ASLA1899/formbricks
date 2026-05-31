@@ -197,8 +197,8 @@ describe("Contact Survey Link", () => {
     test("verifies and decrypts a valid token", () => {
       const result = contactSurveyLink.verifyContactSurveyToken(mockToken);
 
-      // Verify JWT verify was called
-      expect(jwt.verify).toHaveBeenCalledWith(mockToken, ENCRYPTION_KEY);
+      // Verify JWT verify was called with the algorithm pinned to HS256
+      expect(jwt.verify).toHaveBeenCalledWith(mockToken, ENCRYPTION_KEY, { algorithms: ["HS256"] });
 
       // Check the decrypted result
       expect(result).toEqual({
