@@ -190,6 +190,52 @@ ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
    cd /opt/formbricks && sudo docker compose up -d formbricks"
 ```
 
+### Rollback handles (`pre-<feature>-backup`)
+
+Before each deploy, **pre-tag the currently-running image** with a named handle so
+rollback doesn't depend on remembering the previous SHA (and works even if the
+prior image was never pushed to GHCR — the tag lives locally on the VM):
+
+```bash
+# Run BEFORE retagging :latest to the new image
+ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
+  "docker tag ghcr.io/asla1899/formbricks:latest ghcr.io/asla1899/formbricks:pre-<feature>-backup"
+```
+
+Roll back to a handle:
+
+```bash
+ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
+  "docker tag ghcr.io/asla1899/formbricks:pre-<feature>-backup ghcr.io/asla1899/formbricks:latest && \
+   cd /opt/formbricks && docker compose up -d --force-recreate formbricks"
+```
+
+**Current rollback handle:** `ghcr.io/asla1899/formbricks:pre-group-c-backup`
+= `sha-703f1b388` (digest `sha256:45c5b0f5c9d9…`), the image that ran before the
+Group C dependency deploy (`sha-848677502`, 2026-05-31). Stored locally on the VM.
+
+This rollback is **DB-safe with no restore step** when the deploy was
+migration-free (no `schema.prisma` change) — the old image expects exactly the
+schema that's already running. Confirm migration-free with
+`git diff <old-sha> <new-sha> -- packages/database/schema.prisma` (empty = safe).
+If the deploy DID change the schema, see "Database backups" below.
+
+### Database backups
+
+Migration-free deploys (dependency bumps, frontend-only changes) do **not** need a
+DB backup — the image rollback above is sufficient. For any deploy that changes
+`schema.prisma` or runs a data migration/cleanup, take a dump first (and as
+precautionary insurance any time you want it):
+
+```bash
+ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
+  "cd /opt/formbricks && docker compose exec -T postgres \
+     pg_dump -U formbricks -d formbricks | gzip > backups/pre-<feature>-\$(date -u +%Y%m%d-%H%M%S).sql.gz"
+```
+
+Restore: `zcat backups/<file>.sql.gz | docker compose exec -T postgres psql -U formbricks -d formbricks`.
+Backups live in `/opt/formbricks/backups/` as `pre-<feature>-<UTC-timestamp>.sql.gz`.
+
 **Clean up old images:**
 ```bash
 ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
