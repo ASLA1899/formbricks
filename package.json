@@ -81,13 +81,17 @@
   },
   "pnpm": {
     "overrides": {
-      "axios": ">=1.12.2",
-      "node-forge": ">=1.3.2",
+      "axios": ">=1.15.1",
+      "node-forge": ">=1.4.0",
+      "protobufjs": ">=7.5.5 <8.0.0",
+      "preact": ">=10.26.10",
+      "@xmldom/xmldom": ">=0.9.9",
+      "fast-uri": ">=3.1.1",
       "tar-fs": "2.1.4",
       "typeorm": ">=0.3.26"
     },
     "comments": {
-      "overrides": "Security fixes for transitive dependencies. Remove when upstream packages update: axios (CVE-2025-58754) - awaiting @boxyhq/saml-jackson update | node-forge (Dependabot #230) - awaiting @boxyhq/saml-jackson update | tar-fs (Dependabot #205) - awaiting upstream dependency updates | typeorm (Dependabot #223) - awaiting @boxyhq/saml-jackson update"
+      "overrides": "Security overrides for transitive dependencies. Remove each when upstream updates: axios (CVE-2025-58754), node-forge (Dependabot #230), typeorm (Dependabot #223) - awaiting @boxyhq/saml-jackson; tar-fs (Dependabot #205) - awaiting upstream; protobufjs/preact/@xmldom/xmldom/fast-uri - security advisories. NOTE: next is NOT overridden here - apps/web pins 15.5.16 directly (GHSA-36qx-fr4f-26g5); transitive next@16 left to resolve."
     },
     "patchedDependencies": {
       "next-auth@4.24.12": "patches/next-auth@4.24.12.patch"
