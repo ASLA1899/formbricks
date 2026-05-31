@@ -3,8 +3,8 @@ import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
 import type { TSurveyInvitationConfig } from "@formbricks/types/surveys/types";
 import { EMAIL_SEND_THROTTLE_MS } from "@/lib/constants";
-import { getContactSurveyLink } from "@/modules/ee/contacts/lib/contact-survey-link";
 import { sendSurveyInvitationEmail } from "@/modules/email";
+import { getContactSurveyLink } from "@/modules/survey/link/lib/contact-survey-link";
 import { sleep } from "./send-queue";
 import { renderSubject, renderTemplate } from "./template";
 
@@ -77,8 +77,7 @@ export async function sendManualReminders(args: {
       // Preserve undefined-vs-empty so the email template can distinguish
       // "use default" (undefined) from "no heading" ("").
       const headingTemplate = config.emailTemplates.reminder.headingText;
-      const heading =
-        headingTemplate === undefined ? undefined : renderTemplate(headingTemplate, vars);
+      const heading = headingTemplate === undefined ? undefined : renderTemplate(headingTemplate, vars);
 
       await sendSurveyInvitationEmail({
         to: inv.recipientEmail,

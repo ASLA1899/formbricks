@@ -12,8 +12,8 @@ import {
 } from "@/modules/api/v2/management/surveys/[surveyId]/contact-links/contacts/[contactId]/types/survey";
 import { calculateExpirationDate } from "@/modules/api/v2/management/surveys/[surveyId]/contact-links/lib/utils";
 import { ApiErrorResponseV2 } from "@/modules/api/v2/types/api-error";
-import { getContactSurveyLink } from "@/modules/ee/contacts/lib/contact-survey-link";
 import { hasPermission } from "@/modules/organization/settings/api-keys/lib/utils";
+import { getContactSurveyLink } from "@/modules/survey/link/lib/contact-survey-link";
 
 export const GET = async (request: Request, props: { params: Promise<TContactLinkParams> }) =>
   authenticatedApiClient({

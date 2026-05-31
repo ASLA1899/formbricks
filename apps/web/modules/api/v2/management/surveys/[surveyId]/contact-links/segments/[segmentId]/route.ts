@@ -10,9 +10,9 @@ import {
   ZContactLinksBySegmentQuery,
 } from "@/modules/api/v2/management/surveys/[surveyId]/contact-links/segments/[segmentId]/types/contact";
 import { ApiErrorResponseV2 } from "@/modules/api/v2/types/api-error";
-import { getContactSurveyLink } from "@/modules/ee/contacts/lib/contact-survey-link";
 import { getIsContactsEnabled } from "@/modules/ee/license-check/lib/utils";
 import { hasPermission } from "@/modules/organization/settings/api-keys/lib/utils";
+import { getContactSurveyLink } from "@/modules/survey/link/lib/contact-survey-link";
 
 export const GET = async (
   request: Request,

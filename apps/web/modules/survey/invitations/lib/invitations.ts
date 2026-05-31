@@ -5,8 +5,8 @@ import { logger } from "@formbricks/logger";
 import { type TSurveyInvitationConfig, ZSurveyInvitationConfig } from "@formbricks/types/surveys/types";
 import { EMAIL_SEND_CHUNK_SIZE, EMAIL_SEND_THROTTLE_MS } from "@/lib/constants";
 import { getOrganizationByEnvironmentId } from "@/lib/organization/service";
-import { getContactSurveyLink } from "@/modules/ee/contacts/lib/contact-survey-link";
 import { sendSurveyInvitationEmail } from "@/modules/email";
+import { getContactSurveyLink } from "@/modules/survey/link/lib/contact-survey-link";
 import type { TContactInvitationRow, TInvitationRow, TInvitationSummary } from "../types/invitation";
 import { type TAudienceMember, resolveAudience } from "./audience";
 import { sleep } from "./send-queue";
@@ -312,8 +312,7 @@ export async function runPendingInvitationSends(args: {
         // Preserve undefined-vs-empty so the email template can distinguish
         // "use default" (undefined) from "no heading" ("").
         const headingTemplate = config.emailTemplates.invitation.headingText;
-        const heading =
-          headingTemplate === undefined ? undefined : renderTemplate(headingTemplate, vars);
+        const heading = headingTemplate === undefined ? undefined : renderTemplate(headingTemplate, vars);
 
         await sendSurveyInvitationEmail({
           to: inv.recipientEmail,
