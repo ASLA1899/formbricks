@@ -61,6 +61,14 @@ export const SIGNUP_ENABLED = IS_FORMBRICKS_CLOUD || IS_DEVELOPMENT || E2E_TESTI
 export const EMAIL_AUTH_ENABLED = env.EMAIL_AUTH_DISABLED !== "1";
 export const INVITE_DISABLED = env.INVITE_DISABLED === "1";
 
+// Optional allowlist of email domains permitted to sign in / auto-provision via
+// SSO (e.g. "asla.org,aslafund.org"). Empty = no restriction. Lowercased and
+// trimmed; consumed by the Microsoft SSO callback handler.
+export const SSO_ALLOWED_EMAIL_DOMAINS = (env.AUTH_SSO_ALLOWED_EMAIL_DOMAINS ?? "")
+  .split(",")
+  .map((domain) => domain.trim().toLowerCase())
+  .filter(Boolean);
+
 export const SLACK_CLIENT_SECRET = env.SLACK_CLIENT_SECRET;
 export const SLACK_CLIENT_ID = env.SLACK_CLIENT_ID;
 export const SLACK_AUTH_URL = `https://slack.com/oauth/v2/authorize?client_id=${env.SLACK_CLIENT_ID}&scope=channels:read,chat:write,chat:write.public,chat:write.customize,groups:read`;
