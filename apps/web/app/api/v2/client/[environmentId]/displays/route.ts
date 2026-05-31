@@ -3,7 +3,6 @@ import { ResourceNotFoundError } from "@formbricks/types/errors";
 import { ZDisplayCreateInputV2 } from "@/app/api/v2/client/[environmentId]/displays/types/display";
 import { responses } from "@/app/lib/api/response";
 import { transformErrorToDetails } from "@/app/lib/api/validator";
-import { getIsContactsEnabled } from "@/modules/ee/license-check/lib/utils";
 import { createDisplay } from "./lib/display";
 
 interface Context {
@@ -38,12 +37,11 @@ export const POST = async (request: Request, context: Context): Promise<Response
     );
   }
 
-  if (inputValidation.data.contactId) {
-    const isContactsEnabled = await getIsContactsEnabled();
-    if (!isContactsEnabled) {
-      return responses.forbiddenResponse("User identification is only available for enterprise users.", true);
-    }
-  }
+  // ASLA fork: allow contactId without EE license — our /c/<jwt> invitation flow
+  // creates a display with contactId so responses link to a valid displayId.
+  // Upstream gates this behind EE Contacts (identical to the responses gate
+  // removed in 6f87f50c9); the 403 is swallowed by the surveys SDK, silently
+  // dropping every invitation display in our deployment.
 
   try {
     const response = await createDisplay(inputValidation.data);
