@@ -4,6 +4,7 @@ import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
 import type { TUser } from "@formbricks/types/user";
 import { createAccount } from "@/lib/account/service";
+import { SSO_ALLOWED_EMAIL_DOMAINS } from "@/lib/constants";
 import { createMembership } from "@/lib/membership/service";
 import { findMatchingLocale } from "@/lib/utils/locale";
 import { createBrevoCustomer } from "@/modules/auth/lib/brevo";
@@ -37,6 +38,20 @@ export const handleMicrosoftCallback = async ({
 }): Promise<boolean> => {
   if (!user.email || account.provider !== "azure-ad") {
     return false;
+  }
+
+  // Restrict Microsoft sign-in (and first-time auto-provisioning) to an
+  // allowlist of email domains when configured. The ASLA tenant contains
+  // external B2B guests whose emails are not @asla.org; gating on tenant
+  // membership alone would let them provision as owners. An empty allowlist
+  // (the default) imposes no restriction. Checked before any DB lookup.
+  const allowedDomains = SSO_ALLOWED_EMAIL_DOMAINS ?? [];
+  if (allowedDomains.length > 0) {
+    const domain = user.email.split("@")[1]?.toLowerCase() ?? "";
+    if (!allowedDomains.includes(domain)) {
+      logger.warn({ domain }, "Microsoft sign-in rejected: email domain not in allowlist");
+      throw new Error("Your email domain is not permitted to sign in.");
+    }
   }
 
   const existingUserByProvider = await prisma.user.findFirst({

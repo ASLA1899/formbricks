@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "@formbricks/database";
 import { createAccount } from "@/lib/account/service";
 import { createMembership } from "@/lib/membership/service";
@@ -41,6 +41,15 @@ vi.mock("@/lib/utils/locale", () => ({
 vi.mock("@/modules/auth/lib/brevo", () => ({
   createBrevoCustomer: vi.fn(),
 }));
+
+// Shared, mutable allowlist so individual tests can populate it. The handler
+// reads the same array reference, so mutating its contents (push / length = 0)
+// is visible without reassigning the live binding.
+const { constantsMock } = vi.hoisted(() => ({
+  constantsMock: { SSO_ALLOWED_EMAIL_DOMAINS: [] as string[] },
+}));
+
+vi.mock("@/lib/constants", () => constantsMock);
 
 describe("handleMicrosoftCallback", () => {
   const account = {
@@ -200,5 +209,82 @@ describe("handleMicrosoftCallback", () => {
     await handleMicrosoftCallback({ user: { ...mockUser, name: ",,," } as any, account });
 
     expect(createUser).toHaveBeenCalledWith(expect.objectContaining({ name: mockUser.email.split("@")[0] }));
+  });
+
+  describe("email domain allowlist (SSO_ALLOWED_EMAIL_DOMAINS)", () => {
+    afterEach(() => {
+      constantsMock.SSO_ALLOWED_EMAIL_DOMAINS.length = 0;
+    });
+
+    const newUserMocks = (email: string) => {
+      vi.mocked(prisma.user.findFirst).mockResolvedValueOnce(null);
+      vi.mocked(getUserByEmail).mockResolvedValueOnce(null);
+      vi.mocked(createUser).mockResolvedValueOnce({ id: "new-user-id", email } as any);
+      vi.mocked(prisma.organization.findFirst).mockResolvedValueOnce({ id: "org-1" } as any);
+    };
+
+    test("rejects sign-in when the email domain is not in the allowlist", async () => {
+      constantsMock.SSO_ALLOWED_EMAIL_DOMAINS.push("asla.org", "aslafund.org");
+
+      await expect(
+        handleMicrosoftCallback({ user: { ...mockUser, email: "guest@example.com" }, account })
+      ).rejects.toThrow("not permitted");
+
+      // Rejected before any DB lookup or provisioning.
+      expect(prisma.user.findFirst).not.toHaveBeenCalled();
+      expect(getUserByEmail).not.toHaveBeenCalled();
+      expect(createUser).not.toHaveBeenCalled();
+      expect(createMembership).not.toHaveBeenCalled();
+    });
+
+    test("allows an asla.org address when the allowlist is configured", async () => {
+      constantsMock.SSO_ALLOWED_EMAIL_DOMAINS.push("asla.org", "aslafund.org");
+      newUserMocks("greg@asla.org");
+
+      const result = await handleMicrosoftCallback({
+        user: { ...mockUser, email: "greg@asla.org" },
+        account,
+      });
+
+      expect(result).toBe(true);
+      expect(createUser).toHaveBeenCalledWith(expect.objectContaining({ email: "greg@asla.org" }));
+    });
+
+    test("allows an aslafund.org address when the allowlist is configured", async () => {
+      constantsMock.SSO_ALLOWED_EMAIL_DOMAINS.push("asla.org", "aslafund.org");
+      newUserMocks("staff@aslafund.org");
+
+      const result = await handleMicrosoftCallback({
+        user: { ...mockUser, email: "staff@aslafund.org" },
+        account,
+      });
+
+      expect(result).toBe(true);
+    });
+
+    test("matches the allowlist case-insensitively", async () => {
+      constantsMock.SSO_ALLOWED_EMAIL_DOMAINS.push("asla.org");
+      newUserMocks("Greg@ASLA.ORG");
+
+      const result = await handleMicrosoftCallback({
+        user: { ...mockUser, email: "Greg@ASLA.ORG" },
+        account,
+      });
+
+      expect(result).toBe(true);
+    });
+
+    test("imposes no domain restriction when the allowlist is empty", async () => {
+      // allowlist intentionally left empty
+      newUserMocks("anyone@anywhere.com");
+
+      const result = await handleMicrosoftCallback({
+        user: { ...mockUser, email: "anyone@anywhere.com" },
+        account,
+      });
+
+      expect(result).toBe(true);
+      expect(createUser).toHaveBeenCalled();
+    });
   });
 });

@@ -11,6 +11,7 @@ import {
   AZUREAD_TENANT_ID,
   AZURE_OAUTH_ENABLED,
   CONTROL_HASH,
+  EMAIL_AUTH_ENABLED,
   EMAIL_VERIFICATION_DISABLED,
   ENCRYPTION_KEY,
   ENTERPRISE_LICENSE_KEY,
@@ -38,204 +39,236 @@ import { createBrevoCustomer } from "./brevo";
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    CredentialsProvider({
-      id: "credentials",
-      // The name to display on the sign in form (e.g. "Sign in with...")
-      name: "Credentials",
-      // The credentials is used to generate a suitable form on the sign in page.
-      // You can specify whatever fields you are expecting to be submitted.
-      // e.g. domain, username, password, 2FA token, etc.
-      // You can pass any HTML attribute to the <input> tag through the object.
-      credentials: {
-        email: {
-          label: "Email Address",
-          type: "email",
-          placeholder: "Your email address",
-        },
-        password: {
-          label: "Password",
-          type: "password",
-          placeholder: "Your password",
-        },
-        totpCode: { label: "Two-factor Code", type: "input", placeholder: "Code from authenticator app" },
-        backupCode: { label: "Backup Code", type: "input", placeholder: "Two-factor backup code" },
-      },
-      async authorize(credentials, _req) {
-        await applyIPRateLimit(rateLimitConfigs.auth.login);
-
-        // Use email for rate limiting when available, fall back to "unknown_user" for credential validation
-        const identifier = credentials?.email || "unknown_user"; // NOSONAR // We want to check for empty strings
-
-        if (!credentials) {
-          if (await shouldLogAuthFailure("no_credentials")) {
-            logAuthAttempt("no_credentials_provided", "credentials", "credentials_validation");
-          }
-          throw new Error("Invalid credentials");
-        }
-
-        // Validate password length to prevent CPU DoS attacks
-        // bcrypt processes passwords up to 72 bytes, but we limit to 128 characters for security
-        if (credentials.password && credentials.password.length > 128) {
-          if (await shouldLogAuthFailure(identifier)) {
-            logAuthAttempt(
-              "password_too_long",
-              "credentials",
-              "password_validation",
-              UNKNOWN_DATA,
-              credentials?.email
-            );
-          }
-          throw new Error("Invalid credentials");
-        }
-
-        let user;
-        try {
-          // Perform database lookup
-          user = await prisma.user.findUnique({
-            where: {
-              email: credentials?.email,
+    // Email/password login is opt-out via EMAIL_AUTH_DISABLED=1. Gating the
+    // provider here (not only the login UI) makes the flag a real backend
+    // switch — otherwise /api/auth/callback/credentials stays live.
+    ...(EMAIL_AUTH_ENABLED
+      ? [
+          CredentialsProvider({
+            id: "credentials",
+            // The name to display on the sign in form (e.g. "Sign in with...")
+            name: "Credentials",
+            // The credentials is used to generate a suitable form on the sign in page.
+            // You can specify whatever fields you are expecting to be submitted.
+            // e.g. domain, username, password, 2FA token, etc.
+            // You can pass any HTML attribute to the <input> tag through the object.
+            credentials: {
+              email: {
+                label: "Email Address",
+                type: "email",
+                placeholder: "Your email address",
+              },
+              password: {
+                label: "Password",
+                type: "password",
+                placeholder: "Your password",
+              },
+              totpCode: {
+                label: "Two-factor Code",
+                type: "input",
+                placeholder: "Code from authenticator app",
+              },
+              backupCode: { label: "Backup Code", type: "input", placeholder: "Two-factor backup code" },
             },
-          });
-        } catch (e) {
-          logger.error(e, "Error in CredentialsProvider authorize");
-          logAuthAttempt("database_error", "credentials", "user_lookup", UNKNOWN_DATA, credentials?.email);
-          throw Error("Internal server error. Please try again later");
-        }
+            async authorize(credentials, _req) {
+              await applyIPRateLimit(rateLimitConfigs.auth.login);
 
-        // Always perform password verification to maintain constant timing. This is important to prevent timing attacks for user enumeration.
-        // Use actual hash if user exists, control hash if user doesn't exist
-        const hashToVerify = user?.password || CONTROL_HASH;
-        const isValid = await verifyPassword(credentials.password, hashToVerify);
+              // Use email for rate limiting when available, fall back to "unknown_user" for credential validation
+              const identifier = credentials?.email || "unknown_user"; // NOSONAR // We want to check for empty strings
 
-        // Now check all conditions after constant-time operations are complete
-        if (!user) {
-          if (await shouldLogAuthFailure(identifier)) {
-            logAuthAttempt("user_not_found", "credentials", "user_lookup", UNKNOWN_DATA, credentials?.email);
-          }
-          throw new Error("Invalid credentials");
-        }
+              if (!credentials) {
+                if (await shouldLogAuthFailure("no_credentials")) {
+                  logAuthAttempt("no_credentials_provided", "credentials", "credentials_validation");
+                }
+                throw new Error("Invalid credentials");
+              }
 
-        if (!user.password) {
-          logAuthAttempt("no_password_set", "credentials", "password_validation", user.id, user.email);
-          throw new Error("User has no password stored");
-        }
+              // Validate password length to prevent CPU DoS attacks
+              // bcrypt processes passwords up to 72 bytes, but we limit to 128 characters for security
+              if (credentials.password && credentials.password.length > 128) {
+                if (await shouldLogAuthFailure(identifier)) {
+                  logAuthAttempt(
+                    "password_too_long",
+                    "credentials",
+                    "password_validation",
+                    UNKNOWN_DATA,
+                    credentials?.email
+                  );
+                }
+                throw new Error("Invalid credentials");
+              }
 
-        if (user.isActive === false) {
-          logAuthAttempt("account_inactive", "credentials", "account_status", user.id, user.email);
-          throw new Error("Your account is currently inactive. Please contact the organization admin.");
-        }
+              let user;
+              try {
+                // Perform database lookup
+                user = await prisma.user.findUnique({
+                  where: {
+                    email: credentials?.email,
+                  },
+                });
+              } catch (e) {
+                logger.error(e, "Error in CredentialsProvider authorize");
+                logAuthAttempt(
+                  "database_error",
+                  "credentials",
+                  "user_lookup",
+                  UNKNOWN_DATA,
+                  credentials?.email
+                );
+                throw Error("Internal server error. Please try again later");
+              }
 
-        if (!isValid) {
-          if (await shouldLogAuthFailure(user.email)) {
-            logAuthAttempt("invalid_password", "credentials", "password_validation", user.id, user.email);
-          }
-          throw new Error("Invalid credentials");
-        }
+              // Always perform password verification to maintain constant timing. This is important to prevent timing attacks for user enumeration.
+              // Use actual hash if user exists, control hash if user doesn't exist
+              const hashToVerify = user?.password || CONTROL_HASH;
+              const isValid = await verifyPassword(credentials.password, hashToVerify);
 
-        logAuthSuccess("passwordVerified", "credentials", "password_validation", user.id, user.email, {
-          requires2FA: user.twoFactorEnabled,
-        });
+              // Now check all conditions after constant-time operations are complete
+              if (!user) {
+                if (await shouldLogAuthFailure(identifier)) {
+                  logAuthAttempt(
+                    "user_not_found",
+                    "credentials",
+                    "user_lookup",
+                    UNKNOWN_DATA,
+                    credentials?.email
+                  );
+                }
+                throw new Error("Invalid credentials");
+              }
 
-        if (user.twoFactorEnabled && credentials.backupCode) {
-          if (!ENCRYPTION_KEY) {
-            logger.error("Missing encryption key; cannot proceed with backup code login.");
-            logTwoFactorAttempt(false, "backup_code", user.id, user.email, "encryption_key_missing");
-            throw new Error("Internal Server Error");
-          }
+              if (!user.password) {
+                logAuthAttempt("no_password_set", "credentials", "password_validation", user.id, user.email);
+                throw new Error("User has no password stored");
+              }
 
-          if (!user.backupCodes) {
-            logTwoFactorAttempt(false, "backup_code", user.id, user.email, "no_backup_codes");
-            throw new Error("No backup codes found");
-          }
+              if (user.isActive === false) {
+                logAuthAttempt("account_inactive", "credentials", "account_status", user.id, user.email);
+                throw new Error("Your account is currently inactive. Please contact the organization admin.");
+              }
 
-          let backupCodes;
+              if (!isValid) {
+                if (await shouldLogAuthFailure(user.email)) {
+                  logAuthAttempt(
+                    "invalid_password",
+                    "credentials",
+                    "password_validation",
+                    user.id,
+                    user.email
+                  );
+                }
+                throw new Error("Invalid credentials");
+              }
 
-          try {
-            backupCodes = JSON.parse(symmetricDecrypt(user.backupCodes, ENCRYPTION_KEY));
-          } catch (e) {
-            logger.error(e, "Error in CredentialsProvider authorize");
-            logTwoFactorAttempt(false, "backup_code", user.id, user.email, "invalid_backup_codes");
-            throw new Error("Invalid backup codes");
-          }
+              logAuthSuccess("passwordVerified", "credentials", "password_validation", user.id, user.email, {
+                requires2FA: user.twoFactorEnabled,
+              });
 
-          // check if user-supplied code matches one
-          const index = backupCodes.indexOf(credentials.backupCode.replaceAll("-", ""));
-          if (index === -1) {
-            if (await shouldLogAuthFailure(user.email)) {
-              logTwoFactorAttempt(false, "backup_code", user.id, user.email, "invalid_backup_code");
-            }
-            throw new Error("Invalid backup code");
-          }
+              if (user.twoFactorEnabled && credentials.backupCode) {
+                if (!ENCRYPTION_KEY) {
+                  logger.error("Missing encryption key; cannot proceed with backup code login.");
+                  logTwoFactorAttempt(false, "backup_code", user.id, user.email, "encryption_key_missing");
+                  throw new Error("Internal Server Error");
+                }
 
-          // delete verified backup code and re-encrypt remaining
-          backupCodes[index] = null;
-          await prisma.user.update({
-            where: {
-              id: user.id,
+                if (!user.backupCodes) {
+                  logTwoFactorAttempt(false, "backup_code", user.id, user.email, "no_backup_codes");
+                  throw new Error("No backup codes found");
+                }
+
+                let backupCodes;
+
+                try {
+                  backupCodes = JSON.parse(symmetricDecrypt(user.backupCodes, ENCRYPTION_KEY));
+                } catch (e) {
+                  logger.error(e, "Error in CredentialsProvider authorize");
+                  logTwoFactorAttempt(false, "backup_code", user.id, user.email, "invalid_backup_codes");
+                  throw new Error("Invalid backup codes");
+                }
+
+                // check if user-supplied code matches one
+                const index = backupCodes.indexOf(credentials.backupCode.replaceAll("-", ""));
+                if (index === -1) {
+                  if (await shouldLogAuthFailure(user.email)) {
+                    logTwoFactorAttempt(false, "backup_code", user.id, user.email, "invalid_backup_code");
+                  }
+                  throw new Error("Invalid backup code");
+                }
+
+                // delete verified backup code and re-encrypt remaining
+                backupCodes[index] = null;
+                await prisma.user.update({
+                  where: {
+                    id: user.id,
+                  },
+                  data: {
+                    backupCodes: symmetricEncrypt(JSON.stringify(backupCodes), ENCRYPTION_KEY),
+                  },
+                });
+
+                logTwoFactorAttempt(true, "backup_code", user.id, user.email, undefined, {
+                  backupCodeConsumed: true,
+                });
+              } else if (user.twoFactorEnabled) {
+                if (!credentials.totpCode) {
+                  logAuthEvent("twoFactorRequired", "success", user.id, user.email, {
+                    provider: "credentials",
+                    authMethod: "password_validation",
+                    requiresTOTP: true,
+                  });
+                  throw new Error("second factor required");
+                }
+
+                if (!user.twoFactorSecret) {
+                  logTwoFactorAttempt(false, "totp", user.id, user.email, "no_2fa_secret");
+                  throw new Error("Internal Server Error");
+                }
+
+                if (!ENCRYPTION_KEY) {
+                  logTwoFactorAttempt(false, "totp", user.id, user.email, "encryption_key_missing");
+                  throw new Error("Internal Server Error");
+                }
+
+                const secret = symmetricDecrypt(user.twoFactorSecret, ENCRYPTION_KEY);
+                if (secret.length !== 32) {
+                  logTwoFactorAttempt(false, "totp", user.id, user.email, "invalid_2fa_secret");
+                  throw new Error("Invalid two factor secret");
+                }
+
+                const isValidToken = (await import("./totp")).totpAuthenticatorCheck(
+                  credentials.totpCode,
+                  secret
+                );
+                if (!isValidToken) {
+                  if (await shouldLogAuthFailure(user.email)) {
+                    logTwoFactorAttempt(false, "totp", user.id, user.email, "invalid_totp_code");
+                  }
+                  throw new Error("Invalid two factor code");
+                }
+
+                logTwoFactorAttempt(true, "totp", user.id, user.email);
+              }
+
+              let authMethod;
+              if (!user.twoFactorEnabled) {
+                authMethod = "password_only";
+              } else if (credentials.backupCode) {
+                authMethod = "password_and_backup_code";
+              } else {
+                authMethod = "password_and_totp";
+              }
+
+              logAuthSuccess("authenticationSucceeded", "credentials", authMethod, user.id, user.email);
+
+              return {
+                id: user.id,
+                email: user.email,
+                emailVerified: user.emailVerified,
+              };
             },
-            data: {
-              backupCodes: symmetricEncrypt(JSON.stringify(backupCodes), ENCRYPTION_KEY),
-            },
-          });
-
-          logTwoFactorAttempt(true, "backup_code", user.id, user.email, undefined, {
-            backupCodeConsumed: true,
-          });
-        } else if (user.twoFactorEnabled) {
-          if (!credentials.totpCode) {
-            logAuthEvent("twoFactorRequired", "success", user.id, user.email, {
-              provider: "credentials",
-              authMethod: "password_validation",
-              requiresTOTP: true,
-            });
-            throw new Error("second factor required");
-          }
-
-          if (!user.twoFactorSecret) {
-            logTwoFactorAttempt(false, "totp", user.id, user.email, "no_2fa_secret");
-            throw new Error("Internal Server Error");
-          }
-
-          if (!ENCRYPTION_KEY) {
-            logTwoFactorAttempt(false, "totp", user.id, user.email, "encryption_key_missing");
-            throw new Error("Internal Server Error");
-          }
-
-          const secret = symmetricDecrypt(user.twoFactorSecret, ENCRYPTION_KEY);
-          if (secret.length !== 32) {
-            logTwoFactorAttempt(false, "totp", user.id, user.email, "invalid_2fa_secret");
-            throw new Error("Invalid two factor secret");
-          }
-
-          const isValidToken = (await import("./totp")).totpAuthenticatorCheck(credentials.totpCode, secret);
-          if (!isValidToken) {
-            if (await shouldLogAuthFailure(user.email)) {
-              logTwoFactorAttempt(false, "totp", user.id, user.email, "invalid_totp_code");
-            }
-            throw new Error("Invalid two factor code");
-          }
-
-          logTwoFactorAttempt(true, "totp", user.id, user.email);
-        }
-
-        let authMethod;
-        if (!user.twoFactorEnabled) {
-          authMethod = "password_only";
-        } else if (credentials.backupCode) {
-          authMethod = "password_and_backup_code";
-        } else {
-          authMethod = "password_and_totp";
-        }
-
-        logAuthSuccess("authenticationSucceeded", "credentials", authMethod, user.id, user.email);
-
-        return {
-          id: user.id,
-          email: user.email,
-          emailVerified: user.emailVerified,
-        };
-      },
-    }),
+          }),
+        ]
+      : []),
     CredentialsProvider({
       id: "token",
       // The name to display on the sign in form (e.g. "Sign in with...")

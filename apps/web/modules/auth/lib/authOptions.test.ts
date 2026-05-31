@@ -33,23 +33,28 @@ vi.mock("@/modules/core/rate-limit/rate-limit-configs", () => ({
   },
 }));
 
-// Mock constants that this test needs
-vi.mock("@/lib/constants", () => ({
-  EMAIL_VERIFICATION_DISABLED: false,
-  SESSION_MAX_AGE: 86400,
-  NEXTAUTH_SECRET: "test-secret",
-  WEBAPP_URL: "http://localhost:3000",
-  ENCRYPTION_KEY: "12345678901234567890123456789012", // 32 bytes for AES-256
-  REDIS_URL: undefined,
-  AUDIT_LOG_ENABLED: false,
-  AUDIT_LOG_GET_USER_IP: false,
-  ENTERPRISE_LICENSE_KEY: undefined,
-  SENTRY_DSN: undefined,
-  BREVO_API_KEY: undefined,
-  RATE_LIMITING_DISABLED: false,
-  CONTROL_HASH: "$2b$12$fzHf9le13Ss9UJ04xzmsjODXpFJxz6vsnupoepF5FiqDECkX2BH5q",
-  AZURE_OAUTH_ENABLED: false,
+// Mock constants that this test needs. Hoisted so the EMAIL_AUTH_ENABLED gating
+// tests below can re-mock the module (with a different flag) on re-import.
+const { constantsMock } = vi.hoisted(() => ({
+  constantsMock: {
+    EMAIL_VERIFICATION_DISABLED: false,
+    SESSION_MAX_AGE: 86400,
+    NEXTAUTH_SECRET: "test-secret",
+    WEBAPP_URL: "http://localhost:3000",
+    ENCRYPTION_KEY: "12345678901234567890123456789012", // 32 bytes for AES-256
+    REDIS_URL: undefined,
+    AUDIT_LOG_ENABLED: false,
+    AUDIT_LOG_GET_USER_IP: false,
+    ENTERPRISE_LICENSE_KEY: undefined,
+    SENTRY_DSN: undefined,
+    BREVO_API_KEY: undefined,
+    RATE_LIMITING_DISABLED: false,
+    CONTROL_HASH: "$2b$12$fzHf9le13Ss9UJ04xzmsjODXpFJxz6vsnupoepF5FiqDECkX2BH5q",
+    AZURE_OAUTH_ENABLED: false,
+    EMAIL_AUTH_ENABLED: true,
+  },
 }));
+vi.mock("@/lib/constants", () => constantsMock);
 
 // Mock next/headers
 vi.mock("next/headers", () => ({
@@ -94,6 +99,34 @@ function getProviderById(id: string): Provider {
   }
   return provider;
 }
+
+describe("credentials provider gating via EMAIL_AUTH_ENABLED", () => {
+  afterEach(() => {
+    vi.doUnmock("@/lib/constants");
+    vi.resetModules();
+  });
+
+  test("registers the email/password credentials provider when EMAIL_AUTH_ENABLED is true", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/constants", () => ({ ...constantsMock, EMAIL_AUTH_ENABLED: true }));
+    const { authOptions: opts } = await import("./authOptions");
+    expect(opts.providers.find((p) => p.options.id === "credentials")).toBeDefined();
+  });
+
+  test("omits the email/password credentials provider when EMAIL_AUTH_ENABLED is false", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/constants", () => ({ ...constantsMock, EMAIL_AUTH_ENABLED: false }));
+    const { authOptions: opts } = await import("./authOptions");
+    expect(opts.providers.find((p) => p.options.id === "credentials")).toBeUndefined();
+  });
+
+  test("always keeps the token (email-verification) provider regardless of EMAIL_AUTH_ENABLED", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/constants", () => ({ ...constantsMock, EMAIL_AUTH_ENABLED: false }));
+    const { authOptions: opts } = await import("./authOptions");
+    expect(opts.providers.find((p) => p.options.id === "token")).toBeDefined();
+  });
+});
 
 describe("authOptions", () => {
   afterEach(() => {
