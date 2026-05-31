@@ -139,9 +139,18 @@ export const testEndpoint = async (url: string): Promise<boolean> => {
         "Content-Type": "application/json",
       },
       signal: controller.signal,
+      // `redirect: "manual"` prevents SSRF via redirect — validateWebhookUrl only checks the
+      // initial URL, so following a 30x to a private/internal host (e.g. cloud metadata) would
+      // bypass it. With manual redirect, Node's undici returns the actual 30x response, which we
+      // reject below instead of following.
+      redirect: "manual",
     });
     clearTimeout(timeout);
     const statusCode = response.status;
+
+    if (statusCode >= 300 && statusCode < 400) {
+      throw new InvalidInputError("Webhook endpoint returned a redirect, which is not allowed");
+    }
 
     if (statusCode >= 200 && statusCode < 300) {
       return true;
@@ -155,7 +164,7 @@ export const testEndpoint = async (url: string): Promise<boolean> => {
     if (error.name === "AbortError") {
       throw new UnknownError("Request timed out after 5 seconds");
     }
-    if (error instanceof UnknownError) {
+    if (error instanceof UnknownError || error instanceof InvalidInputError) {
       throw error;
     }
 
