@@ -57,11 +57,22 @@ git pull
 
 The script logs into GHCR, runs `docker buildx build --platform linux/amd64 --push`, and tags the image as both `ghcr.io/asla1899/formbricks:latest` and `ghcr.io/asla1899/formbricks:sha-<short>` for rollback.
 
-**Build time:** ~15-20 minutes on M-series Mac (build + push)
+**Build time:** ~15-20 minutes on M-series Mac (build + push) — **with Rosetta enabled** (see below).
+
+**Builder requirement — colima with Rosetta (M-series Macs):** The image targets `linux/amd64`, which on Apple Silicon runs under emulation. The colima builder **must** use Rosetta, not QEMU. With QEMU, the emulated `next build` OOM-kills colima's docker daemon mid-build (~90 min in, failing with `ERROR: failed to build: ... rpc error: code = Unavailable ... EOF`). Enable + persist it once (the flags are saved to colima's config):
+
+```bash
+colima stop && colima start --vz-rosetta --memory 24   # 24 GiB on a 48 GB Mac
+# verify in the VM: colima ssh -- sh -c 'cat /proc/sys/fs/binfmt_misc/rosetta'  -> "enabled"
+#                   (and qemu-x86_64 -> "disabled")
+```
+
+With Rosetta the build completes in the ~15-20 min range; without it, expect a ~90-min failure.
 
 **Troubleshooting:**
 - If build fails with TypeScript errors, rebase on upstream
 - Sentry auth errors are non-fatal (source maps won't upload but build completes)
+- Builder dropped mid-build (`rpc error: code = Unavailable ... EOF`) → colima OOM. Ensure Rosetta is on and `--memory` ≥ ~20 GiB (above), then re-run — the buildkit cache survives a `colima stop`/`start`, so install layers stay warm.
 - For a fresh build without cache, set `DOCKER_BUILDKIT_NO_CACHE=1` before running the script, or temporarily add `--no-cache` to the `docker buildx build` line in `scripts/build-and-push.sh`
 
 ### Step 2: Deploy on the VM
@@ -210,9 +221,10 @@ ssh -i ~/.ssh/id_ed25519_workgh -p 2222 gregcohen@20.185.219.8 \
    cd /opt/formbricks && docker compose up -d --force-recreate formbricks"
 ```
 
-**Current rollback handle:** `ghcr.io/asla1899/formbricks:pre-group-c-backup`
-= `sha-703f1b388` (digest `sha256:45c5b0f5c9d9…`), the image that ran before the
-Group C dependency deploy (`sha-848677502`, 2026-05-31). Stored locally on the VM.
+**Current rollback handle:** `ghcr.io/asla1899/formbricks:pre-ee-compliance-backup`
+= `sha-fafb9b450` (local image `610f3c8fd7f5`), the image that ran before the
+EE-compliance deploy (`sha-5c6130baa`, digest `sha256:3197bd08…`, 2026-06-01).
+Stored locally on the VM.
 
 This rollback is **DB-safe with no restore step** when the deploy was
 migration-free (no `schema.prisma` change) — the old image expects exactly the
