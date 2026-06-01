@@ -45,6 +45,12 @@ yarn-error.log*
 /PHASE_1A_CONTACT_MIRROR_RUNBOOK.md
 /securitybackportfinal.tar.gz
 .beads/
+# internal ops runbooks (not AGPL source — keep local)
+/SURVEY_ACL_RUNBOOK.md
+/DEPLOYMENT_GUIDE.md
+/AZURE_SSO_SETUP.md
+/SCHEDULE_WINDOW_RUNBOOK.md
+/ENV_SETUP_GUIDE.md
 
 # build tools
 .turbo
