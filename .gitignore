@@ -52,6 +52,8 @@ yarn-error.log*
 /SCHEDULE_WINDOW_RUNBOOK.md
 /ENV_SETUP_GUIDE.md
 /DEPLOYMENT_SAVED_OPTION_LISTS.md
+# internal superpowers planning/design artifacts (not AGPL source)
+/docs/superpowers/
 
 # build tools
 .turbo
