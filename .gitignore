@@ -39,6 +39,13 @@ yarn-error.log*
 !packages/database/.env
 !apps/web/.env
 
+# ASLA local-only working docs (not for the public fork)
+/FORK_DIVERGENCE.md
+/CLAUDE.md
+/PHASE_1A_CONTACT_MIRROR_RUNBOOK.md
+/securitybackportfinal.tar.gz
+.beads/
+
 # build tools
 .turbo
 **/*vite.config.*.timestamp-*
