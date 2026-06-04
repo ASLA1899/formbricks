@@ -149,7 +149,7 @@ export const FaviconCustomizationSettings = ({
 
   const buttons: [ModalButton, ModalButton] = [
     {
-      text: t("common.start_free_trial"),
+      text: t("common.upgrade_plan"),
       href: `/environments/${environmentId}/settings/billing`,
     },
     {
@@ -177,9 +177,11 @@ export const FaviconCustomizationSettings = ({
               id="favicon-input"
               allowedFileExtensions={allowedFileExtensions}
               environmentId={environmentId}
-              onFileUpload={(files: string[]) => {
-                setFaviconUrl(files[0]);
-                setIsEditing(true);
+              onFileUpload={(files: string[] | undefined, _fileType: "image" | "video") => {
+                if (files?.[0]) {
+                  setFaviconUrl(files[0]);
+                  setIsEditing(true);
+                }
               }}
               disabled={isReadOnly}
               maxSizeInMB={MAX_FAVICON_SIZE_MB}
@@ -239,6 +241,7 @@ export const FaviconCustomizationSettings = ({
           title={t("environments.settings.domain.customize_favicon_with_higher_plan")}
           description={t("environments.settings.domain.customize_favicon_description")}
           buttons={buttons}
+          feature="favicon_customization"
         />
       )}
     </SettingsCard>

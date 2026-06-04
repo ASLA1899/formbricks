@@ -122,7 +122,7 @@ function ScheduleRow({
 
 interface ResponseOptionsCardProps {
   localSurvey: TSurvey;
-  setLocalSurvey: (survey: TSurvey | ((TSurvey) => TSurvey)) => void;
+  setLocalSurvey: (survey: TSurvey | ((prev: TSurvey) => TSurvey)) => void;
   responseCount: number;
   isSpamProtectionAllowed: boolean;
 }
@@ -139,9 +139,10 @@ export const ResponseOptionsCard = ({
   const [surveyClosedMessageToggle, setSurveyClosedMessageToggle] = useState(false);
   const [verifyEmailToggle, setVerifyEmailToggle] = useState(localSurvey.isVerifyEmailEnabled);
   const [recaptchaToggle, setRecaptchaToggle] = useState(localSurvey.recaptcha?.enabled ?? false);
-  const [isSingleResponsePerEmailEnabledToggle, setIsSingleResponsePerEmailToggle] = useState(
+  const [singleResponsePerEmailToggle, setSingleResponsePerEmailToggle] = useState(
     localSurvey.isSingleResponsePerEmailEnabled
   );
+  const [captureIpToggle, setCaptureIpToggle] = useState(localSurvey.isCaptureIpEnabled);
 
   const [surveyClosedMessage, setSurveyClosedMessage] = useState({
     heading: t("environments.surveys.edit.survey_completed_heading"),
@@ -200,12 +201,12 @@ export const ResponseOptionsCard = ({
       isVerifyEmailEnabled: next,
       isSingleResponsePerEmailEnabled: next ? localSurvey.isSingleResponsePerEmailEnabled : false,
     });
-    if (!next) setIsSingleResponsePerEmailToggle(false);
+    if (!next) setSingleResponsePerEmailToggle(false);
   };
 
   const handleLimitOneResponsePerPersonToggle = () => {
-    const next = !isSingleResponsePerEmailEnabledToggle;
-    setIsSingleResponsePerEmailToggle(next);
+    const next = !singleResponsePerEmailToggle;
+    setSingleResponsePerEmailToggle(next);
     // Dedupe implies verification: flip both on together; flipping off leaves verification alone.
     setLocalSurvey({
       ...localSurvey,
@@ -235,6 +236,11 @@ export const ResponseOptionsCard = ({
     setLocalSurvey({ ...localSurvey, isBackButtonHidden: !localSurvey.isBackButtonHidden });
   };
 
+  const handleCaptureIpToggle = () => {
+    setCaptureIpToggle(!captureIpToggle);
+    setLocalSurvey({ ...localSurvey, isCaptureIpEnabled: !localSurvey.isCaptureIpEnabled });
+  };
+
   useEffect(() => {
     if (!!localSurvey.surveyClosedMessage) {
       setSurveyClosedMessage({
@@ -255,7 +261,7 @@ export const ResponseOptionsCard = ({
     }
   };
 
-  const handleInputResponse = (e) => {
+  const handleInputResponse = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = parseInt(e.target.value);
     if (Number.isNaN(value) || value < 1) {
       value = 1;
@@ -265,7 +271,7 @@ export const ResponseOptionsCard = ({
     setLocalSurvey(updatedSurvey);
   };
 
-  const handleInputResponseBlur = (e) => {
+  const handleInputResponseBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     if (parseInt(e.target.value) === 0) {
       toast.error(t("environments.surveys.edit.response_limit_can_t_be_set_to_0"));
       return;
@@ -325,10 +331,15 @@ export const ResponseOptionsCard = ({
 
   const handleThresholdChange = (value: number) => {
     setRecaptchaThreshold(value);
-    setLocalSurvey((prevSurvey) => ({
-      ...prevSurvey,
-      recaptcha: { ...prevSurvey.recaptcha, threshold: value },
-    }));
+    setLocalSurvey(
+      (prevSurvey: TSurvey): TSurvey => ({
+        ...prevSurvey,
+        recaptcha: {
+          enabled: prevSurvey.recaptcha?.enabled ?? false,
+          threshold: value,
+        },
+      })
+    );
   };
 
   return (
@@ -528,7 +539,7 @@ export const ResponseOptionsCard = ({
               {/* Limit One Response Per Person (was nested; promoted to top-level so it's discoverable) */}
               <AdvancedOptionToggle
                 htmlId="limitOneResponsePerPerson"
-                isChecked={isSingleResponsePerEmailEnabledToggle}
+                isChecked={singleResponsePerEmailToggle}
                 onToggle={handleLimitOneResponsePerPersonToggle}
                 title={t("environments.surveys.edit.limit_one_response_per_person")}
                 description={t("environments.surveys.edit.limit_one_response_per_person_description")}
@@ -597,6 +608,13 @@ export const ResponseOptionsCard = ({
                 ? "Warning: No recordnumber hidden field found — responses will sync but RECORD_NUMBER will be NULL unless contacts have this attribute"
                 : "Automatically send each response to the Snowflake data warehouse"
             }
+          />
+          <AdvancedOptionToggle
+            htmlId="captureIp"
+            isChecked={captureIpToggle}
+            onToggle={handleCaptureIpToggle}
+            title={t("environments.surveys.edit.capture_ip_address")}
+            description={t("environments.surveys.edit.capture_ip_address_description")}
           />
         </div>
       </Collapsible.CollapsibleContent>

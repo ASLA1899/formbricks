@@ -9,6 +9,7 @@ import {
   IS_RECAPTCHA_CONFIGURED,
   PRIVACY_URL,
   RECAPTCHA_SITE_KEY,
+  TERMS_URL,
 } from "@/lib/constants";
 import { getPublicDomain } from "@/lib/getPublicUrl";
 import { PinScreen } from "@/modules/survey/link/components/pin-screen";
@@ -35,7 +36,6 @@ interface SurveyRendererProps {
   // New props - pre-fetched in parent
   environmentContext: TEnvironmentContextForLinkSurvey;
   locale: TUserLocale;
-  isMultiLanguageAllowed: boolean;
   responseCount?: number;
   initialValues?: Record<string, string>;
 }
@@ -49,7 +49,6 @@ interface SurveyRendererProps {
  *
  * @param environmentContext - Pre-fetched project and organization data
  * @param locale - User's locale from Accept-Language header
- * @param isMultiLanguageAllowed - Calculated from organization billing plan
  * @param responseCount - Conditionally fetched if showResponseCount is enabled
  */
 export const renderSurvey = async ({
@@ -61,7 +60,6 @@ export const renderSurvey = async ({
   isPreview,
   environmentContext,
   locale,
-  isMultiLanguageAllowed,
   responseCount,
   initialValues,
 }: SurveyRendererProps) => {
@@ -112,7 +110,7 @@ export const renderSurvey = async ({
         <VerifyEmail
           survey={survey}
           isErrorComponent={true}
-          languageCode={getLanguageCode(langParam, isMultiLanguageAllowed, survey)}
+          languageCode={getLanguageCode(langParam, survey)}
           styling={project.styling}
           locale={locale}
         />
@@ -122,7 +120,7 @@ export const renderSurvey = async ({
       <VerifyEmail
         singleUseId={searchParams.suId ?? ""}
         survey={survey}
-        languageCode={getLanguageCode(langParam, isMultiLanguageAllowed, survey)}
+        languageCode={getLanguageCode(langParam, survey)}
         styling={project.styling}
         locale={locale}
       />
@@ -131,7 +129,7 @@ export const renderSurvey = async ({
 
   // Compute final styling based on project and survey settings
   const styling = computeStyling(project.styling, survey.styling);
-  const languageCode = getLanguageCode(langParam, isMultiLanguageAllowed, survey);
+  const languageCode = getLanguageCode(langParam, survey);
   const publicDomain = getPublicDomain();
 
   // Handle PIN-protected surveys
@@ -146,6 +144,7 @@ export const renderSurvey = async ({
         singleUseResponse={singleUseResponse}
         IMPRINT_URL={IMPRINT_URL}
         PRIVACY_URL={PRIVACY_URL}
+        TERMS_URL={TERMS_URL}
         IS_FORMBRICKS_CLOUD={IS_FORMBRICKS_CLOUD}
         verifiedEmail={verifiedEmail}
         languageCode={languageCode}
@@ -179,6 +178,7 @@ export const renderSurvey = async ({
       verifiedEmail={verifiedEmail}
       IMPRINT_URL={IMPRINT_URL}
       PRIVACY_URL={PRIVACY_URL}
+      TERMS_URL={TERMS_URL}
       IS_FORMBRICKS_CLOUD={IS_FORMBRICKS_CLOUD}
       initialValues={initialValues}
     />
@@ -202,18 +202,14 @@ function computeStyling(
 /**
  * Determines the language code to use for the survey.
  * Checks URL parameter against available survey languages and returns
- * "default" if multi-language is not allowed or language is not found.
+ * "default" if language is not found or disabled.
  */
-function getLanguageCode(
-  langParam: string | undefined,
-  isMultiLanguageAllowed: boolean,
-  survey: TSurvey
-): string {
-  if (!langParam || !isMultiLanguageAllowed) return "default";
+function getLanguageCode(langParam: string | undefined, survey: TSurvey): string {
+  if (!langParam) return "default";
 
   const selectedLanguage = survey.languages.find((surveyLanguage) => {
     return (
-      surveyLanguage.language.code === langParam.toLowerCase() ||
+      surveyLanguage.language.code.toLowerCase() === langParam.toLowerCase() ||
       surveyLanguage.language.alias?.toLowerCase() === langParam.toLowerCase()
     );
   });

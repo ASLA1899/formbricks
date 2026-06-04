@@ -1,8 +1,22 @@
 {
   "$schema": "https://turborepo.org/schema.json",
   "tasks": {
-    "@formbricks/cache#build": {
+    "@formbricks/ai#build": {
+      "dependsOn": ["@formbricks/logger#build"],
+      "outputs": ["dist/**"]
+    },
+    "@formbricks/ai#lint": {
       "dependsOn": ["@formbricks/logger#build"]
+    },
+    "@formbricks/ai#test": {
+      "dependsOn": ["@formbricks/logger#build"]
+    },
+    "@formbricks/ai#test:coverage": {
+      "dependsOn": ["@formbricks/logger#build"]
+    },
+    "@formbricks/cache#build": {
+      "dependsOn": ["@formbricks/logger#build"],
+      "outputs": ["dist/**"]
     },
     "@formbricks/cache#go": {
       "dependsOn": ["@formbricks/logger#build"]
@@ -23,12 +37,13 @@
     "@formbricks/database#lint": {
       "dependsOn": ["@formbricks/logger#build", "@formbricks/database#build"]
     },
-    "@formbricks/database#setup": {
-      "dependsOn": ["db:up"]
+    "@formbricks/email#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
     },
     "@formbricks/i18n-utils#build": {
       "dependsOn": ["^build"],
-      "outputs": ["packages/i18n-utils/dist/**"]
+      "outputs": ["dist/**"]
     },
     "@formbricks/i18n-utils#lint": {
       "dependsOn": ["^lint"]
@@ -48,17 +63,13 @@
     "@formbricks/js-core#lint": {
       "dependsOn": ["@formbricks/database#build"]
     },
-    "@formbricks/react-native#build": {
-      "dependsOn": ["^build", "@formbricks/database#build"],
+    "@formbricks/logger#build": {
+      "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
-    "@formbricks/react-native#go": {
-      "cache": false,
-      "dependsOn": ["@formbricks/database#db:setup"],
-      "persistent": true
-    },
     "@formbricks/storage#build": {
-      "dependsOn": ["@formbricks/logger#build"]
+      "dependsOn": ["@formbricks/logger#build"],
+      "outputs": ["dist/**"]
     },
     "@formbricks/storage#go": {
       "cache": false,
@@ -88,16 +99,16 @@
       "persistent": true
     },
     "@formbricks/surveys#build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "@formbricks/survey-ui#build"],
       "outputs": ["dist/**"]
     },
     "@formbricks/surveys#build:dev": {
-      "dependsOn": ["^build:dev", "@formbricks/i18n-utils#build"],
+      "dependsOn": ["^build:dev", "@formbricks/i18n-utils#build", "@formbricks/survey-ui#build:dev"],
       "outputs": ["dist/**"]
     },
     "@formbricks/surveys#go": {
       "cache": false,
-      "dependsOn": ["@formbricks/surveys#build"],
+      "dependsOn": ["@formbricks/survey-ui#build", "@formbricks/surveys#build"],
       "persistent": true
     },
     "@formbricks/surveys#test": {
@@ -106,38 +117,47 @@
     "@formbricks/surveys#test:coverage": {
       "dependsOn": ["@formbricks/survey-ui#build"]
     },
-    "@formbricks/ui#build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
-    },
-    "@formbricks/ui#build:dev": {
-      "dependsOn": ["^build:dev"],
-      "outputs": ["dist/**"]
-    },
-    "@formbricks/ui#go": {
+    "@formbricks/web#dev": {
       "cache": false,
-      "dependsOn": ["@formbricks/ui#build"],
+      "dependsOn": [
+        "@formbricks/ai#build",
+        "@formbricks/cache#build",
+        "@formbricks/database#build",
+        "@formbricks/logger#build",
+        "@formbricks/storage#build"
+      ],
       "persistent": true
     },
     "@formbricks/web#go": {
       "cache": false,
-      "dependsOn": ["@formbricks/database#db:setup"],
+      "dependsOn": [
+        "@formbricks/ai#build",
+        "@formbricks/cache#build",
+        "@formbricks/database#build",
+        "@formbricks/database#db:setup",
+        "@formbricks/logger#build",
+        "@formbricks/storage#build"
+      ],
       "persistent": true
     },
     "@formbricks/web#test": {
       "dependsOn": [
+        "@formbricks/ai#build",
         "@formbricks/logger#build",
         "@formbricks/database#build",
         "@formbricks/storage#build",
-        "@formbricks/cache#build"
+        "@formbricks/cache#build",
+        "@formbricks/surveys#build"
       ]
     },
     "@formbricks/web#test:coverage": {
       "dependsOn": [
+        "@formbricks/ai#build",
         "@formbricks/logger#build",
         "@formbricks/database#build",
         "@formbricks/storage#build",
-        "@formbricks/cache#build"
+        "@formbricks/cache#build",
+        "@formbricks/surveys#build"
       ]
     },
     "build": {
@@ -145,6 +165,20 @@
       "env": [
         "AUDIT_LOG_ENABLED",
         "AUDIT_LOG_GET_USER_IP",
+        "AI_AWS_ACCESS_KEY_ID",
+        "AI_AWS_REGION",
+        "AI_AWS_SECRET_ACCESS_KEY",
+        "AI_AWS_SESSION_TOKEN",
+        "AI_AZURE_API_KEY",
+        "AI_AZURE_API_VERSION",
+        "AI_AZURE_BASE_URL",
+        "AI_AZURE_RESOURCE_NAME",
+        "AI_GCP_APPLICATION_CREDENTIALS",
+        "AI_GCP_CREDENTIALS_JSON",
+        "AI_GCP_LOCATION",
+        "AI_GCP_PROJECT",
+        "AI_MODEL",
+        "AI_PROVIDER",
         "AIRTABLE_CLIENT_ID",
         "ASSET_PREFIX_URL",
         "AZUREAD_CLIENT_ID",
@@ -157,13 +191,17 @@
         "BREVO_API_KEY",
         "BREVO_LIST_ID",
         "CRON_SECRET",
+        "DISABLE_ACCOUNT_DELETION_SSO_CONFIRMATION",
+        "DANGEROUSLY_ALLOW_WEBHOOK_INTERNAL_URLS",
         "DATABASE_URL",
         "DEBUG",
+        "DEBUG_SHOW_RESET_LINK",
         "E2E_TESTING",
         "EMAIL_AUTH_DISABLED",
         "EMAIL_VERIFICATION_DISABLED",
         "ENCRYPTION_KEY",
         "ENTERPRISE_LICENSE_KEY",
+        "ENVIRONMENT",
         "GITHUB_ID",
         "GITHUB_SECRET",
         "GOOGLE_CLIENT_ID",
@@ -182,6 +220,7 @@
         "IS_FORMBRICKS_CLOUD",
         "CHATWOOT_WEBSITE_TOKEN",
         "CHATWOOT_BASE_URL",
+        "POSTHOG_KEY",
         "LOG_LEVEL",
         "MAIL_FROM",
         "MAIL_FROM_NAME",
@@ -194,17 +233,25 @@
         "NEXT_PUBLIC_FORMBRICKS_COM_API_HOST",
         "NEXT_PUBLIC_FORMBRICKS_COM_ENVIRONMENT_ID",
         "NEXT_PUBLIC_FORMBRICKS_COM_DOCS_FEEDBACK_SURVEY_ID",
-        "OPENTELEMETRY_LISTENER_URL",
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_HEADERS",
+        "OTEL_EXPORTER_OTLP_PROTOCOL",
+        "OTEL_RESOURCE_ATTRIBUTES",
+        "OTEL_SERVICE_NAME",
+        "OTEL_TRACES_SAMPLER",
+        "OTEL_TRACES_SAMPLER_ARG",
         "NEXT_RUNTIME",
         "NEXTAUTH_SECRET",
         "NEXTAUTH_URL",
         "NODE_ENV",
+        "npm_package_version",
         "OIDC_CLIENT_ID",
         "OIDC_CLIENT_SECRET",
         "OIDC_DISPLAY_NAME",
         "OIDC_ISSUER",
         "OIDC_SIGNING_ALGORITHM",
         "PASSWORD_RESET_DISABLED",
+        "PASSWORD_RESET_TOKEN_LIFETIME_MINUTES",
         "PLAYWRIGHT_CI",
         "PRIVACY_URL",
         "RATE_LIMITING_DISABLED",
@@ -242,6 +289,7 @@
         "STRAPI_API_KEY",
         "STRIPE_SECRET_KEY",
         "STRIPE_WEBHOOK_SECRET",
+        "STRIPE_PUBLISHABLE_KEY",
         "SURVEYS_PACKAGE_MODE",
         "SURVEYS_PACKAGE_BUILD",
         "PUBLIC_URL",
@@ -249,6 +297,7 @@
         "TURNSTILE_SITE_KEY",
         "RECAPTCHA_SITE_KEY",
         "RECAPTCHA_SECRET_KEY",
+        "TELEMETRY_DISABLED",
         "TERMS_URL",
         "VERCEL",
         "VERCEL_URL",
@@ -285,6 +334,7 @@
       "outputs": []
     },
     "db:seed": {
+      "env": ["ALLOW_SEED"],
       "outputs": []
     },
     "db:setup": {

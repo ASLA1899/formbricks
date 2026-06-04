@@ -30,6 +30,7 @@ export async function renderVerificationEmail(
 export async function renderForgotPasswordEmail(
   props: {
     verifyLink: string;
+    linkValidityInMinutes: number;
     t: TFunction;
   } & TEmailTemplateLegalProps
 ): Promise<string> {

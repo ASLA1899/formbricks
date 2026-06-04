@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const INVALID_PASSWORD_RESET_TOKEN_ERROR_CODE = "ERR_INVALID_PASSWORD_RESET_TOKEN";
+
 class ResourceNotFoundError extends Error {
   statusCode = 404;
   resourceId: string | null;
@@ -87,9 +89,25 @@ class AuthorizationError extends Error {
 
 class TooManyRequestsError extends Error {
   statusCode = 429;
-  constructor(message: string) {
+  retryAfter?: number;
+  constructor(message: string, retryAfter?: number) {
     super(message);
     this.name = "TooManyRequestsError";
+    this.retryAfter = retryAfter;
+  }
+}
+
+class InvalidPasswordResetTokenError extends Error {
+  statusCode = 400;
+  code: string;
+  reason?: string;
+  userId?: string;
+  constructor(code = INVALID_PASSWORD_RESET_TOKEN_ERROR_CODE, reason?: string, userId?: string) {
+    super(code);
+    this.name = "InvalidPasswordResetTokenError";
+    this.code = code;
+    this.reason = reason;
+    this.userId = userId;
   }
 }
 
@@ -111,7 +129,7 @@ interface ForbiddenError {
   details?: Record<string, string | string[] | number | number[] | boolean | boolean[]>;
 }
 
-export const ZErrorHandler = z.function().args(z.any()).returns(z.void());
+export const ZErrorHandler = z.function({ input: [z.any()], output: z.void() });
 
 export {
   ResourceNotFoundError,
@@ -125,8 +143,30 @@ export {
   AuthenticationError,
   AuthorizationError,
   TooManyRequestsError,
+  InvalidPasswordResetTokenError,
 };
 export type { NetworkError, ForbiddenError };
+
+/**
+ * Error names that represent expected business-logic failures.
+ * These are handled gracefully in the UI and should NOT be reported to Sentry.
+ */
+export const EXPECTED_ERROR_NAMES = new Set([
+  "ResourceNotFoundError",
+  "AuthorizationError",
+  "InvalidInputError",
+  "ValidationError",
+  "AuthenticationError",
+  "OperationNotAllowedError",
+  "TooManyRequestsError",
+  "InvalidPasswordResetTokenError",
+]);
+
+/**
+ * Check whether an error is an expected business-logic failure.
+ * Works with both error instances and serialised errors (where only `name` survives).
+ */
+export const isExpectedError = (error: Error): boolean => EXPECTED_ERROR_NAMES.has(error.name);
 
 export interface ApiErrorResponse {
   code:

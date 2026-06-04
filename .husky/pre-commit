@@ -1,43 +1,13 @@
-#!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
+#!/usr/bin/env sh
 
-# Load environment variables from .env files
-if [ -f .env ]; then
-  set -a
-  . .env
-  set +a
-fi
-
-pnpm lint-staged
-
-# Run Lingo.dev i18n workflow if LINGODOTDEV_API_KEY is set
-if [ -n "$LINGODOTDEV_API_KEY" ]; then
-  echo ""
-  echo "🌍 Running Lingo.dev translation workflow..."
-  echo ""
-  
-  # Run translation generation and validation
-  if pnpm run i18n; then
-    echo ""
-    echo "✅ Translation validation passed"
-    echo ""
-    # Add updated locale files to git
-    git add apps/web/locales/*.json
-  else
-    echo ""
-    echo "❌ Translation validation failed!"
-    echo ""
-    echo "Please fix the translation issues above before committing:"
-    echo "  • Add missing translation keys to your locale files"
-    echo "  • Remove unused translation keys"
-    echo ""
-    echo "Or run 'pnpm i18n' to see the detailed report"
-    echo ""
-    exit 1
-  fi
+if command -v pnpm >/dev/null 2>&1; then
+  pnpm lint-staged
+elif command -v npm >/dev/null 2>&1; then
+  npm exec --yes pnpm@10.32.1 lint-staged
+elif command -v corepack >/dev/null 2>&1; then
+  corepack pnpm lint-staged
 else
-  echo ""
-  echo "⚠️  Skipping translation validation: LINGODOTDEV_API_KEY is not set"
-  echo "   (This is expected for community contributors)"
-  echo ""
+  echo "Error: pnpm, npm, and corepack are unavailable in this Git hook PATH."
+  echo "Install Node.js tooling or update your PATH, then retry the commit."
+  exit 127
 fi

@@ -45,7 +45,7 @@ const loadSurveyManageContext = async (surveyId: string, userId: string) => {
 const ZSurveyId = z.object({ surveyId: z.string().cuid2() });
 
 export const getSurveySharingStateAction = authenticatedActionClient
-  .schema(ZSurveyId)
+  .inputSchema(ZSurveyId)
   .action(async ({ ctx, parsedInput }) => {
     const { survey, organizationId } = await loadSurveyManageContext(parsedInput.surveyId, ctx.user.id);
     const [accessList, members] = await Promise.all([
@@ -65,7 +65,7 @@ const ZSetVisibility = z.object({
 });
 
 export const setSurveyVisibilityAction = authenticatedActionClient
-  .schema(ZSetVisibility)
+  .inputSchema(ZSetVisibility)
   .action(async ({ ctx, parsedInput }) => {
     await loadSurveyManageContext(parsedInput.surveyId, ctx.user.id);
     return setSurveyVisibility(parsedInput.surveyId, parsedInput.visibility);
@@ -77,7 +77,7 @@ const ZAddAccess = z.object({
 });
 
 export const addSurveyAccessAction = authenticatedActionClient
-  .schema(ZAddAccess)
+  .inputSchema(ZAddAccess)
   .action(async ({ ctx, parsedInput }) => {
     await loadSurveyManageContext(parsedInput.surveyId, ctx.user.id);
     await addSurveyAccess(parsedInput.surveyId, parsedInput.userIds);
@@ -90,7 +90,7 @@ const ZRemoveAccess = z.object({
 });
 
 export const removeSurveyAccessAction = authenticatedActionClient
-  .schema(ZRemoveAccess)
+  .inputSchema(ZRemoveAccess)
   .action(async ({ ctx, parsedInput }) => {
     await loadSurveyManageContext(parsedInput.surveyId, ctx.user.id);
     await removeSurveyAccess(parsedInput.surveyId, parsedInput.userId);

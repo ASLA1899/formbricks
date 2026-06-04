@@ -48,4 +48,5 @@ export const getMinimalSurvey = (t: TFunction): TSurvey => ({
   snowflakeSync: false,
   metadata: {},
   slug: null,
+  isCaptureIpEnabled: false,
 });

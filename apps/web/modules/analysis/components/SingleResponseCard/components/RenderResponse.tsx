@@ -4,11 +4,13 @@ import { TResponseDataValue } from "@formbricks/types/responses";
 import { normalizeContactInfoResponse } from "@formbricks/types/surveys/compound-fields";
 import { TSurveyElement, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
+import { TUserLocale } from "@formbricks/types/user";
 import { cn } from "@/lib/cn";
 import { getLanguageCode, getLocalizedValue } from "@/lib/i18n/utils";
 import { getChoiceIdByValue } from "@/lib/response/utils";
 import { processResponseData } from "@/lib/responses";
-import { formatDateWithOrdinal, formatMonthYear, isMonthYearString } from "@/lib/utils/datetime";
+import { formatStoredDateForDisplay } from "@/lib/utils/date-display";
+import { formatMonthYear, isMonthYearString } from "@/lib/utils/datetime";
 import { renderHyperlinkedContent } from "@/modules/analysis/utils";
 import { ArrayResponse } from "@/modules/ui/components/array-response";
 import { FileUploadResponse } from "@/modules/ui/components/file-upload-response";
@@ -22,6 +24,7 @@ interface RenderResponseProps {
   element: TSurveyElement;
   survey: TSurvey;
   language: string | null;
+  locale: TUserLocale;
   isExpanded?: boolean;
   showId: boolean;
 }
@@ -31,6 +34,7 @@ export const RenderResponse: React.FC<RenderResponseProps> = ({
   element,
   survey,
   language,
+  locale,
   isExpanded = true,
   showId,
 }) => {
@@ -66,10 +70,9 @@ export const RenderResponse: React.FC<RenderResponseProps> = ({
       if (typeof responseData === "string") {
         let formattedDate: string;
         if (isMonthYearString(responseData)) {
-          formattedDate = formatMonthYear(responseData);
+          formattedDate = formatMonthYear(responseData, locale);
         } else {
-          const parsedDate = new Date(responseData);
-          formattedDate = isNaN(parsedDate.getTime()) ? responseData : formatDateWithOrdinal(parsedDate);
+          formattedDate = formatStoredDateForDisplay(responseData, element.format, locale) ?? responseData;
         }
 
         return <p className="ph-no-capture my-1 truncate font-normal text-slate-700">{formattedDate}</p>;
@@ -186,10 +189,12 @@ export const RenderResponse: React.FC<RenderResponseProps> = ({
           />
         );
       } else if (Array.isArray(responseData)) {
-        const itemsArray = responseData.map((choice) => {
-          const choiceId = getChoiceIdByValue(choice, element);
-          return { value: choice, id: choiceId };
-        });
+        const itemsArray = responseData
+          .filter((choice) => choice !== "")
+          .map((choice) => {
+            const choiceId = getChoiceIdByValue(choice, element);
+            return { value: choice, id: choiceId };
+          });
         return (
           <>
             {element.type === TSurveyElementTypeEnum.Ranking ? (

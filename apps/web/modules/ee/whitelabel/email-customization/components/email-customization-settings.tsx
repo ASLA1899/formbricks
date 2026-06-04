@@ -181,7 +181,7 @@ export const EmailCustomizationSettings = ({
 
   const buttons: [ModalButton, ModalButton] = [
     {
-      text: isFormbricksCloud ? t("common.start_free_trial") : t("common.request_trial_license"),
+      text: isFormbricksCloud ? t("common.upgrade_plan") : t("common.request_trial_license"),
       href: isFormbricksCloud
         ? `/environments/${environmentId}/settings/billing`
         : "https://formbricks.com/upgrade-self-hosting-license",
@@ -206,7 +206,7 @@ export const EmailCustomizationSettings = ({
             <div className="mb-10">
               <Small>{t("environments.settings.general.logo_in_email_header")}</Small>
 
-              <div className="mt-2 mb-6 flex items-center gap-4">
+              <div className="mb-6 mt-2 flex items-center gap-4">
                 {logoUrl && (
                   <div className="flex flex-col gap-2">
                     <div className="flex w-max items-center justify-center rounded-lg border border-slate-200 px-4 py-2">
@@ -276,7 +276,7 @@ export const EmailCustomizationSettings = ({
                 </Button>
               </div>
             </div>
-            <div className="shadow-card-xl min-h-52 w-[446px] rounded-t-lg border border-slate-100 px-10 pt-10 pb-4">
+            <div className="min-h-52 w-[446px] rounded-t-lg border border-slate-100 px-10 pb-4 pt-10 shadow-card-xl">
               <Image
                 data-testid="email-customization-preview-image"
                 src={logoUrl || fbLogoUrl}
@@ -300,11 +300,12 @@ export const EmailCustomizationSettings = ({
             title={t("environments.settings.general.customize_email_with_a_higher_plan")}
             description={t("environments.settings.general.eliminate_branding_with_whitelabel")}
             buttons={buttons}
+            feature="email_customization"
           />
         )}
 
         {hasWhiteLabelPermission && isReadOnly && (
-          <Alert variant="warning" className="mt-4 mb-6">
+          <Alert variant="warning" className="mb-6 mt-4">
             <AlertDescription>
               {t("common.only_owners_managers_and_manage_access_members_can_perform_this_action")}
             </AlertDescription>

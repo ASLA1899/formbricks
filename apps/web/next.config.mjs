@@ -9,21 +9,46 @@ jiti("./lib/env");
 
 /** @type {import('next').NextConfig} */
 
-const getHostname = (url) => {
-  const urlObj = new URL(url);
-  return urlObj.hostname;
-};
-
 const nextConfig = {
   assetPrefix: process.env.ASSET_PREFIX_URL || undefined,
   basePath: process.env.BASE_PATH || undefined,
   output: "standalone",
   poweredByHeader: false,
-  productionBrowserSourceMaps: true,
-  serverExternalPackages: ["@aws-sdk", "@opentelemetry/instrumentation", "pino", "pino-pretty"],
+  // Enable source maps only when uploading to Sentry (CI/production); skip for faster local builds
+  productionBrowserSourceMaps: !!process.env.SENTRY_AUTH_TOKEN,
+  serverExternalPackages: [
+    "@aws-sdk",
+    "@opentelemetry/api",
+    "@opentelemetry/auto-instrumentations-node",
+    "@opentelemetry/exporter-metrics-otlp-http",
+    "@opentelemetry/exporter-prometheus",
+    "@opentelemetry/exporter-trace-otlp-http",
+    "@opentelemetry/instrumentation",
+    "@opentelemetry/resources",
+    "@opentelemetry/sdk-metrics",
+    "@opentelemetry/sdk-node",
+    "@opentelemetry/sdk-trace-base",
+    "@opentelemetry/semantic-conventions",
+    "@prisma/instrumentation",
+    "pino",
+    "pino-pretty",
+    "pino-opentelemetry-transport",
+    "posthog-node",
+  ],
   outputFileTracingIncludes: {
     "/api/auth/**/*": ["../../node_modules/jose/**/*"],
+    // pino loads transport code in worker threads via dynamic require() — the file tracer
+    // only traces static imports and misses these runtime-loaded files.
+    // Include the full pino package (worker.js needs transport-stream.js, etc.)
+    // and its transport targets with their dependencies.
+    "/*": [
+      "../../node_modules/pino/**/*",
+      "../../node_modules/pino-opentelemetry-transport/**/*",
+      "../../node_modules/pino-abstract-transport/**/*",
+      "../../node_modules/otlp-logger/**/*",
+    ],
   },
+  turbopack: {},
   experimental: {},
   transpilePackages: ["@formbricks/database"],
   images: {
@@ -137,14 +162,31 @@ const nextConfig = {
     const isProduction = process.env.NODE_ENV === "production";
     const scriptSrcUnsafeEval = isProduction ? "" : " 'unsafe-eval'";
 
+    const cspBase = `default-src 'self'; script-src 'self' 'unsafe-inline'${scriptSrcUnsafeEval} https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' blob: data: http://localhost:9000 https:; font-src 'self' data: https:; connect-src 'self' http://localhost:9000 https: wss:; frame-src 'self' https://app.cal.com https:; media-src 'self' https:; object-src 'self' data: https:; base-uri 'self'; form-action 'self'`;
+
     return [
       {
-        // Apply X-Frame-Options to all routes except those starting with /s/ or /c/
+        // Apply X-Frame-Options and restricted frame-ancestors to all routes except those starting with /s/ or /c/
         source: "/((?!s/|c/).*)",
         headers: [
           {
             key: "X-Frame-Options",
             value: "SAMEORIGIN",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: `${cspBase}; frame-ancestors 'self'`,
+          },
+        ],
+      },
+      {
+        // Allow surveys (/s/*) and contact survey links (/c/*) to be embedded in iframes on any domain
+        // Note: These routes need frame-ancestors * to support embedding surveys in customer websites
+        source: "/(s|c)/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: `${cspBase}; frame-ancestors *`,
           },
         ],
       },
@@ -182,10 +224,6 @@ const nextConfig = {
           {
             key: "X-Content-Type-Options",
             value: "nosniff",
-          },
-          {
-            key: "Content-Security-Policy",
-            value: `default-src 'self'; script-src 'self' 'unsafe-inline'${scriptSrcUnsafeEval} https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' blob: data: http://localhost:9000 https:; font-src 'self' data: https:; connect-src 'self' http://localhost:9000 https: wss:; frame-src 'self' https://app.cal.com https:; media-src 'self' https:; object-src 'self' data: https:; base-uri 'self'; form-action 'self'`,
           },
           {
             key: "Strict-Transport-Security",
@@ -372,7 +410,20 @@ const nextConfig = {
     ];
   },
   async rewrites() {
+    const posthogRewrites = process.env.POSTHOG_KEY
+      ? [
+          {
+            source: "/ingest/static/:path*",
+            destination: "https://eu-assets.i.posthog.com/static/:path*",
+          },
+          {
+            source: "/ingest/:path*",
+            destination: "https://eu.i.posthog.com/:path*",
+          },
+        ]
+      : [];
     return [
+      ...posthogRewrites,
       {
         source: "/api/packages/website",
         destination: "/js/formbricks.umd.cjs",
@@ -396,18 +447,6 @@ const nextConfig = {
       {
         source: "/api/v1/client/:environmentId/app/environment",
         destination: "/api/v1/client/:environmentId/environment",
-      },
-      {
-        source: "/api/v1/client/:environmentId/app/people/:userId",
-        destination: "/api/v1/client/:environmentId/identify/people/:userId",
-      },
-      {
-        source: "/api/v1/client/:environmentId/identify/people/:userId",
-        destination: "/api/v1/client/:environmentId/identify/contacts/:userId",
-      },
-      {
-        source: "/api/v1/client/:environmentId/people/:userId/attributes",
-        destination: "/api/v1/client/:environmentId/contacts/:userId/attributes",
       },
       {
         source: "/api/v1/management/people/:id*",
@@ -461,8 +500,6 @@ const sentryOptions = {
 // Always enable Sentry plugin to inject Debug IDs
 // Runtime Sentry reporting still depends on DSN being set via environment variables
 const exportConfig = process.env.SENTRY_AUTH_TOKEN ? withSentryConfig(nextConfig, sentryOptions) : nextConfig;
-
-console.log("BASE PATH", nextConfig.basePath);
 
 
 export default exportConfig;

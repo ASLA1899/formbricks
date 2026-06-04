@@ -36,7 +36,6 @@ import { PictureSelectionForm } from "@/modules/survey/editor/components/picture
 import { RankingElementForm } from "@/modules/survey/editor/components/ranking-element-form";
 import { RatingElementForm } from "@/modules/survey/editor/components/rating-element-form";
 import { formatTextWithSlashes } from "@/modules/survey/editor/lib/utils";
-import { isLabelValidForAllLanguages } from "@/modules/survey/editor/lib/validation";
 import { getElementIconMap, getTSurveyElementTypeEnumName } from "@/modules/survey/lib/elements";
 import { Alert, AlertButton, AlertTitle } from "@/modules/ui/components/alert";
 
@@ -128,25 +127,7 @@ export const BlockCard = ({
   const isBlockOpen = block.elements.some((element) => element.id === activeElementId);
 
   const hasInvalidElement = block.elements.some((element) => invalidElements?.includes(element.id));
-
-  // Check if button labels have incomplete translations for any enabled language
-  // A button label is invalid if it exists but doesn't have valid text for all enabled languages
-  const surveyLanguages = localSurvey.languages ?? [];
-  const hasInvalidButtonLabel =
-    block.buttonLabel !== undefined &&
-    block.buttonLabel["default"]?.trim() !== "" &&
-    !isLabelValidForAllLanguages(block.buttonLabel, surveyLanguages);
-
-  // Check if back button label is invalid
-  // Back button label should exist for all blocks except the first one
-  const hasInvalidBackButtonLabel =
-    blockIdx > 0 &&
-    block.backButtonLabel !== undefined &&
-    block.backButtonLabel["default"]?.trim() !== "" &&
-    !isLabelValidForAllLanguages(block.backButtonLabel, surveyLanguages);
-
-  // Block should be highlighted if it has invalid elements OR invalid button labels
-  const isBlockInvalid = hasInvalidElement || hasInvalidButtonLabel || hasInvalidBackButtonLabel;
+  const isBlockInvalid = hasInvalidElement;
 
   const [isBlockCollapsed, setIsBlockCollapsed] = useState(false);
   const [openAdvanced, setOpenAdvanced] = useState(blockLogic.length > 0);
@@ -251,9 +232,6 @@ export const BlockCard = ({
     zIndex: isDragging ? 10 : 1,
   };
 
-  const blockElementsCount = block.elements.length;
-  const blockElementsCountText = blockElementsCount === 1 ? "question" : "questions";
-
   let blockSidebarColorClass = "";
   if (isBlockInvalid) {
     blockSidebarColorClass = "bg-red-400";
@@ -284,7 +262,7 @@ export const BlockCard = ({
         </div>
 
         <button
-          className="opacity-0 group-hover:opacity-100 hover:cursor-move"
+          className="opacity-0 hover:cursor-move group-hover:opacity-100"
           aria-label="Drag to reorder block">
           <GripIcon className="h-4 w-4" />
         </button>
@@ -333,7 +311,7 @@ export const BlockCard = ({
                       className="w-full min-w-0 rounded border-none bg-transparent p-0 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:bg-white focus:ring-1 focus:ring-slate-300 focus:outline-none"
                     />
                     <p className="text-xs text-slate-500">
-                      {blockElementsCount} {blockElementsCountText}
+                      {t("common.count_questions", { count: block.elements.length })}
                     </p>
                   </div>
                 </div>
@@ -393,7 +371,9 @@ export const BlockCard = ({
                               <div className="flex grow flex-col justify-center">
                                 {hasMultipleElements && (
                                   <p className="mb-1 text-xs font-medium text-slate-500">
-                                    Question {elementIndex + 1}
+                                    {t("environments.surveys.edit.question_number", {
+                                      number: elementIndex + 1,
+                                    })}
                                   </p>
                                 )}
                                 <h3 className="text-sm font-semibold">

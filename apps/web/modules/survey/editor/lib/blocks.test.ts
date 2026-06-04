@@ -87,6 +87,8 @@ const createMockSurvey = (blocks: TSurveyBlock[] = []): TSurvey => ({
   autoAdvance: false,
   snowflakeSync: false,
   metadata: {},
+  isCaptureIpEnabled: false,
+  slug: null,
 });
 
 describe("renumberBlocks", () => {

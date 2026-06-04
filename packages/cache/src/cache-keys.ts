@@ -32,6 +32,12 @@ export const createCacheKey = {
     status: (organizationId: string): CacheKey => makeCacheKey("license", organizationId, "status"),
     previous_result: (organizationId: string): CacheKey =>
       makeCacheKey("license", organizationId, "previous_result"),
+    fetch_lock: (organizationId: string): CacheKey => makeCacheKey("license", organizationId, "fetch_lock"),
+  },
+
+  // Response-related keys
+  response: {
+    countBySurveyId: (surveyId: string): CacheKey => makeCacheKey("response", surveyId, "count"),
   },
 
   // Rate limiting and security

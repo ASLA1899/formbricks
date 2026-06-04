@@ -174,6 +174,9 @@ export const mockSurvey: TSurvey = {
   segment: null,
   followUps: mockFollowUps,
   metadata: {},
+  blocks: [],
+  isCaptureIpEnabled: false,
+  slug: null,
 };
 
 export const mockContactQuestion: TSurveyContactInfoQuestion = {
@@ -224,6 +227,7 @@ export const mockContactQuestion: TSurveyContactInfoQuestion = {
   backButtonLabel: {
     default: "Back‌‌‍‍‌‌‌‍‌‌‌‍‍‌‌‌‍‌‌‌‍‍‍‌‌‍‌‌‌‌‌‍‌‍‌‌",
   },
+  customFields: [],
 };
 
 export const mockContactEmailFollowUp: TSurvey["followUps"][number] = {

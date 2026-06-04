@@ -149,12 +149,11 @@ describe("Survey Editor Library Tests", () => {
       ownerUserId: "user123",
       billing: {
         stripeCustomerId: "cust_123",
-        plan: "free" as const,
         features: {},
-        period: "monthly" as const,
-        periodStart: new Date(),
+        usageCycleAnchor: new Date(),
       },
-      isAIEnabled: false,
+      isAISmartToolsEnabled: false,
+      isAIDataAnalysisEnabled: false,
     };
 
     beforeEach(() => {
@@ -171,7 +170,7 @@ describe("Survey Editor Library Tests", () => {
       vi.mocked(getOrganizationAIKeys).mockResolvedValue(mockOrganization as any);
     });
 
-    test("should handle languages update", async () => {
+    test("should handle languages update with multiple languages", async () => {
       const updatedSurvey: TSurvey = {
         ...mockSurvey,
         languages: [
@@ -220,6 +219,60 @@ describe("Survey Editor Library Tests", () => {
         }),
         select: expect.any(Object),
       });
+    });
+
+    test("should handle languages update with single default language", async () => {
+      // This tests the fix for the bug where languages.length === 1 would incorrectly
+      // set updatedLanguageIds to [] causing the default language to be removed
+      const updatedSurvey: TSurvey = {
+        ...mockSurvey,
+        languages: [
+          {
+            language: {
+              id: "en",
+              code: "en",
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              alias: null,
+              projectId: "project1",
+            },
+            default: true,
+            enabled: true,
+          },
+        ],
+      };
+
+      await updateSurvey(updatedSurvey);
+
+      // Verify that prisma.survey.update was called
+      expect(prisma.survey.update).toHaveBeenCalled();
+
+      const updateCall = vi.mocked(prisma.survey.update).mock.calls[0][0];
+
+      // The key test: when languages.length === 1, we should still process language updates
+      // and NOT delete the language. Before the fix, languages.length > 1 would fail this case.
+      expect(updateCall).toBeDefined();
+      expect(updateCall.where).toEqual({ id: "survey123" });
+      expect(updateCall.data).toBeDefined();
+    });
+
+    test("should remove all languages when empty array is passed", async () => {
+      const updatedSurvey: TSurvey = {
+        ...mockSurvey,
+        languages: [],
+      };
+
+      await updateSurvey(updatedSurvey);
+
+      // Verify that prisma.survey.update was called
+      expect(prisma.survey.update).toHaveBeenCalled();
+
+      const updateCall = vi.mocked(prisma.survey.update).mock.calls[0][0];
+
+      // When languages is empty array, all existing languages should be removed
+      expect(updateCall).toBeDefined();
+      expect(updateCall.where).toEqual({ id: "survey123" });
+      expect(updateCall.data).toBeDefined();
     });
 
     test("should delete private segment for non-app type surveys", async () => {

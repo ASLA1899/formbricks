@@ -8,7 +8,9 @@ export class UpdateQueue {
   private static instance: UpdateQueue | null = null;
   private updates: TUpdates | null = null;
   private debounceTimeout: NodeJS.Timeout | null = null;
+  private pendingFlush: Promise<void> | null = null;
   private readonly DEBOUNCE_DELAY = 500;
+  private readonly PENDING_WORK_TIMEOUT = 5000;
 
   private constructor() {}
 
@@ -63,17 +65,45 @@ export class UpdateQueue {
     return !this.updates;
   }
 
+  public hasPendingWork(): boolean {
+    return this.updates !== null || this.pendingFlush !== null;
+  }
+
+  public async waitForPendingWork(): Promise<boolean> {
+    if (!this.hasPendingWork()) return true;
+
+    const flush = this.pendingFlush ?? this.processUpdates();
+    try {
+      const succeeded = await Promise.race([
+        flush.then(() => true as const),
+        new Promise<false>((resolve) => {
+          setTimeout(() => {
+            resolve(false);
+          }, this.PENDING_WORK_TIMEOUT);
+        }),
+      ]);
+      return succeeded;
+    } catch {
+      return false;
+    }
+  }
+
   public async processUpdates(): Promise<void> {
     const logger = Logger.getInstance();
     if (!this.updates) {
       return;
     }
 
+    // If a flush is already in flight, reuse it instead of creating a new promise
+    if (this.pendingFlush) {
+      return this.pendingFlush;
+    }
+
     if (this.debounceTimeout) {
       clearTimeout(this.debounceTimeout);
     }
 
-    return new Promise((resolve, reject) => {
+    const flushPromise = new Promise<void>((resolve, reject) => {
       const handler = async (): Promise<void> => {
         try {
           let currentUpdates = { ...this.updates };
@@ -93,7 +123,7 @@ export class UpdateQueue {
                   ...config.get().user,
                   data: {
                     ...config.get().user.data,
-                    language: currentUpdates.attributes?.language,
+                    language: currentUpdates.attributes?.language as string | undefined,
                   },
                 },
               });
@@ -133,7 +163,8 @@ export class UpdateQueue {
                 if (isNewUser) {
                   logger.debug(`User successfully identified: ${effectiveUserId}`);
                 }
-                if (hasAttributes) {
+                // Only log success message if there were no warnings (e.g., skipped attributes)
+                if (hasAttributes && !result.data.hasWarnings) {
                   const attributeKeys = Object.keys(currentUpdates.attributes ?? {}).join(", ");
                   logger.debug(`Attributes successfully set: ${attributeKeys}`);
                 }
@@ -146,8 +177,10 @@ export class UpdateQueue {
           }
 
           this.clearUpdates();
+          this.pendingFlush = null;
           resolve();
         } catch (error: unknown) {
+          this.pendingFlush = null;
           logger.error(
             `Failed to process updates: ${error instanceof Error ? error.message : "Unknown error"}`
           );
@@ -157,5 +190,8 @@ export class UpdateQueue {
 
       this.debounceTimeout = setTimeout(() => void handler(), this.DEBOUNCE_DELAY);
     });
+
+    this.pendingFlush = flushPromise;
+    return flushPromise;
   }
 }

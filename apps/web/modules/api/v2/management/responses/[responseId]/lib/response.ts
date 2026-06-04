@@ -31,7 +31,9 @@ export const getResponse = reactCache(async (responseId: string) => {
   } catch (error) {
     return err({
       type: "internal_server_error",
-      details: [{ field: "response", issue: error.message }],
+      details: [
+        { field: "response", issue: error instanceof Error ? error.message : "Unknown error occurred" },
+      ],
     });
   }
 });
@@ -83,7 +85,9 @@ export const getResponseForPipeline = async (
   } catch (error) {
     return err({
       type: "internal_server_error",
-      details: [{ field: "response", issue: error.message }],
+      details: [
+        { field: "response", issue: error instanceof Error ? error.message : "Unknown error occurred" },
+      ],
     });
   }
 };
@@ -135,7 +139,9 @@ export const deleteResponse = async (responseId: string): Promise<Result<Respons
 
     return err({
       type: "internal_server_error",
-      details: [{ field: "response", issue: error.message }],
+      details: [
+        { field: "response", issue: error instanceof Error ? error.message : "Unknown error occurred" },
+      ],
     });
   }
 };
@@ -169,7 +175,9 @@ export const updateResponse = async (
     }
     return err({
       type: "internal_server_error",
-      details: [{ field: "response", issue: error.message }],
+      details: [
+        { field: "response", issue: error instanceof Error ? error.message : "Unknown error occurred" },
+      ],
     });
   }
 };

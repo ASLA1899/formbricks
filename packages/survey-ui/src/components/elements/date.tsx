@@ -20,6 +20,8 @@ interface DateElementProps {
   onChange: (value: string) => void;
   /** Whether the field is required (shows asterisk indicator) */
   required?: boolean;
+  /** Custom label for the required indicator */
+  requiredLabel?: string;
   /** Minimum date allowed (ISO format: YYYY-MM-DD) */
   minDate?: string;
   /** Maximum date allowed (ISO format: YYYY-MM-DD) */
@@ -48,6 +50,7 @@ function DateElement({
   value,
   onChange,
   required = false,
+  requiredLabel,
   minDate,
   maxDate,
   dir = "auto",
@@ -170,12 +173,13 @@ function DateElement({
         headline={headline}
         description={description}
         required={required}
+        requiredLabel={requiredLabel}
         htmlFor={inputId}
         imageUrl={imageUrl}
         videoUrl={videoUrl}
       />
 
-      <div className="relative">
+      <div className="relative" data-element-input>
         <ElementError errorMessage={errorMessage} dir={dir} />
         <div className="w-full">
           {isMonthYear ? (
@@ -200,7 +204,7 @@ function DateElement({
               onSelect={handleDateSelect}
               locale={dateLocale}
               required={required}
-              className="rounded-input border-input-border bg-input-bg text-input-text shadow-input mx-auto w-full max-w-[25rem] border"
+              className="rounded-input border-input-border bg-input-bg text-input-text shadow-input mx-auto h-[stretch] w-full max-w-[25rem] border"
             />
           )}
         </div>

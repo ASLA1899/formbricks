@@ -1,8 +1,9 @@
-import { Organization, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { Mocked, afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "@formbricks/database";
 import { PrismaErrorType } from "@formbricks/database/types/error";
 import { DatabaseError, ResourceNotFoundError } from "@formbricks/types/errors";
+import { TOrganizationBilling } from "@formbricks/types/organizations";
 import { getOrganizationAIKeys, getOrganizationIdFromEnvironmentId } from "./organization";
 
 // Mock prisma
@@ -34,7 +35,7 @@ describe("getOrganizationIdFromEnvironmentId", () => {
   test("should return organization ID if found", async () => {
     const mockEnvId = "env_test123";
     const mockOrgId = "org_test456";
-    mockPrismaOrganization.findFirst.mockResolvedValueOnce({ id: mockOrgId } as Organization);
+    mockPrismaOrganization.findFirst.mockResolvedValueOnce({ id: mockOrgId } as any);
 
     const result = await getOrganizationIdFromEnvironmentId(mockEnvId);
 
@@ -82,24 +83,25 @@ describe("getOrganizationAIKeys", () => {
   });
 
   const mockOrgId = "org_test789";
-  const mockOrganizationData: Pick<Organization, "isAIEnabled" | "billing"> = {
-    isAIEnabled: true,
+  const mockOrganizationData: {
+    isAISmartToolsEnabled: boolean;
+    isAIDataAnalysisEnabled: boolean;
+    billing: TOrganizationBilling;
+  } = {
+    isAISmartToolsEnabled: true,
+    isAIDataAnalysisEnabled: true,
     billing: {
-      plan: "free",
       stripeCustomerId: null,
-      period: "monthly",
-      periodStart: new Date(),
+      usageCycleAnchor: new Date(),
       limits: {
-        monthly: { responses: null, miu: null },
+        monthly: { responses: null },
         projects: null,
       },
     }, // Prisma.JsonValue compatible
   };
 
   test("should return organization AI keys if found", async () => {
-    mockPrismaOrganization.findUnique.mockResolvedValueOnce(
-      mockOrganizationData as Organization // Cast to full Organization for mock purposes
-    );
+    mockPrismaOrganization.findUnique.mockResolvedValueOnce(mockOrganizationData as any);
 
     const result = await getOrganizationAIKeys(mockOrgId);
 
@@ -109,8 +111,16 @@ describe("getOrganizationAIKeys", () => {
         id: mockOrgId,
       },
       select: {
-        isAIEnabled: true,
-        billing: true,
+        isAISmartToolsEnabled: true,
+        isAIDataAnalysisEnabled: true,
+        billing: {
+          select: {
+            stripeCustomerId: true,
+            limits: true,
+            usageCycleAnchor: true,
+            stripe: true,
+          },
+        },
       },
     });
   });

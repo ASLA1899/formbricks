@@ -17,8 +17,8 @@ export type TEnrichmentConfig = z.infer<typeof ZEnrichmentConfig>;
 // Enrichment result for a single contact
 export const ZEnrichmentResult = z.object({
   success: z.boolean(),
-  originalData: z.record(z.string()),
-  enrichedData: z.record(z.string()).optional(),
+  originalData: z.record(z.string(), z.string()),
+  enrichedData: z.record(z.string(), z.string()).optional(),
   error: z.string().optional(),
 });
 

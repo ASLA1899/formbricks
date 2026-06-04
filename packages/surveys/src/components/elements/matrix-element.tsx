@@ -15,6 +15,8 @@ interface MatrixElementProps {
   ttc: TResponseTtc;
   setTtc: (ttc: TResponseTtc) => void;
   currentElementId: string;
+  errorMessage?: string;
+  dir?: "ltr" | "rtl" | "auto";
 }
 
 export function MatrixElement({
@@ -25,14 +27,17 @@ export function MatrixElement({
   ttc,
   setTtc,
   currentElementId,
+  errorMessage,
+  dir = "auto",
 }: Readonly<MatrixElementProps>) {
   const [startTime, setStartTime] = useState(performance.now());
-  const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
+  // ASLA matrix "Other" option: local text for the free-text "other" row. errorMessage is a
+  // controlled prop (upstream moved matrix validation to the parent), so it is NOT local state.
   const [otherValue, setOtherValue] = useState("");
   const isCurrent = element.id === currentElementId;
-
-  useTtc(element.id, ttc, setTtc, startTime, setStartTime, isCurrent);
+  const isRequired = element.required;
   const { t } = useTranslation();
+  useTtc(element.id, ttc, setTtc, startTime, setStartTime, isCurrent);
 
   // Separate "other" row from regular rows
   const otherRow = useMemo(() => element.rows.find((r) => r.id === "other"), [element.rows]);
@@ -137,7 +142,6 @@ export function MatrixElement({
   };
 
   const handleChange = (newValue: Record<string, string>) => {
-    setErrorMessage(undefined);
     const labelValue = convertValueFromIds(newValue);
 
     // Check if all values are empty and if so, make it an empty object
@@ -174,22 +178,9 @@ export function MatrixElement({
     }
   };
 
-  const validateRequired = (): boolean => {
-    if (element.required) {
-      // Only regular rows must have a column selected; "other" row is always optional
-      const hasUnansweredRows = rows.some((row) => !value[row.label]);
-      if (hasUnansweredRows) {
-        setErrorMessage(t("errors.please_select_an_option"));
-        return false;
-      }
-    }
-    return true;
-  };
-
   const handleSubmit = (e: Event) => {
     e.preventDefault();
-    setErrorMessage(undefined);
-    if (!validateRequired()) return;
+    // Update TTC when form is submitted (for TTC collection)
     const updatedTtc = getUpdatedTtc(ttc, element.id, performance.now() - startTime);
     setTtc(updatedTtc);
   };
@@ -202,6 +193,7 @@ export function MatrixElement({
   return (
     <form key={element.id} onSubmit={handleSubmit} className="w-full">
       <Matrix
+        dir={dir}
         elementId={element.id}
         inputId={element.id}
         headline={getLocalizedValue(element.headline, languageCode)}
@@ -210,7 +202,8 @@ export function MatrixElement({
         columns={columns}
         value={convertValueToIds(value)}
         onChange={handleChange}
-        required={element.required}
+        required={isRequired}
+        requiredLabel={t("common.required")}
         errorMessage={errorMessage}
         imageUrl={element.imageUrl}
         videoUrl={element.videoUrl}

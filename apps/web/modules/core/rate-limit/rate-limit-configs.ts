@@ -11,12 +11,8 @@ export const rateLimitConfigs = {
   api: {
     v1: { interval: 60, allowedPerInterval: 100, namespace: "api:v1" }, // 100 per minute (Management API)
     v2: { interval: 60, allowedPerInterval: 100, namespace: "api:v2" }, // 100 per minute
+    v3: { interval: 60, allowedPerInterval: 100, namespace: "api:v3" }, // 100 per minute
     client: { interval: 60, allowedPerInterval: 100, namespace: "api:client" }, // 100 per minute (Client API)
-    syncUserIdentification: {
-      interval: 60,
-      allowedPerInterval: 5,
-      namespace: "api:sync-user-identification",
-    }, // 5 per minute per environment-user pair
   },
 
   // Server actions - varies by action type
@@ -29,6 +25,7 @@ export const rateLimitConfigs = {
       allowedPerInterval: 10,
       namespace: "action:send-link-survey-email",
     }, // 10 per hour
+    licenseRecheck: { interval: 60, allowedPerInterval: 5, namespace: "action:license-recheck" }, // 5 per minute
   },
 
   storage: {
@@ -40,4 +37,4 @@ export const rateLimitConfigs = {
     }, // 100 per minute per environment
     delete: { interval: 60, allowedPerInterval: 5, namespace: "storage:delete" }, // 5 per minute
   },
-};
+} as const;

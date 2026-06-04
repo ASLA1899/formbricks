@@ -39,7 +39,7 @@ describe("updateMembership", () => {
     const mockOrganizationMembers = [{ userId: "user1" }, { userId: "user2" }];
 
     vi.mocked(prisma.membership.update).mockResolvedValue(mockMembership);
-    vi.mocked(prisma.teamUser.findMany).mockResolvedValue(mockTeamMemberships);
+    vi.mocked(prisma.teamUser.findMany).mockResolvedValue(mockTeamMemberships as any);
     vi.mocked(prisma.membership.findMany).mockResolvedValue(mockOrganizationMembers as any);
 
     const result = await updateMembership("user1", "org1", { role: "owner" });
@@ -84,7 +84,7 @@ describe("updateMembership", () => {
     const mockOrganizationMembers = [{ userId: "user1" }, { userId: "user2" }];
 
     vi.mocked(prisma.membership.update).mockResolvedValue(mockMembership);
-    vi.mocked(prisma.teamUser.findMany).mockResolvedValue(mockTeamMemberships);
+    vi.mocked(prisma.teamUser.findMany).mockResolvedValue(mockTeamMemberships as any);
     vi.mocked(prisma.membership.findMany).mockResolvedValue(mockOrganizationMembers as any);
 
     const result = await updateMembership("user1", "org1", { role: "manager" });

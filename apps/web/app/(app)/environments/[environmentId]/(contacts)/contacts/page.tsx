@@ -17,7 +17,7 @@ const ContactsPage = async ({ params: paramsProps }: { params: Promise<{ environ
 
   const t = await getTranslate();
 
-  const isQuotasAllowed = await getIsQuotasEnabled(organization.billing.plan);
+  const isQuotasAllowed = await getIsQuotasEnabled(organization.id);
 
   const contactAttributeKeys = await getContactAttributeKeys(params.environmentId);
   const initialContacts = await getContacts(params.environmentId, 0);

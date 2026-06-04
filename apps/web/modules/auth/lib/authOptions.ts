@@ -1,10 +1,10 @@
-import type { Account, NextAuthOptions } from "next-auth";
+import type { NextAuthOptions } from "next-auth";
 import AzureADProvider from "next-auth/providers/azure-ad";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { cookies } from "next/headers";
 import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
-import { TUser } from "@formbricks/types/user";
+import type { TUser } from "@formbricks/types/user";
 import {
   AZUREAD_CLIENT_ID,
   AZUREAD_CLIENT_SECRET,
@@ -15,10 +15,21 @@ import {
   EMAIL_VERIFICATION_DISABLED,
   ENCRYPTION_KEY,
   ENTERPRISE_LICENSE_KEY,
+  POSTHOG_KEY,
   SESSION_MAX_AGE,
+  WEBAPP_URL,
 } from "@/lib/constants";
 import { symmetricDecrypt, symmetricEncrypt } from "@/lib/crypto";
 import { verifyToken } from "@/lib/jwt";
+import { capturePostHogEvent } from "@/lib/posthog";
+import { getValidatedCallbackUrl } from "@/lib/utils/url";
+import {
+  completeAccountDeletionSsoReauthentication,
+  getAccountDeletionSsoReauthFailureRedirectUrl,
+  getAccountDeletionSsoReauthIntentFromCallbackUrl,
+  validateAccountDeletionSsoReauthenticationCallback,
+} from "@/modules/account/lib/account-deletion-sso-reauth";
+import { getAuthCallbackUrlFromCookies } from "@/modules/auth/lib/callback-url";
 import { handleMicrosoftCallback } from "@/modules/auth/lib/microsoft-handler";
 import { getUserByEmail, updateUser, updateUserLastLoginAt } from "@/modules/auth/lib/user";
 import {
@@ -38,6 +49,10 @@ import { handleSsoCallback } from "@/modules/ee/sso/lib/sso-handlers";
 import { createBrevoCustomer } from "./brevo";
 
 export const authOptions: NextAuthOptions = {
+  // ASLA fork keeps JWT sessions (no PrismaAdapter). Our Microsoft/Azure SSO
+  // provisions + links users in the signIn callback via identityProvider fields;
+  // that flow is incompatible with the adapter owning OAuth account resolution.
+  // Adopting upstream's database sessions (#7594) is tracked as separate work.
   providers: [
     // Email/password login is opt-out via EMAIL_AUTH_DISABLED=1. Gating the
     // provider here (not only the login UI) makes the flag a real backend
@@ -358,6 +373,7 @@ export const authOptions: NextAuthOptions = {
     ...(ENTERPRISE_LICENSE_KEY ? getSSOProviders() : []),
   ],
   session: {
+    strategy: "jwt",
     maxAge: SESSION_MAX_AGE,
   },
   callbacks: {
@@ -384,41 +400,100 @@ export const authOptions: NextAuthOptions = {
 
       return session;
     },
-    async signIn({ user, account }: { user: TUser; account: Account }) {
+    async signIn({ user, account }) {
       const cookieStore = await cookies();
 
       // get callback url from the cookie store,
       const callbackUrl =
-        cookieStore.get("__Secure-next-auth.callback-url")?.value ||
-        cookieStore.get("next-auth.callback-url")?.value ||
-        "";
+        getValidatedCallbackUrl(getAuthCallbackUrlFromCookies(cookieStore), WEBAPP_URL) ?? "";
+      const accountDeletionSsoReauthIntentToken =
+        getAccountDeletionSsoReauthIntentFromCallbackUrl(callbackUrl);
+
+      const userEmail = user.email ?? "";
+      const userId = user.id as string;
+
+      // Capture sign-in event for PostHog (query BEFORE updating lastLoginAt)
+      const captureSignIn = async (provider: string) => {
+        if (!POSTHOG_KEY) return;
+
+        try {
+          const [membershipCount, userData] = await Promise.all([
+            prisma.membership.count({ where: { userId } }),
+            prisma.user.findUnique({ where: { id: userId }, select: { lastLoginAt: true } }),
+          ]);
+          const isFirstLoginToday =
+            userData?.lastLoginAt?.toISOString().slice(0, 10) !== new Date().toISOString().slice(0, 10);
+
+          capturePostHogEvent(userId, "user_signed_in", {
+            auth_provider: provider,
+            organization_count: membershipCount,
+            is_first_login_today: isFirstLoginToday,
+          });
+        } catch (error) {
+          logger.warn({ error }, "Failed to capture PostHog sign-in event");
+        }
+      };
 
       if (account?.provider === "credentials" || account?.provider === "token") {
         // check if user's email is verified or not
-        if (!user.emailVerified && !EMAIL_VERIFICATION_DISABLED) {
+        if ("emailVerified" in user && !user.emailVerified && !EMAIL_VERIFICATION_DISABLED) {
           logger.error("Email Verification is Pending");
           throw new Error("Email Verification is Pending");
         }
-        await updateUserLastLoginAt(user.email);
+        void captureSignIn(account.provider);
+        await updateUserLastLoginAt(userEmail);
         return true;
       }
-      if (account?.provider === "azure-ad" && !ENTERPRISE_LICENSE_KEY) {
-        const result = await handleMicrosoftCallback({ user, account });
+      // ASLA non-EE M365/Azure AD SSO: handled outside the EE SSO path (no license).
+      if (account && account.provider === "azure-ad" && !ENTERPRISE_LICENSE_KEY) {
+        const result = await handleMicrosoftCallback({ user: user as TUser, account });
 
         if (result) {
-          await updateUserLastLoginAt(user.email);
+          await updateUserLastLoginAt(userEmail);
         }
         return result;
       }
-      if (ENTERPRISE_LICENSE_KEY) {
-        const result = await handleSsoCallback({ user, account, callbackUrl });
+      if (ENTERPRISE_LICENSE_KEY && account) {
+        try {
+          if (accountDeletionSsoReauthIntentToken) {
+            await validateAccountDeletionSsoReauthenticationCallback({
+              account,
+              intentToken: accountDeletionSsoReauthIntentToken,
+            });
+          }
 
-        if (result) {
-          await updateUserLastLoginAt(user.email);
+          const result = await handleSsoCallback({
+            user: user as TUser,
+            account,
+            callbackUrl,
+          });
+
+          if (result) {
+            if (accountDeletionSsoReauthIntentToken) {
+              await completeAccountDeletionSsoReauthentication({
+                account,
+                intentToken: accountDeletionSsoReauthIntentToken,
+              });
+            }
+
+            void captureSignIn(account.provider);
+            await updateUserLastLoginAt(userEmail);
+          }
+          return result;
+        } catch (error) {
+          const failureRedirectUrl = getAccountDeletionSsoReauthFailureRedirectUrl({
+            intentToken: accountDeletionSsoReauthIntentToken,
+          });
+
+          if (failureRedirectUrl) {
+            return failureRedirectUrl;
+          }
+
+          throw error;
         }
-        return result;
       }
-      await updateUserLastLoginAt(user.email);
+      void captureSignIn(account?.provider ?? "unknown");
+      await updateUserLastLoginAt(userEmail);
       return true;
     },
   },

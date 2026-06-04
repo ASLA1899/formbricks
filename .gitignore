@@ -16,6 +16,7 @@
 **/.next/
 **/out/
 **/build
+**/next-env.d.ts
 
 # node
 **/dist/
@@ -63,7 +64,7 @@ yarn-error.log*
 .direnv
 
 # Playwright
-/test-results/
+**/test-results/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
@@ -86,3 +87,7 @@ i18n.cache
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+stats.html
+# next-agents-md
+.next-docs/

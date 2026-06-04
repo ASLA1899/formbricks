@@ -36,6 +36,8 @@ interface MatrixProps {
   onChange: (value: Record<string, string>) => void;
   /** Whether the field is required (shows asterisk indicator) */
   required?: boolean;
+  /** Custom label for the required indicator */
+  requiredLabel?: string;
   /** Error message to display */
   errorMessage?: string;
   /** Text direction: 'ltr' (left-to-right), 'rtl' (right-to-left), or 'auto' (auto-detect from content) */
@@ -68,6 +70,7 @@ function Matrix({
   value = {},
   onChange,
   required = false,
+  requiredLabel,
   errorMessage,
   dir = "auto",
   disabled = false,
@@ -103,13 +106,14 @@ function Matrix({
         headline={headline}
         description={description}
         required={required}
+        requiredLabel={requiredLabel}
         htmlFor={inputId}
         imageUrl={imageUrl}
         videoUrl={videoUrl}
       />
 
       {/* Matrix Table */}
-      <div className="relative">
+      <div className="relative" data-element-input>
         <ElementError errorMessage={errorMessage} dir={dir} />
 
         {/* Table container with overflow for mobile */}
@@ -118,7 +122,7 @@ function Matrix({
             {/* Column headers */}
             <thead>
               <tr>
-                <th className="p-2 text-left" />
+                <th className="p-2 text-start" />
                 {columns.map((column) => (
                   <th key={column.id} className="p-2 text-center font-normal">
                     <Label className="justify-center">{column.label}</Label>
@@ -145,9 +149,9 @@ function Matrix({
                     disabled={disabled}
                     aria-required={required}
                     aria-invalid={Boolean(errorMessage)}>
-                    <tr className={cn("relative", baseBgColor)}>
+                    <tr className={cn("relative", baseBgColor)} dir={dir}>
                       {/* Row label */}
-                      <th scope="row" className={cn("rounded-l-input p-2 text-left align-middle")}>
+                      <th scope="row" className={cn("rounded-s-input p-2 text-left align-middle")}>
                         <div className="flex flex-col gap-0 leading-none">
                           <Label>{row.label}</Label>
                         </div>
@@ -160,7 +164,7 @@ function Matrix({
                         return (
                           <td
                             key={column.id}
-                            className={cn("p-2 text-center align-middle", isLastColumn && "rounded-r-input")}>
+                            className={cn("p-2 text-center align-middle", isLastColumn && "rounded-e-input")}>
                             <Label htmlFor={cellId} className="flex cursor-pointer justify-center">
                               <RadioGroupItem
                                 value={column.id}

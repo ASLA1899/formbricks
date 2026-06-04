@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { updateAttributes } from "./attributes";
 import { getContactAttributeKeys } from "./contact-attribute-keys";
 import { getContactAttributes } from "./contact-attributes";
@@ -16,7 +16,7 @@ describe("updateContactAttributes", () => {
     vi.clearAllMocks();
   });
 
-  it("should update contact attributes successfully", async () => {
+  test("should update contact attributes with deleteRemovedAttributes: true", async () => {
     const contactId = "contact123";
     const environmentId = "env123";
     const userId = "user123";
@@ -48,6 +48,7 @@ describe("updateContactAttributes", () => {
         type: "default" as const,
         isUnique: false,
         description: null,
+        dataType: "string" as const,
       },
       {
         id: "key2",
@@ -59,6 +60,7 @@ describe("updateContactAttributes", () => {
         type: "default" as const,
         isUnique: false,
         description: null,
+        dataType: "string" as const,
       },
       {
         id: "key3",
@@ -70,6 +72,7 @@ describe("updateContactAttributes", () => {
         type: "default" as const,
         isUnique: false,
         description: null,
+        dataType: "string" as const,
       },
     ];
 
@@ -91,13 +94,14 @@ describe("updateContactAttributes", () => {
 
     expect(getContact).toHaveBeenCalledWith(contactId);
     expect(getContactAttributeKeys).toHaveBeenCalledWith(environmentId);
-    expect(updateAttributes).toHaveBeenCalledWith(contactId, userId, environmentId, attributes);
+    // Should call updateAttributes with deleteRemovedAttributes: true for UI form updates
+    expect(updateAttributes).toHaveBeenCalledWith(contactId, userId, environmentId, attributes, true);
     expect(getContactAttributes).toHaveBeenCalledWith(contactId);
     expect(result.updatedAttributes).toEqual(mockUpdatedAttributes);
     expect(result.updatedAttributeKeys).toBeUndefined();
   });
 
-  it("should detect new attribute keys when created", async () => {
+  test("should detect new attribute keys when created", async () => {
     const contactId = "contact123";
     const environmentId = "env123";
     const userId = "user123";
@@ -126,6 +130,7 @@ describe("updateContactAttributes", () => {
         type: "default" as const,
         isUnique: false,
         description: null,
+        dataType: "string" as const,
       },
     ];
     const mockUpdatedKeys = [
@@ -139,6 +144,7 @@ describe("updateContactAttributes", () => {
         type: "default" as const,
         isUnique: false,
         description: null,
+        dataType: "string" as const,
       },
       {
         id: "key2",
@@ -150,6 +156,7 @@ describe("updateContactAttributes", () => {
         type: "custom" as const,
         isUnique: false,
         description: null,
+        dataType: "string" as const,
       },
     ];
 
@@ -180,11 +187,12 @@ describe("updateContactAttributes", () => {
         type: "custom",
         isUnique: false,
         description: null,
+        dataType: "string" as const,
       },
     ]);
   });
 
-  it("should handle missing userId with warning message", async () => {
+  test("should handle missing userId gracefully", async () => {
     const contactId = "contact123";
     const environmentId = "env123";
     const attributes = {
@@ -210,6 +218,7 @@ describe("updateContactAttributes", () => {
         type: "default" as const,
         isUnique: false,
         description: null,
+        dataType: "string" as const,
       },
     ];
     const mockUpdatedAttributes = {
@@ -226,13 +235,13 @@ describe("updateContactAttributes", () => {
 
     const result = await updateContactAttributes(contactId, attributes);
 
-    expect(updateAttributes).toHaveBeenCalledWith(contactId, "", environmentId, attributes);
-    expect(result.messages).toContain(
-      "Warning: userId attribute is missing. Some operations may not work correctly."
-    );
+    // When userId is not in attributes, pass empty string to updateAttributes
+    expect(updateAttributes).toHaveBeenCalledWith(contactId, "", environmentId, attributes, true);
+    // No warning message - the backend now gracefully handles missing userId by keeping current value
+    expect(result.messages).toBeUndefined();
   });
 
-  it("should merge messages from updateAttributes", async () => {
+  test("should merge messages from updateAttributes", async () => {
     const contactId = "contact123";
     const environmentId = "env123";
     const userId = "user123";
@@ -259,6 +268,7 @@ describe("updateContactAttributes", () => {
         type: "default" as const,
         isUnique: false,
         description: null,
+        dataType: "string" as const,
       },
     ];
     const mockUpdatedAttributes = {
@@ -269,17 +279,17 @@ describe("updateContactAttributes", () => {
     vi.mocked(getContactAttributeKeys).mockResolvedValueOnce(mockCurrentKeys);
     vi.mocked(updateAttributes).mockResolvedValue({
       success: true,
-      messages: ["The email already exists for this environment and was not updated."],
+      messages: [{ code: "email_already_exists", params: {} }],
     });
     vi.mocked(getContactAttributes).mockResolvedValue(mockUpdatedAttributes);
     vi.mocked(getContactAttributeKeys).mockResolvedValueOnce(mockCurrentKeys);
 
     const result = await updateContactAttributes(contactId, attributes);
 
-    expect(result.messages).toContain("The email already exists for this environment and was not updated.");
+    expect(result.messages).toContainEqual({ code: "email_already_exists", params: {} });
   });
 
-  it("should throw error if contact not found", async () => {
+  test("should throw error if contact not found", async () => {
     const contactId = "contact123";
     const attributes = {
       firstName: "John",

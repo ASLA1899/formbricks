@@ -7,12 +7,11 @@ import {
   COMPOUND_FIELD_LABELS,
   getCompoundFields,
 } from "@formbricks/types/surveys/compound-fields";
-import { getTextContent } from "@formbricks/types/surveys/validation";
 import {
-  TSurveyAddressElement,
-  TSurveyContactInfoElement,
+  TSurveyElement,
   TSurveyElementTypeEnum,
 } from "@formbricks/types/surveys/elements";
+import { getTextContent } from "@formbricks/types/surveys/validation";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { TUserLocale } from "@formbricks/types/user";
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
@@ -39,10 +38,7 @@ interface ElementToggleTableProps {
   localSurvey: TSurvey;
   elementIdx: number;
   isInvalid: boolean;
-  updateElement: (
-    elementIdx: number,
-    updatedAttributes: Partial<TSurveyContactInfoElement | TSurveyAddressElement>
-  ) => void;
+  updateElement: (elementIdx: number, updatedAttributes: Partial<TSurveyElement>) => void;
   selectedLanguageCode: string;
   setSelectedLanguageCode: (languageCode: string) => void;
   locale: TUserLocale;

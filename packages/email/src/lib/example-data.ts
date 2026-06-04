@@ -12,6 +12,7 @@ export const exampleData = {
 
   forgotPasswordEmail: {
     verifyLink: "https://app.formbricks.com/auth/forgot-password/reset?token=example-reset-token",
+    linkValidityInMinutes: 30,
   },
 
   newEmailVerification: {
@@ -106,7 +107,6 @@ export const exampleData = {
         url: "https://example.com",
       },
       tags: [],
-      notes: [],
       ttc: {},
       singleUseId: null,
       language: "default",
@@ -130,11 +130,11 @@ export const exampleData = {
         limits: {
           monthly: {
             responses: 1000,
-            miu: 10000,
           },
         },
       },
-      isAIEnabled: false,
+      isAISmartToolsEnabled: false,
+      isAIDataAnalysisEnabled: false,
     } as unknown as TOrganization,
   },
 

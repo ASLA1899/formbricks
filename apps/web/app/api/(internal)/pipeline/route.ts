@@ -1,5 +1,6 @@
 import { PipelineTriggers, Webhook } from "@prisma/client";
 import { headers } from "next/headers";
+import { v7 as uuidv7 } from "uuid";
 import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
 import { ResourceNotFoundError } from "@formbricks/types/errors";
@@ -8,20 +9,24 @@ import { ZPipelineInput } from "@/app/api/(internal)/pipeline/types/pipelines";
 import { insertSurveyResponses } from "@/app/api/member-lookup/snowflake-service";
 import { responses } from "@/app/lib/api/response";
 import { transformErrorToDetails } from "@/app/lib/api/validator";
-import { CRON_SECRET } from "@/lib/constants";
+import { CRON_SECRET, DANGEROUSLY_ALLOW_WEBHOOK_INTERNAL_URLS, POSTHOG_KEY } from "@/lib/constants";
+import { generateStandardWebhookSignature } from "@/lib/crypto";
 import { getIntegrations } from "@/lib/integration/service";
 import { getOrganizationByEnvironmentId } from "@/lib/organization/service";
 import { getResponseCountBySurveyId } from "@/lib/response/service";
 import { getSurvey, updateSurvey } from "@/lib/survey/service";
 import { convertDatesInObject } from "@/lib/time";
-import { validateWebhookUrl } from "@/lib/utils/validate-webhook-url";
+import { createPinnedDispatcher, validateAndResolveWebhookUrl } from "@/lib/utils/validate-webhook-url";
 import { queueAuditEvent } from "@/modules/ee/audit-logs/lib/handler";
 import { TAuditStatus, UNKNOWN_DATA } from "@/modules/ee/audit-logs/types/audit-log";
+import { recordResponseCreatedMeterEvent } from "@/modules/ee/billing/lib/metering";
 import { sendResponseFinishedEmail } from "@/modules/email";
+import { resolveStorageUrlsInObject } from "@/modules/storage/utils";
 import { sendFollowUpsForResponse } from "@/modules/survey/follow-ups/lib/follow-ups";
 import { FollowUpSendError } from "@/modules/survey/follow-ups/types/follow-up";
 import { linkResponseToInvitation } from "@/modules/survey/invitations/lib/invitations";
 import { handleIntegrations } from "./lib/handleIntegrations";
+import { captureSurveyResponsePostHogEvent } from "./lib/posthog";
 import { buildSnowflakeRows } from "./lib/snowflake-sync";
 
 export const POST = async (request: Request) => {
@@ -32,7 +37,10 @@ export const POST = async (request: Request) => {
   }
 
   const jsonInput = await request.json();
-  const convertedJsonInput = convertDatesInObject(jsonInput);
+  const convertedJsonInput = convertDatesInObject(
+    jsonInput,
+    new Set(["contactAttributes", "variables", "data", "meta"])
+  );
 
   const inputValidation = ZPipelineInput.safeParse(convertedJsonInput);
 
@@ -87,41 +95,102 @@ export const POST = async (request: Request) => {
   // Prepare webhook and email promises
 
   // Fetch with timeout of 5 seconds to prevent hanging.
-  // `redirect: "manual"` prevents SSRF via redirect — validateWebhookUrl (called per webhook below)
-  // only checks the initial URL, so following a 30x to a private/internal host would bypass it.
-  const fetchWithTimeout = (url: string, options: RequestInit, timeout: number = 5000): Promise<Response> => {
+  // `redirect: "manual"` blocks SSRF via redirect — webhook URLs are validated against private/internal
+  // ranges before delivery, but redirect targets would otherwise bypass that check. Gated on the same
+  // env var as `validateAndResolveWebhookUrl`: self-hosters who opted into trusting internal URLs also
+  // get the pre-patch redirect-follow behavior for consistency.
+  const redirectMode: RequestRedirect = DANGEROUSLY_ALLOW_WEBHOOK_INTERNAL_URLS ? "follow" : "manual";
+  type WebhookFetchOptions = RequestInit & { dispatcher?: ReturnType<typeof createPinnedDispatcher> };
+  const fetchWithTimeout = (
+    url: string,
+    options: WebhookFetchOptions,
+    timeout: number = 5000
+  ): Promise<Response> => {
     return Promise.race([
-      fetch(url, { ...options, redirect: "manual" }),
+      fetch(url, { ...options, redirect: redirectMode } as RequestInit),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout)),
     ]);
   };
 
-  const webhookPromises = webhooks.map((webhook) =>
-    validateWebhookUrl(webhook.url)
-      .then(() =>
-        fetchWithTimeout(webhook.url, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
+  const resolvedResponseData = resolveStorageUrlsInObject(response.data);
+
+  const deliverWebhook = async (webhook: Webhook): Promise<void> => {
+    const body = JSON.stringify({
+      webhookId: webhook.id,
+      event,
+      data: {
+        ...response,
+        data: resolvedResponseData,
+        survey: {
+          title: survey.name,
+          type: survey.type,
+          status: survey.status,
+          createdAt: survey.createdAt,
+          updatedAt: survey.updatedAt,
+        },
+      },
+    });
+
+    // Generate Standard Webhooks headers
+    const webhookMessageId = uuidv7();
+    const webhookTimestamp = Math.floor(Date.now() / 1000);
+
+    const requestHeaders: Record<string, string> = {
+      "content-type": "application/json",
+      "webhook-id": webhookMessageId,
+      "webhook-timestamp": webhookTimestamp.toString(),
+    };
+
+    // Add signature if webhook has a secret configured
+    if (webhook.secret) {
+      requestHeaders["webhook-signature"] = generateStandardWebhookSignature(
+        webhookMessageId,
+        webhookTimestamp,
+        body,
+        webhook.secret
+      );
+    }
+
+    let dispatcher: ReturnType<typeof createPinnedDispatcher> | undefined;
+    try {
+      const address = await validateAndResolveWebhookUrl(webhook.url);
+      // Pin TCP connect to validated IP — closes DNS-rebinding TOCTOU between
+      // validation and fetch. Null address = DANGEROUSLY flag + blocked name
+      // (/etc/hosts path), so skip pinning.
+      dispatcher = address ? createPinnedDispatcher(address) : undefined;
+
+      const webhookResponse = await fetchWithTimeout(webhook.url, {
+        method: "POST",
+        headers: requestHeaders,
+        body,
+        dispatcher,
+      });
+
+      // With `redirect: "manual"`, undici returns the actual 30x (not opaqueredirect).
+      // Treat as delivery failure so redirect-based SSRF cannot silently succeed.
+      if (webhookResponse.status >= 300 && webhookResponse.status < 400) {
+        throw new Error(`Webhook delivery blocked: redirect status ${webhookResponse.status}`);
+      }
+    } catch (error) {
+      logger.error({ error, url: request.url }, `Webhook call to ${webhook.url} failed`);
+    } finally {
+      // destroy() force-kills sockets — close() would deadlock on accepted-but-idle endpoints.
+      try {
+        await dispatcher?.destroy();
+      } catch (cleanupError) {
+        logger.warn(
+          {
+            err: cleanupError,
             webhookId: webhook.id,
-            event,
-            data: {
-              ...response,
-              survey: {
-                title: survey.name,
-                type: survey.type,
-                status: survey.status,
-                createdAt: survey.createdAt,
-                updatedAt: survey.updatedAt,
-              },
-            },
-          }),
-        })
-      )
-      .catch((error) => {
-        logger.error({ error, url: request.url }, `Webhook call to ${webhook.url} failed`);
-      })
-  );
+            webhookUrl: webhook.url,
+          },
+          "Response pipeline webhook dispatcher cleanup failed"
+        );
+      }
+    }
+  };
+
+  const webhookPromises = webhooks.map((webhook) => deliverWebhook(webhook));
 
   if (event === "responseFinished") {
     // Fetch integrations and responseCount in parallel
@@ -201,7 +270,14 @@ export const POST = async (request: Request) => {
     }
 
     const emailPromises = usersWithNotifications.map((user) =>
-      sendResponseFinishedEmail(user.email, environmentId, survey, response, responseCount).catch((error) => {
+      sendResponseFinishedEmail(
+        user.email,
+        user.locale,
+        environmentId,
+        survey,
+        response,
+        responseCount
+      ).catch((error) => {
         logger.error(
           { error, url: request.url, userEmail: user.email },
           `Failed to send email to ${user.email}`
@@ -280,6 +356,26 @@ export const POST = async (request: Request) => {
     });
   }
   if (event === "responseCreated") {
+    recordResponseCreatedMeterEvent({
+      stripeCustomerId: organization.billing.stripeCustomerId,
+      responseId: response.id,
+      createdAt: response.createdAt,
+    }).catch((error) => {
+      logger.error({ error, responseId: response.id }, "Failed to record response meter event");
+    });
+
+    if (POSTHOG_KEY) {
+      const responseCount = await getResponseCountBySurveyId(surveyId);
+
+      captureSurveyResponsePostHogEvent({
+        organizationId: organization.id,
+        surveyId,
+        surveyType: survey.type,
+        environmentId,
+        responseCount,
+      });
+    }
+
     // Send telemetry events
     await sendTelemetryEvents();
   }

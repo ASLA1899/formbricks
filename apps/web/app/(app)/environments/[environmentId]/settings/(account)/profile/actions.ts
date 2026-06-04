@@ -7,18 +7,19 @@ import {
   ZUserPersonalInfoUpdateInput,
 } from "@formbricks/types/user";
 import { getIsEmailUnique } from "@/app/(app)/environments/[environmentId]/settings/(account)/profile/lib/user";
-import { EMAIL_VERIFICATION_DISABLED } from "@/lib/constants";
+import { EMAIL_VERIFICATION_DISABLED, PASSWORD_RESET_DISABLED } from "@/lib/constants";
 import { verifyUserPassword } from "@/lib/user/password";
 import { getUser, updateUser } from "@/lib/user/service";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
 import { AuthenticatedActionClientCtx } from "@/lib/utils/action-client/types/context";
+import { requestPasswordReset } from "@/modules/auth/forgot-password/lib/password-reset-service";
 import { updateBrevoCustomer } from "@/modules/auth/lib/brevo";
 import { applyRateLimit } from "@/modules/core/rate-limit/helpers";
 import { rateLimitConfigs } from "@/modules/core/rate-limit/rate-limit-configs";
 import { withAuditLogging } from "@/modules/ee/audit-logs/lib/handler";
-import { sendForgotPasswordEmail, sendVerificationNewEmail } from "@/modules/email";
+import { sendVerificationNewEmail } from "@/modules/email";
 
-function buildUserUpdatePayload(parsedInput: any): TUserUpdateInput {
+function buildUserUpdatePayload(parsedInput: TUserPersonalInfoUpdateInput): TUserUpdateInput {
   return {
     ...(parsedInput.name && { name: parsedInput.name }),
     ...(parsedInput.locale && { locale: parsedInput.locale }),
@@ -56,55 +57,45 @@ async function handleEmailUpdate({
     payload.email = inputEmail;
     await updateBrevoCustomer({ id: ctx.user.id, email: inputEmail });
   } else {
-    await sendVerificationNewEmail(ctx.user.id, inputEmail);
+    await sendVerificationNewEmail(ctx.user.id, inputEmail, ctx.user.locale);
   }
   return payload;
 }
 
-export const updateUserAction = authenticatedActionClient.schema(ZUserPersonalInfoUpdateInput).action(
-  withAuditLogging(
-    "updated",
-    "user",
-    async ({
-      ctx,
-      parsedInput,
-    }: {
-      ctx: AuthenticatedActionClientCtx;
-      parsedInput: TUserPersonalInfoUpdateInput;
-    }) => {
-      const oldObject = await getUser(ctx.user.id);
-      let payload = buildUserUpdatePayload(parsedInput);
-      payload = await handleEmailUpdate({ ctx, parsedInput, payload });
+export const updateUserAction = authenticatedActionClient.inputSchema(ZUserPersonalInfoUpdateInput).action(
+  withAuditLogging("updated", "user", async ({ ctx, parsedInput }) => {
+    const oldObject = await getUser(ctx.user.id);
+    let payload = buildUserUpdatePayload(parsedInput);
+    payload = await handleEmailUpdate({ ctx, parsedInput, payload });
 
-      // Only proceed with updateUser if we have actual changes to make
-      let newObject = oldObject;
-      if (Object.keys(payload).length > 0) {
-        newObject = await updateUser(ctx.user.id, payload);
-      }
-
-      ctx.auditLoggingCtx.userId = ctx.user.id;
-      ctx.auditLoggingCtx.oldObject = oldObject;
-      ctx.auditLoggingCtx.newObject = newObject;
-
-      return true;
+    // Only proceed with updateUser if we have actual changes to make
+    let newObject = oldObject;
+    if (Object.keys(payload).length > 0) {
+      newObject = await updateUser(ctx.user.id, payload);
     }
-  )
+
+    ctx.auditLoggingCtx.userId = ctx.user.id;
+    ctx.auditLoggingCtx.oldObject = oldObject;
+    ctx.auditLoggingCtx.newObject = newObject;
+
+    return true;
+  })
 );
 
 export const resetPasswordAction = authenticatedActionClient.action(
-  withAuditLogging(
-    "passwordReset",
-    "user",
-    async ({ ctx }: { ctx: AuthenticatedActionClientCtx; parsedInput: undefined }) => {
-      if (ctx.user.identityProvider !== "email") {
-        throw new OperationNotAllowedError("Password reset is not allowed for this user.");
-      }
-
-      await sendForgotPasswordEmail(ctx.user);
-
-      ctx.auditLoggingCtx.userId = ctx.user.id;
-
-      return { success: true };
+  withAuditLogging("passwordReset", "user", async ({ ctx }) => {
+    if (PASSWORD_RESET_DISABLED) {
+      throw new OperationNotAllowedError("Password reset is disabled");
     }
-  )
+
+    if (ctx.user.identityProvider !== "email") {
+      throw new OperationNotAllowedError("Password reset is not allowed for this user.");
+    }
+
+    await requestPasswordReset(ctx.user, "profile");
+
+    ctx.auditLoggingCtx.userId = ctx.user.id;
+
+    return { success: true };
+  })
 );

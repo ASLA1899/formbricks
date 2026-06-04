@@ -10,7 +10,7 @@ import { getIsMultiOrgEnabled } from "@/modules/ee/license-check/lib/utils";
 import { getOrganizationAuth } from "@/modules/organization/lib/utils";
 import { Header } from "@/modules/ui/components/header";
 
-const Page = async (props) => {
+const Page = async (props: { params: Promise<{ organizationId: string }> }) => {
   const params = await props.params;
   const t = await getTranslate();
 
@@ -26,7 +26,8 @@ const Page = async (props) => {
   const isMultiOrgEnabled = await getIsMultiOrgEnabled();
 
   const membership = await getMembershipByUserIdOrganizationId(session.user.id, organization.id);
-  const { isMember } = getAccessFlags(membership?.role);
+  const { isMember, isBilling } = getAccessFlags(membership?.role);
+  const isMembershipPending = membership?.role === undefined;
 
   return (
     <div className="flex min-h-full min-w-full flex-row">
@@ -45,6 +46,8 @@ const Page = async (props) => {
               isOwnerOrManager={false}
               isAccessControlAllowed={false}
               isMember={isMember}
+              isBilling={isBilling}
+              isMembershipPending={isMembershipPending}
               environments={[]}
             />
           </div>

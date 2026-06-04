@@ -40,6 +40,8 @@ interface FormFieldProps {
   onChange: (value: Record<string, string>) => void;
   /** Whether the entire form is required (shows asterisk indicator) */
   required?: boolean;
+  /** Custom label for the required indicator */
+  requiredLabel?: string;
   /** Error message to display */
   errorMessage?: string;
   /** Text direction: 'ltr' (left-to-right), 'rtl' (right-to-left), or 'auto' (auto-detect from content) */
@@ -60,6 +62,7 @@ function FormField({
   value = {},
   onChange,
   required = false,
+  requiredLabel,
   errorMessage,
   dir = "auto",
   disabled = false,
@@ -106,72 +109,74 @@ function FormField({
         headline={headline}
         description={description}
         required={required}
+        requiredLabel={requiredLabel}
         imageUrl={imageUrl}
         videoUrl={videoUrl}
       />
 
       {/* Form Fields */}
-      <div className="relative space-y-3">
+      <div className="relative" data-element-input>
         <ElementError errorMessage={errorMessage} dir={dir} />
-        {visibleFields.map((field) => {
-          const fieldRequired = isFieldRequired(field);
-          const fieldValue = currentValues[field.id] ?? "";
-          const fieldInputId = `${elementId}-${field.id}`;
+        <div className="space-y-3">
+          {visibleFields.map((field) => {
+            const fieldRequired = isFieldRequired(field);
+            const fieldValue = currentValues[field.id] ?? "";
+            const fieldInputId = `${elementId}-${field.id}`;
 
-          // Determine input type (dropdown is handled separately; date falls back to text)
-          const rawType = field.type ?? "text";
-          let inputType: "text" | "email" | "tel" | "number" | "url" =
-            rawType === "date" || rawType === "dropdown" ? "text" : rawType;
-          if (field.id === "email" && !field.type) {
-            inputType = "email";
-          } else if (field.id === "phone" && !field.type) {
-            inputType = "tel";
-          }
+            // Determine input type (dropdown is handled separately; date falls back to text)
+            const rawType = field.type ?? "text";
+            let inputType: "text" | "email" | "tel" | "number" | "url" =
+              rawType === "date" || rawType === "dropdown" ? "text" : rawType;
+            if (field.id === "email" && !field.type) {
+              inputType = "email";
+            } else if (field.id === "phone" && !field.type) {
+              inputType = "tel";
+            }
 
-          return (
-            <div key={field.id} className="space-y-2">
-              <Label htmlFor={fieldInputId} variant="default">
-                {fieldRequired ? `${field.label}*` : field.label}
-              </Label>
-              {field.type === "dropdown" && field.options ? (
-                <>
-                  <SingleSelect
-                    elementId={fieldInputId}
-                    headline=""
-                    inputId={`${fieldInputId}-select`}
-                    options={field.options}
-                    value={
-                      // Value may be stored as label (human-readable), so resolve back to option ID
-                      field.options.find((opt) => opt.id === fieldValue)?.id ??
-                      field.options.find((opt) => opt.label === fieldValue)?.id ??
-                      undefined
-                    }
-                    onChange={(val) => {
-                      // Store the display label, not the option ID — contact info
-                      // fields store human-readable values (e.g. "Mr." not an opaque ID)
-                      const selectedOption = field.options?.find((opt) => opt.id === val);
-                      handleFieldChange(field.id, selectedOption?.label ?? val);
-                    }}
-                    required={fieldRequired}
-                    disabled={disabled}
-                    dir={dir}
-                    variant="dropdown"
-                    placeholder="Select..."
-                  />
-                  {/* Hidden input for native browser required validation on dropdown fields */}
-                  {fieldRequired && (
-                    <input
-                      type="text"
-                      required
-                      value={fieldValue}
-                      onChange={() => {}}
-                      className="sr-only"
-                      tabIndex={-1}
-                      aria-hidden="true"
+            return (
+              <div key={field.id} className="space-y-2">
+                <Label htmlFor={fieldInputId} variant="default">
+                  {fieldRequired ? `${field.label}*` : field.label}
+                </Label>
+                {field.type === "dropdown" && field.options ? (
+                  <>
+                    <SingleSelect
+                      elementId={fieldInputId}
+                      headline=""
+                      inputId={`${fieldInputId}-select`}
+                      options={field.options}
+                      value={
+                        // Value may be stored as label (human-readable), so resolve back to option ID
+                        field.options.find((opt) => opt.id === fieldValue)?.id ??
+                        field.options.find((opt) => opt.label === fieldValue)?.id ??
+                        undefined
+                      }
+                      onChange={(val) => {
+                        // Store the display label, not the option ID — contact info
+                        // fields store human-readable values (e.g. "Mr." not an opaque ID)
+                        const selectedOption = field.options?.find((opt) => opt.id === val);
+                        handleFieldChange(field.id, selectedOption?.label ?? val);
+                      }}
+                      required={fieldRequired}
+                      disabled={disabled}
+                      dir={dir}
+                      variant="dropdown"
+                      placeholder="Select..."
                     />
-                  )}
-                </>
-              ) : (
+                    {/* Hidden input for native browser required validation on dropdown fields */}
+                    {fieldRequired && (
+                      <input
+                        type="text"
+                        required
+                        value={fieldValue}
+                        onChange={() => {}}
+                        className="sr-only"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </>
+                ) : (
                 <Input
                   id={fieldInputId}
                   type={inputType}
@@ -202,6 +207,7 @@ function FormField({
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );

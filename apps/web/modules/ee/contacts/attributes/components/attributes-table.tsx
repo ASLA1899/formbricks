@@ -78,7 +78,7 @@ export const AttributesTable = ({
   // Generate columns
   const columns = useMemo(() => {
     return generateAttributeTableColumns(searchValue, isReadOnly, isExpanded ?? false, t, locale);
-  }, [searchValue, isReadOnly, isExpanded]);
+  }, [searchValue, isReadOnly, isExpanded, locale, t]);
 
   // Load saved settings from localStorage
   useEffect(() => {
@@ -122,10 +122,10 @@ export const AttributesTable = ({
       const initialVisibility = table
         .getAllLeafColumns()
         .map((column) => column.id)
-        .reduce((acc, curr) => {
+        .reduce<Record<string, true>>((acc, curr) => {
           acc[curr] = true;
           return acc;
-        }, {}) as Record<string, true>;
+        }, {});
 
       setColumnVisibility(initialVisibility);
     }

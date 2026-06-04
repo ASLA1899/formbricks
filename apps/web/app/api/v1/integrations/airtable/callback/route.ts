@@ -1,12 +1,13 @@
-import { NextRequest } from "next/server";
 import * as z from "zod";
 import { logger } from "@formbricks/logger";
 import { responses } from "@/app/lib/api/response";
-import { TSessionAuthentication, withV1ApiWrapper } from "@/app/lib/api/with-api-logging";
+import { withV1ApiWrapper } from "@/app/lib/api/with-api-logging";
 import { fetchAirtableAuthToken } from "@/lib/airtable/service";
 import { AIRTABLE_CLIENT_ID, WEBAPP_URL } from "@/lib/constants";
 import { hasUserEnvironmentAccess } from "@/lib/environment/auth";
-import { createOrUpdateIntegration } from "@/lib/integration/service";
+import { createOrUpdateIntegration, getIntegrationByType } from "@/lib/integration/service";
+import { capturePostHogEvent } from "@/lib/posthog";
+import { getOrganizationIdFromEnvironmentId } from "@/lib/utils/helper";
 
 const getEmail = async (token: string) => {
   const req_ = await fetch("https://api.airtable.com/v0/meta/whoami", {
@@ -21,13 +22,11 @@ const getEmail = async (token: string) => {
 };
 
 export const GET = withV1ApiWrapper({
-  handler: async ({
-    req,
-    authentication,
-  }: {
-    req: NextRequest;
-    authentication: NonNullable<TSessionAuthentication>;
-  }) => {
+  handler: async ({ req, authentication }) => {
+    if (!authentication || !("user" in authentication)) {
+      return { response: responses.notAuthenticatedResponse() };
+    }
+
     const url = req.url;
     const queryParams = new URLSearchParams(url.split("?")[1]); // Split the URL and get the query parameters
     const environmentId = queryParams.get("state"); // Get the value of the 'state' parameter
@@ -79,16 +78,31 @@ export const GET = withV1ApiWrapper({
       }
       const email = await getEmail(key.access_token);
 
+      // Preserve existing integration data (survey-to-table mappings) when re-authorizing
+      const existingIntegration = await getIntegrationByType(environmentId, "airtable");
+      const existingData = existingIntegration?.config?.data ?? [];
+
       const airtableIntegrationInput = {
         type: "airtable" as "airtable",
         environment: environmentId,
         config: {
           key,
-          data: [],
+          data: existingData,
           email,
         },
       };
       await createOrUpdateIntegration(environmentId, airtableIntegrationInput);
+
+      try {
+        const organizationId = await getOrganizationIdFromEnvironmentId(environmentId);
+        capturePostHogEvent(authentication.user.id, "integration_connected", {
+          integration_type: "airtable",
+          organization_id: organizationId,
+        });
+      } catch (err) {
+        logger.error({ error: err }, "Failed to capture PostHog integration_connected event for airtable");
+      }
+
       return {
         response: Response.redirect(
           `${WEBAPP_URL}/environments/${environmentId}/workspace/integrations/airtable`
@@ -97,7 +111,9 @@ export const GET = withV1ApiWrapper({
     } catch (error) {
       logger.error({ error, url: req.url }, "Error in GET /api/v1/integrations/airtable/callback");
       return {
-        response: responses.internalServerErrorResponse(error),
+        response: responses.internalServerErrorResponse(
+          error instanceof Error ? error.message : String(error)
+        ),
       };
     }
   },

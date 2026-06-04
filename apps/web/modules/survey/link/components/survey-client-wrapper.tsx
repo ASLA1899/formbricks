@@ -9,8 +9,11 @@ import { TResponseData } from "@formbricks/types/responses";
 import { TSurvey, TSurveyStyling } from "@formbricks/types/surveys/types";
 import { toJsEnvironmentStateSurvey } from "@/lib/survey/client-utils";
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
+import { CustomScriptsInjector } from "@/modules/survey/link/components/custom-scripts-injector";
 import { LinkSurveyWrapper } from "@/modules/survey/link/components/link-survey-wrapper";
+import { OfflineAlert } from "@/modules/survey/link/components/offline-alert";
 import { getPrefillValue } from "@/modules/survey/link/lib/prefill";
+import { isRTLLanguage } from "@/modules/survey/link/lib/utils";
 import { SurveyInline } from "@/modules/ui/components/survey";
 
 const RESUME_STORAGE_PREFIX = "formbricks-resume-";
@@ -57,7 +60,7 @@ function clearStoredResume(surveyId: string): void {
 
 interface SurveyClientWrapperProps {
   survey: TSurvey;
-  project: Pick<Project, "styling" | "logo" | "linkSurveyBranding">;
+  project: Pick<Project, "styling" | "logo" | "linkSurveyBranding" | "customHeadScripts">;
   styling: TProjectStyling | TSurveyStyling;
   publicDomain: string;
   responseCount?: number;
@@ -72,6 +75,7 @@ interface SurveyClientWrapperProps {
   verifiedEmail?: string;
   IMPRINT_URL?: string;
   PRIVACY_URL?: string;
+  TERMS_URL?: string;
   IS_FORMBRICKS_CLOUD: boolean;
   initialValues?: Record<string, string>;
 }
@@ -96,11 +100,13 @@ export const SurveyClientWrapper = ({
   verifiedEmail,
   IMPRINT_URL,
   PRIVACY_URL,
+  TERMS_URL,
   IS_FORMBRICKS_CLOUD,
   initialValues,
 }: SurveyClientWrapperProps) => {
   const searchParams = useSearchParams();
   const skipPrefilled = searchParams.get("skipPrefilled") === "true";
+  const offlineSupport = searchParams.get("offlineSupport") === "true";
   const elements = useMemo(() => getElementsFromBlocks(survey.blocks), [survey.blocks]);
 
   const startAt = searchParams.get("startAt");
@@ -235,6 +241,18 @@ export const SurveyClientWrapper = ({
     return null;
   }, [survey.isVerifyEmailEnabled, verifiedEmail]);
 
+  const [offlineStatus, setOfflineStatus] = useState({
+    isOnline: true,
+    isSyncing: false,
+    pendingSyncCount: 0,
+  });
+  const handleOfflineStatusChange = useCallback(
+    (status: { isOnline: boolean; isSyncing: boolean; pendingSyncCount: number }) => {
+      setOfflineStatus(status);
+    },
+    []
+  );
+
   const handleResetSurvey = () => {
     if (survey.welcomeCard.enabled) {
       setBlockId("start");
@@ -244,6 +262,11 @@ export const SurveyClientWrapper = ({
     setResponseData({});
     clearStoredResume(survey.id);
   };
+  // Determine text direction based on language code for logo positioning only
+  // which checks both language code and survey content. This is only for logo UI positioning.
+  const logoDir = useMemo(() => {
+    return isRTLLanguage(toJsEnvironmentStateSurvey(survey), languageCode) ? "rtl" : "auto";
+  }, [languageCode, survey]);
 
   // Block the survey from mounting until we've decided whether to resume —
   // otherwise the runtime initializes with empty state and the resume fetch
@@ -253,57 +276,80 @@ export const SurveyClientWrapper = ({
   }
 
   return (
-    <LinkSurveyWrapper
-      project={project}
-      surveyId={survey.id}
-      isWelcomeCardEnabled={survey.welcomeCard.enabled}
-      isPreview={isPreview}
-      surveyType={survey.type}
-      determineStyling={() => styling}
-      handleResetSurvey={handleResetSurvey}
-      isEmbed={isEmbed}
-      publicDomain={publicDomain}
-      IS_FORMBRICKS_CLOUD={IS_FORMBRICKS_CLOUD}
-      IMPRINT_URL={IMPRINT_URL}
-      PRIVACY_URL={PRIVACY_URL}
-      isBrandingEnabled={project.linkSurveyBranding}>
-      <SurveyInline
-        appUrl={publicDomain}
-        environmentId={survey.environmentId}
-        isPreviewMode={isPreview}
-        survey={toJsEnvironmentStateSurvey(survey)}
-        styling={styling}
-        languageCode={languageCode}
+    <>
+      {/* Inject custom scripts for tracking/analytics (self-hosted only) */}
+      {!IS_FORMBRICKS_CLOUD && !isPreview && (
+        <CustomScriptsInjector
+          projectScripts={project.customHeadScripts}
+          surveyScripts={survey.customHeadScripts}
+          scriptsMode={survey.customHeadScriptsMode}
+        />
+      )}
+      <LinkSurveyWrapper
+        project={project}
+        surveyId={survey.id}
+        isWelcomeCardEnabled={survey.welcomeCard.enabled}
+        isPreview={isPreview}
+        surveyType={survey.type}
+        determineStyling={() => styling}
+        handleResetSurvey={handleResetSurvey}
+        isEmbed={isEmbed}
+        publicDomain={publicDomain}
+        IS_FORMBRICKS_CLOUD={IS_FORMBRICKS_CLOUD}
+        IMPRINT_URL={IMPRINT_URL}
+        PRIVACY_URL={PRIVACY_URL}
+        TERMS_URL={TERMS_URL}
         isBrandingEnabled={project.linkSurveyBranding}
-        shouldResetQuestionId={false}
-        autoFocus={autoFocus}
-        prefillResponseData={mergedPrefillValue}
-        skipPrefilled={skipPrefilled}
-        responseCount={responseCount}
-        getSetBlockId={(f: (value: string) => void) => {
-          setBlockId = f;
-        }}
-        getSetResponseData={(f: (value: TResponseData) => void) => {
-          setResponseData = f;
-        }}
-        startAtQuestionId={startAt && isStartAtValid ? startAt : undefined}
-        fullSizeCards={isEmbed}
-        cardSize={survey.styling?.cardSize ?? "normal"}
-        autoAdvance={survey.autoAdvance ?? false}
-        hiddenFieldsRecord={{
-          ...hiddenFieldsRecord,
-          ...getVerifiedEmail,
-        }}
-        singleUseId={singleUseId}
-        singleUseResponseId={singleUseResponseId}
-        getSetIsResponseSendingFinished={(_f: (value: boolean) => void) => {}}
-        contactId={contactId}
-        recaptchaSiteKey={recaptchaSiteKey}
-        isSpamProtectionEnabled={isSpamProtectionEnabled}
-        resumedResponse={resumedResponse}
-        onResponseIdReceived={handleResponseIdReceived}
-        onFinished={handleFinished}
-      />
-    </LinkSurveyWrapper>
+        dir={logoDir}>
+        <SurveyInline
+          appUrl={publicDomain}
+          environmentId={survey.environmentId}
+          isPreviewMode={isPreview}
+          // ASLA #7931: pass the metadata-stripped js-environment-state survey shape, NOT the
+          // raw TSurvey (upstream 4.9 predates #7931 and passes the unstripped survey here).
+          survey={toJsEnvironmentStateSurvey(survey)}
+          styling={styling}
+          languageCode={languageCode}
+          isBrandingEnabled={project.linkSurveyBranding}
+          shouldResetQuestionId={false}
+          autoFocus={autoFocus}
+          prefillResponseData={mergedPrefillValue}
+          skipPrefilled={skipPrefilled}
+          responseCount={responseCount}
+          getSetBlockId={(f: (value: string) => void) => {
+            setBlockId = f;
+          }}
+          getSetResponseData={(f: (value: TResponseData) => void) => {
+            setResponseData = f;
+          }}
+          startAtQuestionId={startAt && isStartAtValid ? startAt : undefined}
+          fullSizeCards={isEmbed}
+          cardSize={survey.styling?.cardSize ?? "normal"}
+          autoAdvance={survey.autoAdvance ?? false}
+          hiddenFieldsRecord={{
+            ...hiddenFieldsRecord,
+            ...getVerifiedEmail,
+          }}
+          singleUseId={singleUseId}
+          singleUseResponseId={singleUseResponseId}
+          getSetIsResponseSendingFinished={(_f: (value: boolean) => void) => {}}
+          contactId={contactId}
+          recaptchaSiteKey={recaptchaSiteKey}
+          isSpamProtectionEnabled={isSpamProtectionEnabled}
+          offlineSupport={offlineSupport}
+          onOfflineStatusChange={offlineSupport ? handleOfflineStatusChange : undefined}
+          resumedResponse={resumedResponse}
+          onResponseIdReceived={handleResponseIdReceived}
+          onFinished={handleFinished}
+        />
+      </LinkSurveyWrapper>
+      {offlineSupport && !isEmbed && (
+        <OfflineAlert
+          isOnline={offlineStatus.isOnline}
+          isSyncing={offlineStatus.isSyncing}
+          pendingSyncCount={offlineStatus.pendingSyncCount}
+        />
+      )}
+    </>
   );
 };

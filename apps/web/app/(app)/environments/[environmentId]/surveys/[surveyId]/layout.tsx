@@ -1,8 +1,10 @@
 import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
 import { prisma } from "@formbricks/database";
+import { ResourceNotFoundError } from "@formbricks/types/errors";
 import { canAccessSurvey, getSurveyAccessMembership } from "@/lib/survey/access";
 import { getSurvey } from "@/lib/survey/service";
+import { getTranslate } from "@/lingodotdev/server";
 import { authOptions } from "@/modules/auth/lib/authOptions";
 import { SurveyContextWrapper } from "./context/survey-context";
 
@@ -36,9 +38,10 @@ const SurveyLayout = async ({ params, children }: SurveyLayoutProps) => {
   }
 
   const survey = await getSurvey(resolvedParams.surveyId);
+  const t = await getTranslate();
 
   if (!survey) {
-    notFound();
+    throw new ResourceNotFoundError(t("common.survey"), resolvedParams.surveyId);
   }
 
   return <SurveyContextWrapper survey={survey}>{children}</SurveyContextWrapper>;

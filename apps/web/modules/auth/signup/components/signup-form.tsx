@@ -11,10 +11,12 @@ import Turnstile, { useTurnstile } from "react-turnstile";
 import { z } from "zod";
 import { TUserLocale, ZUserName, ZUserPassword } from "@formbricks/types/user";
 import { getFormattedErrorMessage } from "@/lib/utils/helper";
+import { buildVerificationRequestedPath } from "@/modules/auth/lib/verification-links";
 import { createUserAction } from "@/modules/auth/signup/actions";
 import { TermsPrivacyLinks } from "@/modules/auth/signup/components/terms-privacy-links";
 import { SSOOptions } from "@/modules/ee/sso/components/sso-options";
 import { Button } from "@/modules/ui/components/button";
+import { Checkbox } from "@/modules/ui/components/checkbox";
 import { FormControl, FormError, FormField, FormItem } from "@/modules/ui/components/form";
 import { Input } from "@/modules/ui/components/input";
 import { PasswordInput } from "@/modules/ui/components/password-input";
@@ -23,7 +25,7 @@ import { PasswordChecks } from "./password-checks";
 
 const ZSignupInput = z.object({
   name: ZUserName,
-  email: z.string().email(),
+  email: z.email(),
   password: ZUserPassword,
 });
 
@@ -48,6 +50,7 @@ interface SignupFormProps {
   samlTenant: string;
   samlProduct: string;
   turnstileSiteKey?: string;
+  isFormbricksCloud: boolean;
 }
 
 export const SignupForm = ({
@@ -69,6 +72,7 @@ export const SignupForm = ({
   samlTenant,
   samlProduct,
   turnstileSiteKey,
+  isFormbricksCloud,
 }: SignupFormProps) => {
   const [showLogin, setShowLogin] = useState(false);
   const searchParams = useSearchParams();
@@ -76,10 +80,12 @@ export const SignupForm = ({
   const inviteToken = searchParams?.get("inviteToken");
   const router = useRouter();
   const [turnstileToken, setTurnstileToken] = useState<string>();
+  const [subscribeToSecurityUpdates, setSubscribeToSecurityUpdates] = useState(false);
+  const [subscribeToProductUpdates, setSubscribeToProductUpdates] = useState(false);
 
   const turnstile = useTurnstile();
 
-  const callbackUrl = useMemo(() => {
+  const returnToUrl = useMemo(() => {
     if (inviteToken) {
       return webAppUrl + "/invite?token=" + inviteToken;
     } else {
@@ -109,6 +115,9 @@ export const SignupForm = ({
         userLocale,
         inviteToken: inviteToken ?? "",
         turnstileToken,
+        isFormbricksCloud,
+        subscribeToSecurityUpdates,
+        subscribeToProductUpdates,
       });
 
       const emailTokenActionResponse = await createEmailTokenAction({ email: data.email });
@@ -116,7 +125,10 @@ export const SignupForm = ({
 
       const url = emailVerificationDisabled
         ? `/auth/signup-without-verification-success?token=${token}`
-        : `/auth/verification-requested?token=${token}`;
+        : buildVerificationRequestedPath({
+            token: token ?? "",
+            callbackUrl: inviteToken ? returnToUrl : undefined,
+          });
 
       if (createUserResponse?.data) {
         router.push(url);
@@ -213,7 +225,7 @@ export const SignupForm = ({
                               placeholder="*******"
                               aria-placeholder="password"
                               required
-                              className="focus:border-brand-dark focus:ring-brand-dark block w-full rounded-md shadow-sm sm:text-sm"
+                              className="block w-full rounded-md shadow-sm focus:border-brand-dark focus:ring-brand-dark sm:text-sm"
                             />
                             {error?.message && <FormError className="text-left">{error.message}</FormError>}
                           </div>
@@ -237,6 +249,43 @@ export const SignupForm = ({
                 }}
               />
             )}
+
+            {showLogin &&
+              (isFormbricksCloud ? (
+                <label
+                  htmlFor="product-updates"
+                  className="my-4 flex cursor-pointer space-x-2 rounded-md border border-slate-200 bg-slate-100 p-2 text-left">
+                  <Checkbox
+                    id="product-updates"
+                    checked={subscribeToProductUpdates}
+                    onCheckedChange={(checked) => setSubscribeToProductUpdates(checked === true)}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-slate-700">
+                      {t("auth.signup.product_updates_title")}
+                    </span>
+                    <p className="text-xs text-slate-500">{t("auth.signup.product_updates_description")}</p>
+                  </div>
+                </label>
+              ) : (
+                <label
+                  htmlFor="security-updates"
+                  className="my-4 flex cursor-pointer space-x-2 rounded-md border border-slate-200 bg-slate-100 p-2 text-left">
+                  <Checkbox
+                    id="security-updates"
+                    checked={subscribeToSecurityUpdates}
+                    onCheckedChange={(checked) => setSubscribeToSecurityUpdates(checked === true)}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-slate-700">
+                      {t("auth.signup.security_updates_title")}
+                    </span>
+                    <p className="text-xs text-slate-500">{t("auth.signup.security_updates_description")}</p>
+                  </div>
+                </label>
+              ))}
 
             {showLogin && (
               <Button
@@ -273,7 +322,7 @@ export const SignupForm = ({
           samlSsoEnabled={samlSsoEnabled}
           samlTenant={samlTenant}
           samlProduct={samlProduct}
-          callbackUrl={callbackUrl}
+          returnToUrl={returnToUrl}
           source="signup"
         />
       )}
@@ -282,7 +331,7 @@ export const SignupForm = ({
         <span className="leading-5 text-slate-500">{t("auth.signup.have_an_account")}</span>
         <br />
         <Link
-          href={inviteToken ? `/auth/login?callbackUrl=${callbackUrl}` : "/auth/login"}
+          href={inviteToken ? `/auth/login?callbackUrl=${returnToUrl}` : "/auth/login"}
           className="font-semibold text-slate-600 underline hover:text-slate-700">
           {t("auth.signup.log_in")}
         </Link>

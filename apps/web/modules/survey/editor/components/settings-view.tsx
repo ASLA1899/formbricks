@@ -1,4 +1,5 @@
 import { ActionClass, Environment, OrganizationRole } from "@prisma/client";
+import { type Dispatch, type SetStateAction } from "react";
 import { TContactAttributeKey } from "@formbricks/types/contact-attribute-key";
 import { TSurveyQuota } from "@formbricks/types/quota";
 import { TSegment } from "@formbricks/types/segment";
@@ -19,7 +20,7 @@ import { SharingPanel } from "@/modules/survey/sharing/components/sharing-panel"
 interface SettingsViewProps {
   environment: Pick<Environment, "id" | "appSetupCompleted">;
   localSurvey: TSurvey;
-  setLocalSurvey: (survey: TSurvey) => void;
+  setLocalSurvey: Dispatch<SetStateAction<TSurvey>>;
   actionClasses: ActionClass[];
   contactAttributeKeys: TContactAttributeKey[];
   segments: TSegment[];

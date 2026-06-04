@@ -71,14 +71,19 @@ export const OrganizationActions = ({
   const handleLeaveOrganization = async () => {
     setLoading(true);
     try {
-      await leaveOrganizationAction({ organizationId: organization.id });
+      const result = await leaveOrganizationAction({ organizationId: organization.id });
+      if (result?.serverError) {
+        toast.error(getFormattedErrorMessage(result));
+        setLoading(false);
+        return;
+      }
       toast.success(t("environments.settings.general.member_deleted_successfully"));
       router.refresh();
       setLoading(false);
       localStorage.removeItem(FORMBRICKS_ENVIRONMENT_ID_LS);
       router.push("/");
     } catch (err) {
-      toast.error(`Error: ${err.message}`);
+      toast.error(`Error: ${err instanceof Error ? err.message : "Unknown error occurred"}`);
       setLoading(false);
     }
   };
@@ -101,24 +106,23 @@ export const OrganizationActions = ({
         toast.error(errorMessage);
       }
     } else {
-      const invitePromises = await Promise.all(
-        data.map(async ({ name, email, role, teamIds }) => {
-          const inviteUserActionResult = await inviteUserAction({
-            organizationId: organization.id,
-            email: email.toLowerCase(),
-            name,
-            role,
-            teamIds,
-          });
-          return {
-            email,
-            success: Boolean(inviteUserActionResult?.data),
-          };
-        })
-      );
-      let failedInvites: string[] = [];
-      let successInvites: string[] = [];
-      invitePromises.forEach((invite) => {
+      const inviteResults: { email: string; success: boolean }[] = [];
+      for (const { name, email, role, teamIds } of data) {
+        const inviteUserActionResult = await inviteUserAction({
+          organizationId: organization.id,
+          email: email.toLowerCase(),
+          name,
+          role,
+          teamIds,
+        });
+        inviteResults.push({
+          email,
+          success: Boolean(inviteUserActionResult?.data),
+        });
+      }
+      const failedInvites: string[] = [];
+      const successInvites: string[] = [];
+      inviteResults.forEach((invite) => {
         if (!invite.success) {
           failedInvites.push(invite.email);
         } else {

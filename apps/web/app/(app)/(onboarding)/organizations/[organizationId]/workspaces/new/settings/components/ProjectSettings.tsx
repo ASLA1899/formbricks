@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -17,6 +17,7 @@ import {
 import { createProjectAction } from "@/app/(app)/environments/[environmentId]/actions";
 import { previewSurvey } from "@/app/lib/templates";
 import { FORMBRICKS_SURVEYS_FILTERS_KEY_LS } from "@/lib/localStorage";
+import { buildStylingFromBrandColor } from "@/lib/styling/constants";
 import { toJsEnvironmentStateSurvey } from "@/lib/survey/client-utils";
 import { getFormattedErrorMessage } from "@/lib/utils/helper";
 import { TOrganizationTeam } from "@/modules/ee/teams/project-teams/types/team";
@@ -65,10 +66,17 @@ export const ProjectSettings = ({
   const { t } = useTranslation();
   const addProject = async (data: TProjectUpdateInput) => {
     try {
+      // Build the full styling from the chosen brand color so all derived
+      // colours (question, button, input, option, progress, etc.) are persisted.
+      // Without this, only brandColor is saved and the look-and-feel page falls
+      // back to STYLE_DEFAULTS computed from the default brand (#64748b).
+      const fullStyling = buildStylingFromBrandColor(data.styling?.brandColor?.light);
+
       const createProjectResponse = await createProjectAction({
         organizationId,
         data: {
           ...data,
+          styling: fullStyling,
           config: { channel, industry },
           teamIds: data.teamIds,
         },
@@ -113,6 +121,7 @@ export const ProjectSettings = ({
   const projectName = form.watch("name");
   const logoUrl = form.watch("logo.url");
   const brandColor = form.watch("styling.brandColor.light") ?? defaultBrandColor;
+  const previewStyling = useMemo(() => buildStylingFromBrandColor(brandColor), [brandColor]);
   const { isSubmitting } = form.formState;
 
   const organizationTeamsOptions = organizationTeams.map((team) => ({
@@ -220,29 +229,27 @@ export const ProjectSettings = ({
         </FormProvider>
       </div>
 
-      <div className="relative flex h-[30rem] w-1/2 flex-col items-center justify-center space-y-2 rounded-lg border bg-slate-200 shadow">
+      <div className="relative flex w-1/2 flex-col items-center justify-center space-y-2 rounded-lg border bg-slate-200 p-6 shadow">
         {logoUrl && (
           <Image
             src={logoUrl}
             alt="Logo"
             width={256}
             height={56}
-            className="absolute top-2 left-2 -mb-6 h-20 w-auto max-w-64 rounded-lg border object-contain p-1"
+            className="absolute left-2 top-2 -mb-6 h-20 w-auto max-w-64 rounded-lg border object-contain p-1"
           />
         )}
         <p className="text-sm text-slate-400">{t("common.preview")}</p>
-        <div className="z-0 h-3/4 w-3/4">
-          <SurveyInline
-            appUrl={publicDomain}
-            isPreviewMode={true}
-            survey={toJsEnvironmentStateSurvey(previewSurvey(projectName || "my Product", t))}
-            styling={{ brandColor: { light: brandColor } }}
-            isBrandingEnabled={false}
-            languageCode="default"
-            onFileUpload={async (file) => file.name}
-            autoFocus={false}
-          />
-        </div>
+        <SurveyInline
+          appUrl={publicDomain}
+          isPreviewMode={true}
+          survey={toJsEnvironmentStateSurvey(previewSurvey(projectName || t("common.my_product"), t))}
+          styling={previewStyling}
+          isBrandingEnabled={false}
+          languageCode="default"
+          onFileUpload={async (file) => file.name}
+          autoFocus={false}
+        />
       </div>
       <CreateTeamModal
         open={createTeamModalOpen}

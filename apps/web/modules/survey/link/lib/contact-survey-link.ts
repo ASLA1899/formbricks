@@ -98,7 +98,7 @@ export const verifyContactSurveyToken = (
       surveyId: symmetricDecrypt(claims.surveyId, ENCRYPTION_KEY),
     });
   } catch (error) {
-    logger.error("Error verifying contact survey token:", error);
+    logger.error(error, "Error verifying contact survey token");
 
     if (error instanceof jwt.TokenExpiredError) {
       return err({

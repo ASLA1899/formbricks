@@ -11,31 +11,14 @@ import { getOrganizationByEnvironmentId } from "@/lib/organization/service";
 import { type SurveyAccessMembership, getSurveyAccessWhere } from "@/lib/survey/access";
 import { checkForInvalidMediaInBlocks } from "@/lib/survey/utils";
 import { validateInputs } from "@/lib/utils/validate";
+import { getTranslate } from "@/lingodotdev/server";
 import { getIsQuotasEnabled } from "@/modules/ee/license-check/lib/utils";
 import { getQuotas } from "@/modules/ee/quotas/lib/quotas";
 import { buildOrderByClause, buildWhereClause } from "@/modules/survey/lib/utils";
 import { doesEnvironmentExist } from "@/modules/survey/list/lib/environment";
 import { getProjectWithLanguagesByEnvironmentId } from "@/modules/survey/list/lib/project";
 import { TProjectWithLanguages, TSurvey } from "@/modules/survey/list/types/surveys";
-
-export const surveySelect: Prisma.SurveySelect = {
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  name: true,
-  type: true,
-  creator: {
-    select: {
-      name: true,
-    },
-  },
-  status: true,
-  singleUse: true,
-  environmentId: true,
-  _count: {
-    select: { responses: true },
-  },
-};
+import { mapSurveyRowToSurvey, mapSurveyRowsToSurveys, surveySelect } from "./survey-record";
 
 export type SurveyAccessContext = {
   userId: string;
@@ -73,12 +56,7 @@ export const getSurveys = reactCache(
         skip: offset,
       });
 
-      return surveysPrisma.map((survey) => {
-        return {
-          ...survey,
-          responseCount: survey._count.responses,
-        };
-      });
+      return mapSurveyRowsToSurveys(surveysPrisma);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         logger.error(error, "Error getting surveys");
@@ -135,12 +113,7 @@ export const getSurveysSortedByRelevance = reactCache(
               skip: offset,
             });
 
-      surveys = inProgressSurveys.map((survey) => {
-        return {
-          ...survey,
-          responseCount: survey._count.responses,
-        };
-      });
+      surveys = mapSurveyRowsToSurveys(inProgressSurveys);
 
       // Determine if additional surveys are needed
       if (offset !== undefined && limit && inProgressSurveys.length < limit) {
@@ -163,15 +136,7 @@ export const getSurveysSortedByRelevance = reactCache(
           skip: newOffset,
         });
 
-        surveys = [
-          ...surveys,
-          ...additionalSurveys.map((survey) => {
-            return {
-              ...survey,
-              responseCount: survey._count.responses,
-            };
-          }),
-        ];
+        surveys = [...surveys, ...mapSurveyRowsToSurveys(additionalSurveys)];
       }
 
       return surveys;
@@ -206,7 +171,7 @@ export const getSurvey = reactCache(async (surveyId: string): Promise<TSurvey | 
     return null;
   }
 
-  return { ...surveyPrisma, responseCount: surveyPrisma?._count.responses };
+  return mapSurveyRowToSurvey(surveyPrisma);
 });
 
 export const deleteSurvey = async (surveyId: string): Promise<boolean> => {
@@ -332,8 +297,9 @@ export const copySurveyToOtherEnvironment = async (
     if (!existingEnvironment) throw new ResourceNotFoundError("Environment", environmentId);
     if (!existingProject) throw new ResourceNotFoundError("Project", environmentId);
     if (!existingSurvey) throw new ResourceNotFoundError("Survey", surveyId);
+    if (!organization) throw new ResourceNotFoundError("Organization", environmentId);
 
-    const isQuotasAllowed = await getIsQuotasEnabled(organization?.billing.plan);
+    const isQuotasAllowed = await getIsQuotasEnabled(organization.id);
 
     let targetEnvironment: string | null = null;
     let targetProject: TProjectWithLanguages | null = null;
@@ -361,12 +327,13 @@ export const copySurveyToOtherEnvironment = async (
 
     const { ...restExistingSurvey } = existingSurvey;
     const hasLanguages = existingSurvey.languages && existingSurvey.languages.length > 0;
+    const t = await getTranslate();
 
     // Prepare survey data
     const surveyData: Prisma.SurveyCreateInput = {
       ...restExistingSurvey,
       id: createId(),
-      name: `${existingSurvey.name} (copy)`,
+      name: `${existingSurvey.name} ${t("common.duplicate_copy")}`,
       type: existingSurvey.type,
       status: "draft",
       welcomeCard: structuredClone(existingSurvey.welcomeCard),
@@ -429,11 +396,11 @@ export const copySurveyToOtherEnvironment = async (
           if (hasNameConflict) {
             // Find a unique name by appending (copy), (copy 2), (copy 3), etc.
             let copyNumber = 1;
-            let candidateName = `${trigger.actionClass.name} (copy)`;
+            let candidateName = `${trigger.actionClass.name} ${t("common.duplicate_copy")}`;
 
             while (existingActionClassNames.has(candidateName)) {
               copyNumber++;
-              candidateName = `${trigger.actionClass.name} (copy ${copyNumber})`;
+              candidateName = `${trigger.actionClass.name} ${t("common.duplicate_copy_number", { copyNumber })}`;
             }
 
             modifiedName = candidateName;
@@ -631,13 +598,26 @@ export const copySurveyToOtherEnvironment = async (
   }
 };
 
+/**
+ * Count surveys in an environment. ACL-filtered by access when an access context is provided
+ * (the UI survey list); unfiltered for workspace-scoped API callers (e.g. the v3 surveys API,
+ * whose list query — getSurveyListPage — is likewise not per-user ACL'd). Applies the same
+ * filterCriteria as getSurveys so the total matches the list.
+ */
 export const getSurveyCount = reactCache(
-  async (environmentId: string, accessContext: SurveyAccessContext): Promise<number> => {
-    validateInputs([environmentId, z.string().cuid2()]);
+  async (
+    environmentId: string,
+    accessContext?: SurveyAccessContext,
+    filterCriteria?: TSurveyFilterCriteria
+  ): Promise<number> => {
+    validateInputs([environmentId, z.cuid2()]);
     try {
       const surveyCount = await prisma.survey.count({
         where: {
-          AND: [{ environmentId }, getSurveyAccessWhere(accessContext)],
+          AND: [
+            { environmentId, ...buildWhereClause(filterCriteria) },
+            accessContext ? getSurveyAccessWhere(accessContext) : {},
+          ],
         },
       });
 

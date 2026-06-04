@@ -1,7 +1,7 @@
-import { NextRequest } from "next/server";
+import { logger } from "@formbricks/logger";
 import { TIntegrationNotionConfigData, TIntegrationNotionInput } from "@formbricks/types/integration/notion";
 import { responses } from "@/app/lib/api/response";
-import { TSessionAuthentication, withV1ApiWrapper } from "@/app/lib/api/with-api-logging";
+import { withV1ApiWrapper } from "@/app/lib/api/with-api-logging";
 import {
   ENCRYPTION_KEY,
   NOTION_OAUTH_CLIENT_ID,
@@ -12,15 +12,15 @@ import {
 import { symmetricEncrypt } from "@/lib/crypto";
 import { hasUserEnvironmentAccess } from "@/lib/environment/auth";
 import { createOrUpdateIntegration, getIntegrationByType } from "@/lib/integration/service";
+import { capturePostHogEvent } from "@/lib/posthog";
+import { getOrganizationIdFromEnvironmentId } from "@/lib/utils/helper";
 
 export const GET = withV1ApiWrapper({
-  handler: async ({
-    req,
-    authentication,
-  }: {
-    req: NextRequest;
-    authentication: NonNullable<TSessionAuthentication>;
-  }) => {
+  handler: async ({ req, authentication }) => {
+    if (!authentication || !("user" in authentication)) {
+      return { response: responses.notAuthenticatedResponse() };
+    }
+
     const url = req.url;
     const queryParams = new URLSearchParams(url.split("?")[1]); // Split the URL and get the query parameters
     const environmentId = queryParams.get("state"); // Get the value of the 'state' parameter
@@ -99,6 +99,16 @@ export const GET = withV1ApiWrapper({
       const result = await createOrUpdateIntegration(environmentId, notionIntegration);
 
       if (result) {
+        try {
+          const organizationId = await getOrganizationIdFromEnvironmentId(environmentId);
+          capturePostHogEvent(authentication.user.id, "integration_connected", {
+            integration_type: "notion",
+            organization_id: organizationId,
+          });
+        } catch (err) {
+          logger.error({ error: err }, "Failed to capture PostHog integration_connected event for notion");
+        }
+
         return {
           response: Response.redirect(
             `${WEBAPP_URL}/environments/${environmentId}/workspace/integrations/notion`

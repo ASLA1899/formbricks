@@ -20,6 +20,10 @@ import {
   isValidGoogleSheetsUrl,
 } from "@/app/(app)/environments/[environmentId]/workspace/integrations/google-sheets/lib/util";
 import GoogleSheetLogo from "@/images/googleSheetsLogo.png";
+import {
+  GOOGLE_SHEET_INTEGRATION_INSUFFICIENT_PERMISSION,
+  GOOGLE_SHEET_INTEGRATION_INVALID_GRANT,
+} from "@/lib/googleSheet/constants";
 import { getFormattedErrorMessage } from "@/lib/utils/helper";
 import { recallToHeadline } from "@/lib/utils/recall";
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
@@ -118,6 +122,17 @@ export const AddIntegrationModal = ({
     resetForm();
   }, [selectedIntegration, surveys]);
 
+  const showErrorMessageToast = (response: Awaited<ReturnType<typeof getSpreadsheetNameByIdAction>>) => {
+    const errorMessage = getFormattedErrorMessage(response);
+    if (errorMessage === GOOGLE_SHEET_INTEGRATION_INVALID_GRANT) {
+      toast.error(t("environments.integrations.google_sheets.token_expired_error"));
+    } else if (errorMessage === GOOGLE_SHEET_INTEGRATION_INSUFFICIENT_PERMISSION) {
+      toast.error(t("environments.integrations.google_sheets.spreadsheet_permission_error"));
+    } else {
+      toast.error(errorMessage);
+    }
+  };
+
   const linkSheet = async () => {
     try {
       if (!isValidGoogleSheetsUrl(spreadsheetUrl)) {
@@ -129,6 +144,7 @@ export const AddIntegrationModal = ({
       if (selectedElements.length === 0) {
         throw new Error(t("environments.integrations.select_at_least_one_question_error"));
       }
+      setIsLinkingSheet(true);
       const spreadsheetId = extractSpreadsheetIdFromUrl(spreadsheetUrl);
       const spreadsheetNameResponse = await getSpreadsheetNameByIdAction({
         googleSheetIntegration,
@@ -137,13 +153,11 @@ export const AddIntegrationModal = ({
       });
 
       if (!spreadsheetNameResponse?.data) {
-        const errorMessage = getFormattedErrorMessage(spreadsheetNameResponse);
-        throw new Error(errorMessage);
+        showErrorMessageToast(spreadsheetNameResponse);
+        return;
       }
 
       const spreadsheetName = spreadsheetNameResponse.data;
-
-      setIsLinkingSheet(true);
       integrationData.spreadsheetId = spreadsheetId;
       integrationData.spreadsheetName = spreadsheetName;
       integrationData.surveyId = selectedSurvey.id;
@@ -165,7 +179,14 @@ export const AddIntegrationModal = ({
         // create action
         googleSheetIntegrationData.config.data.push(integrationData);
       }
-      await createOrUpdateIntegrationAction({ environmentId, integrationData: googleSheetIntegrationData });
+      const result = await createOrUpdateIntegrationAction({
+        environmentId,
+        integrationData: googleSheetIntegrationData,
+      });
+      if (result?.serverError) {
+        toast.error(getFormattedErrorMessage(result));
+        return;
+      }
       if (selectedIntegration) {
         toast.success(t("environments.integrations.integration_updated_successfully"));
       } else {
@@ -174,7 +195,7 @@ export const AddIntegrationModal = ({
       resetForm();
       setOpen(false);
     } catch (e) {
-      toast.error(e.message);
+      toast.error(e instanceof Error ? e.message : "Unknown error occurred");
     } finally {
       setIsLinkingSheet(false);
     }
@@ -205,11 +226,18 @@ export const AddIntegrationModal = ({
     googleSheetIntegrationData.config.data.splice(selectedIntegration!.index, 1);
     try {
       setIsDeleting(true);
-      await createOrUpdateIntegrationAction({ environmentId, integrationData: googleSheetIntegrationData });
+      const result = await createOrUpdateIntegrationAction({
+        environmentId,
+        integrationData: googleSheetIntegrationData,
+      });
+      if (result?.serverError) {
+        toast.error(getFormattedErrorMessage(result));
+        return;
+      }
       toast.success(t("environments.integrations.integration_removed_successfully"));
       setOpen(false);
     } catch (error) {
-      toast.error(error.message);
+      toast.error(error instanceof Error ? error.message : "Unknown error occurred");
     } finally {
       setIsDeleting(false);
     }
@@ -266,7 +294,7 @@ export const AddIntegrationModal = ({
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="Surveys">{t("common.questions")}</Label>
-                    <div className="mt-1 max-h-[15vh] overflow-x-hidden overflow-y-auto rounded-lg border border-slate-200">
+                    <div className="mt-1 max-h-[15vh] overflow-y-auto overflow-x-hidden rounded-lg border border-slate-200">
                       <div className="grid content-center rounded-lg bg-slate-50 p-3 text-left text-sm text-slate-900">
                         {surveyElements.map((question) => (
                           <div key={question.id} className="my-1 flex items-center space-x-2">

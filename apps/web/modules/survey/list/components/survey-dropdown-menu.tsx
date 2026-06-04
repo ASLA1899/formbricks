@@ -73,7 +73,11 @@ export const SurveyDropDownMenu = ({
   const handleDeleteSurvey = async (surveyId: string) => {
     setLoading(true);
     try {
-      await deleteSurveyAction({ surveyId });
+      const result = await deleteSurveyAction({ surveyId });
+      if (result?.serverError) {
+        toast.error(getFormattedErrorMessage(result));
+        return;
+      }
       deleteSurvey(surveyId);
       toast.success(t("environments.surveys.survey_deleted_successfully"));
     } catch (error) {
@@ -105,7 +109,9 @@ export const SurveyDropDownMenu = ({
         targetEnvironmentId: environmentId,
       });
 
-      if (duplicatedSurveyResponse?.data) {
+      if (duplicatedSurveyResponse?.serverError) {
+        toast.error(getFormattedErrorMessage(duplicatedSurveyResponse));
+      } else if (duplicatedSurveyResponse?.data) {
         const transformedDuplicatedSurvey = await getSurveyAction({
           surveyId: duplicatedSurveyResponse.data.id,
         });
@@ -123,7 +129,7 @@ export const SurveyDropDownMenu = ({
     setLoading(false);
   };
 
-  const handleEditforActiveSurvey = (e) => {
+  const handleEditforActiveSurvey = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsDropDownOpen(false);
     setIsCautionDialogOpen(true);
@@ -344,7 +350,7 @@ export const SurveyDropDownMenu = ({
 
       {!isSurveyCreationDeletionDisabled && (
         <DeleteDialog
-          deleteWhat="Survey"
+          deleteWhat={t("common.survey")}
           open={isDeleteDialogOpen}
           setOpen={setDeleteDialogOpen}
           onDelete={() => handleDeleteSurvey(survey.id)}

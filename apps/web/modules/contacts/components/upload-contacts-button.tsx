@@ -79,7 +79,7 @@ export const UploadContactsCSVButton = ({
           return;
         }
 
-        setCsvData(records);
+        setCsvData(records as Record<string, string>[]);
         setEnrichedData([]);
         setShowPreview("original");
       } catch (error) {
@@ -225,7 +225,10 @@ export const UploadContactsCSVButton = ({
     ];
 
     const headers = Object.keys(exampleData[0]);
-    const csvRows = [headers.join(","), ...exampleData.map((row) => headers.map((h) => row[h]).join(","))];
+    const csvRows = [
+      headers.join(","),
+      ...exampleData.map((row) => headers.map((h) => row[h as keyof typeof row]).join(",")),
+    ];
     const csvString = csvRows.join("\n");
     const csvContent = "data:text/csv;charset=utf-8," + encodeURIComponent(csvString);
 

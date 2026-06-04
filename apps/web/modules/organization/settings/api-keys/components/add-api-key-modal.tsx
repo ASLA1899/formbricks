@@ -53,11 +53,7 @@ interface PermissionRecord {
   environmentType: string;
 }
 
-const permissionOptions: ApiKeyPermission[] = [
-  ApiKeyPermission.read,
-  ApiKeyPermission.write,
-  ApiKeyPermission.manage,
-];
+const permissionOptions = [ApiKeyPermission.read, ApiKeyPermission.write, ApiKeyPermission.manage];
 
 export const AddApiKeyModal = ({
   open,
@@ -79,7 +75,7 @@ export const AddApiKeyModal = ({
   const [selectedOrganizationAccess, setSelectedOrganizationAccess] =
     useState<TOrganizationAccess>(defaultOrganizationAccess);
 
-  const getInitialPermissions = () => {
+  const getInitialPermissions = (): Record<string, PermissionRecord> => {
     if (projects.length > 0 && projects[0].environments.length > 0) {
       return {
         "permission-0": {
@@ -91,7 +87,7 @@ export const AddApiKeyModal = ({
         },
       };
     }
-    return {} as Record<string, PermissionRecord>;
+    return {};
   };
 
   // Initialize with one permission by default
@@ -255,7 +251,7 @@ export const AddApiKeyModal = ({
                               </span>
                             </button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent className="min-w-[8rem]">
+                          <DropdownMenuContent className="max-h-[300px] min-w-[8rem] overflow-y-auto">
                             {projectOptions.map((option) => (
                               <DropdownMenuItem
                                 key={option.id}
@@ -286,7 +282,7 @@ export const AddApiKeyModal = ({
                               </span>
                             </button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent className="min-w-[8rem] capitalize">
+                          <DropdownMenuContent className="max-h-[300px] min-w-[8rem] overflow-y-auto capitalize">
                             {getEnvironmentOptionsForProject(permission.projectId).map((env) => (
                               <DropdownMenuItem
                                 key={env.id}

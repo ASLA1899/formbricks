@@ -1,14 +1,14 @@
 import { useRef, useState } from "preact/hooks";
 import { useTranslation } from "react-i18next";
-import { getLanguageLabel } from "@formbricks/i18n-utils/src";
 import { TJsEnvironmentStateSurvey } from "@formbricks/types/js";
 import { type TSurveyLanguage } from "@formbricks/types/surveys/types";
 import { LanguageIcon } from "@/components/icons/language-icon";
 import { mixColor } from "@/lib/color";
 import { getI18nLanguage } from "@/lib/i18n-utils";
 import i18n from "@/lib/i18n.config";
+import { getLanguageDisplayName } from "@/lib/language-display-name";
 import { useClickOutside } from "@/lib/use-click-outside-hook";
-import { checkIfSurveyIsRTL, cn } from "@/lib/utils";
+import { cn, isRTLLanguage } from "@/lib/utils";
 
 interface LanguageSwitchProps {
   survey: TJsEnvironmentStateSurvey;
@@ -16,7 +16,7 @@ interface LanguageSwitchProps {
   setSelectedLanguageCode: (languageCode: string) => void;
   setFirstRender?: (firstRender: boolean) => void;
   hoverColor?: string;
-  borderRadius?: number;
+  borderRadius?: number | string;
   dir?: "ltr" | "rtl" | "auto";
   setDir?: (dir: "ltr" | "rtl" | "auto") => void;
 }
@@ -59,7 +59,7 @@ export function LanguageSwitch({
     handleI18nLanguage(calculatedLanguageCode);
 
     if (setDir) {
-      const calculateDir = checkIfSurveyIsRTL(survey, calculatedLanguageCode) ? "rtl" : "auto";
+      const calculateDir = isRTLLanguage(survey, calculatedLanguageCode) ? "rtl" : "ltr";
       setDir?.(calculateDir);
     }
 
@@ -85,7 +85,7 @@ export function LanguageSwitch({
         style={{
           backgroundColor: isHovered ? hoverColorWithOpacity : "transparent",
           transition: "background-color 0.2s ease",
-          borderRadius: `${borderRadius}px`,
+          borderRadius: typeof borderRadius === "number" ? `${borderRadius}px` : borderRadius,
         }}
         onClick={toggleDropdown}
         tabIndex={-1}
@@ -113,7 +113,7 @@ export function LanguageSwitch({
                 onClick={() => {
                   changeLanguage(surveyLanguage.language.code);
                 }}>
-                {getLanguageLabel(surveyLanguage.language.code, "en-US")}
+                {getLanguageDisplayName(surveyLanguage.language.code)}
               </button>
             );
           })}

@@ -2,6 +2,7 @@ import { Prisma, Webhook } from "@prisma/client";
 import { prisma } from "@formbricks/database";
 import { Result, err, ok } from "@formbricks/types/error-handlers";
 import { InvalidInputError } from "@formbricks/types/errors";
+import { generateWebhookSecret } from "@/lib/crypto";
 import { validateWebhookUrl } from "@/lib/utils/validate-webhook-url";
 import { getWebhooksQuery } from "@/modules/api/v2/management/webhooks/lib/utils";
 import { TGetWebhooksFilter, TWebhookInput } from "@/modules/api/v2/management/webhooks/types/webhooks";
@@ -42,7 +43,9 @@ export const getWebhooks = async (
   } catch (error) {
     return err({
       type: "internal_server_error",
-      details: [{ field: "webhooks", issue: error.message }],
+      details: [
+        { field: "webhooks", issue: error instanceof Error ? error.message : "Unknown error occurred" },
+      ],
     });
   }
 };
@@ -66,6 +69,8 @@ export const createWebhook = async (webhook: TWebhookInput): Promise<Result<Webh
   }
 
   try {
+    const secret = generateWebhookSecret();
+
     const prismaData: Prisma.WebhookCreateInput = {
       environment: {
         connect: {
@@ -77,6 +82,7 @@ export const createWebhook = async (webhook: TWebhookInput): Promise<Result<Webh
       source,
       triggers,
       surveyIds,
+      secret,
     };
 
     const createdWebhook = await prisma.webhook.create({
@@ -87,7 +93,9 @@ export const createWebhook = async (webhook: TWebhookInput): Promise<Result<Webh
   } catch (error) {
     return err({
       type: "internal_server_error",
-      details: [{ field: "webhook", issue: error.message }],
+      details: [
+        { field: "webhook", issue: error instanceof Error ? error.message : "Unknown error occurred" },
+      ],
     });
   }
 };

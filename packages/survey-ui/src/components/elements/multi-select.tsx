@@ -8,6 +8,11 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/general/dropdown-menu";
+import {
+  DropdownSearchInput,
+  SEARCH_THRESHOLD,
+  useDropdownSearch,
+} from "@/components/general/dropdown-search";
 import { ElementError } from "@/components/general/element-error";
 import { ElementHeader } from "@/components/general/element-header";
 import { Input } from "@/components/general/input";
@@ -46,6 +51,8 @@ interface MultiSelectProps {
   onChange: (value: string[]) => void;
   /** Whether the field is required (shows asterisk indicator) */
   required?: boolean;
+  /** Custom label for the required indicator */
+  requiredLabel?: string;
   /** Error message to display below the options */
   errorMessage?: string;
   /** Text direction: 'ltr' (left-to-right), 'rtl' (right-to-left), or 'auto' (auto-detect from content) */
@@ -74,6 +81,10 @@ interface MultiSelectProps {
   videoUrl?: string;
   /** Number of columns for list display: "1" (default) or "2" (responsive: single column on mobile, two columns on desktop) */
   columns?: "1" | "2";
+  /** Placeholder text for the search input in dropdown mode */
+  searchPlaceholder?: string;
+  /** Message shown when search yields no results */
+  searchNoResultsText?: string;
 }
 
 // Shared className for option labels
@@ -110,6 +121,8 @@ interface DropdownVariantProps {
   dir: TextDirection;
   otherInputRef: React.RefObject<HTMLInputElement | null>;
   required: boolean;
+  searchPlaceholder: string;
+  searchNoResultsText: string;
 }
 
 function DropdownVariant({
@@ -132,8 +145,10 @@ function DropdownVariant({
   dir,
   otherInputRef,
   required,
+  searchPlaceholder,
+  searchNoResultsText,
 }: Readonly<DropdownVariantProps>): React.JSX.Element {
-  const handleOptionToggle = (optionId: string) => {
+  const handleOptionToggle = (optionId: string): void => {
     if (selectedValues.includes(optionId)) {
       handleOptionRemove(optionId);
     } else {
@@ -141,61 +156,61 @@ function DropdownVariant({
     }
   };
 
+  // Search + side-locking
+  const allDropdownOptionCount = options.length + (hasOtherOption ? 1 : 0);
+  const showSearch = allDropdownOptionCount > SEARCH_THRESHOLD;
+
+  const {
+    searchQuery,
+    setSearchQuery,
+    searchInputRef,
+    lockedSide,
+    contentRef,
+    noneOption,
+    noneMatchesSearch,
+    filteredRegularOptions,
+    otherMatchesSearch,
+    hasNoResults,
+    handleDropdownOpen,
+    handleDropdownClose,
+  } = useDropdownSearch({ options, hasOtherOption, otherOptionLabel, isSearchEnabled: showSearch });
+
   return (
-    <>
+    <div>
       <ElementError errorMessage={errorMessage} dir={dir} />
-      <DropdownMenu>
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (open) handleDropdownOpen();
+          else handleDropdownClose();
+        }}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
             disabled={disabled}
-            className="rounded-input w-full justify-between"
+            className="rounded-input min-h-input bg-input-bg border-input-border text-input-text py-input-y px-input-x w-full justify-between"
             aria-invalid={Boolean(errorMessage)}
             aria-label={headline}>
-            <span className="truncate">{displayText}</span>
+            <span className="font-input font-input-weight text-input-text truncate">{displayText}</span>
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          className="z-[1100] w-[var(--radix-dropdown-menu-trigger-width)] border-slate-200 bg-white shadow-lg"
+          ref={contentRef}
+          side={lockedSide}
+          avoidCollisions={lockedSide === undefined}
+          className="bg-option-bg border-input-border w-(--radix-dropdown-menu-trigger-width) overflow-hidden"
           align="start">
-          {options
-            .filter((option) => option.id !== "none")
-            .map((option) => {
-              const isChecked = selectedValues.includes(option.id);
-              const optionId = `${inputId}-${option.id}`;
-
-              return (
-                <DropdownMenuCheckboxItem
-                  key={option.id}
-                  id={optionId}
-                  checked={isChecked}
-                  onCheckedChange={() => {
-                    handleOptionToggle(option.id);
-                  }}
-                  disabled={disabled}>
-                  <span className={optionLabelClassName}>{renderInlineMarkdown(option.label)}</span>
-                </DropdownMenuCheckboxItem>
-              );
-            })}
-          {hasOtherOption && otherOptionId ? (
-            <DropdownMenuCheckboxItem
-              id={`${inputId}-${otherOptionId}`}
-              checked={isOtherSelected}
-              onCheckedChange={() => {
-                if (isOtherSelected) {
-                  handleOptionRemove(otherOptionId);
-                } else {
-                  handleOptionAdd(otherOptionId);
-                }
-              }}
-              disabled={disabled}>
-              <span className={optionLabelClassName}>{renderInlineMarkdown(otherOptionLabel)}</span>
-            </DropdownMenuCheckboxItem>
+          {showSearch ? (
+            <DropdownSearchInput
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              searchInputRef={searchInputRef}
+              placeholder={searchPlaceholder}
+              dir={dir}
+            />
           ) : null}
-          {options
-            .filter((option) => option.id === "none")
-            .map((option) => {
+          <div className="max-h-[260px] overflow-y-auto">
+            {filteredRegularOptions.map((option) => {
               const isChecked = selectedValues.includes(option.id);
               const optionId = `${inputId}-${option.id}`;
 
@@ -203,15 +218,60 @@ function DropdownVariant({
                 <DropdownMenuCheckboxItem
                   key={option.id}
                   id={optionId}
+                  dir={dir}
                   checked={isChecked}
                   onCheckedChange={() => {
                     handleOptionToggle(option.id);
+                  }}
+                  onSelect={(e) => {
+                    e.preventDefault();
                   }}
                   disabled={disabled}>
                   <span className={optionLabelClassName}>{renderInlineMarkdown(option.label)}</span>
                 </DropdownMenuCheckboxItem>
               );
             })}
+            {otherMatchesSearch && otherOptionId ? (
+              <DropdownMenuCheckboxItem
+                id={`${inputId}-${otherOptionId}`}
+                dir={dir}
+                checked={isOtherSelected}
+                onCheckedChange={() => {
+                  if (isOtherSelected) {
+                    handleOptionRemove(otherOptionId);
+                  } else {
+                    handleOptionAdd(otherOptionId);
+                  }
+                }}
+                onSelect={(e) => {
+                  e.preventDefault();
+                }}
+                disabled={disabled}>
+                <span className="font-input font-input-weight text-input-text">{otherOptionLabel}</span>
+              </DropdownMenuCheckboxItem>
+            ) : null}
+            {noneOption && noneMatchesSearch ? (
+              <DropdownMenuCheckboxItem
+                key={noneOption.id}
+                id={`${inputId}-${noneOption.id}`}
+                dir={dir}
+                checked={selectedValues.includes(noneOption.id)}
+                onCheckedChange={() => {
+                  handleOptionToggle(noneOption.id);
+                }}
+                onSelect={(e) => {
+                  e.preventDefault();
+                }}
+                disabled={disabled}>
+                <span className="font-input font-input-weight text-input-text">{noneOption.label}</span>
+              </DropdownMenuCheckboxItem>
+            ) : null}
+            {hasNoResults ? (
+              <div className="text-input-placeholder px-2 py-4 text-center text-sm">
+                {searchNoResultsText}
+              </div>
+            ) : null}
+          </div>
         </DropdownMenuContent>
       </DropdownMenu>
       {isOtherSelected ? (
@@ -223,11 +283,12 @@ function DropdownVariant({
           placeholder={otherOptionPlaceholder}
           disabled={disabled}
           aria-required={required}
+          aria-invalid={Boolean(errorMessage)}
           dir={dir}
-          className="w-full"
+          className="mt-2 w-full"
         />
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -356,6 +417,7 @@ function ListVariant({
                   placeholder={otherOptionPlaceholder}
                   disabled={disabled}
                   aria-required={required}
+                  aria-invalid={Boolean(errorMessage)}
                   dir={dir}
                   className="mt-2 w-full"
                   ref={otherInputRef}
@@ -414,6 +476,7 @@ function MultiSelect({
   value = [],
   onChange,
   required = false,
+  requiredLabel,
   errorMessage,
   dir = "auto",
   disabled = false,
@@ -428,6 +491,8 @@ function MultiSelect({
   imageUrl,
   videoUrl,
   columns = "1",
+  searchPlaceholder = "Search...",
+  searchNoResultsText = "No results found",
 }: Readonly<MultiSelectProps>): React.JSX.Element {
   // Ensure value is always an array
   const selectedValues = Array.isArray(value) ? value : [];
@@ -470,10 +535,17 @@ function MultiSelect({
   // Get selected option labels for dropdown display
   const selectedLabels = options.filter((opt) => selectedValues.includes(opt.id)).map((opt) => opt.label);
 
+  // Handle "other" option label display
+  if (hasOtherOption && otherOptionId && selectedValues.includes(otherOptionId)) {
+    const otherLabel = otherValue || otherOptionLabel;
+    if (!selectedLabels.includes(otherLabel)) {
+      selectedLabels.push(otherLabel);
+    }
+  }
+
   let displayText = placeholder;
   if (selectedLabels.length > 0) {
-    displayText =
-      selectedLabels.length === 1 ? selectedLabels[0] : `${String(selectedLabels.length)} selected`;
+    displayText = selectedLabels.join(", ");
   }
 
   return (
@@ -483,13 +555,14 @@ function MultiSelect({
         headline={headline}
         description={description}
         required={required}
+        requiredLabel={requiredLabel}
         htmlFor={inputId}
         imageUrl={imageUrl}
         videoUrl={videoUrl}
       />
 
       {/* Options */}
-      <div className="relative">
+      <div className="relative" data-element-input>
         {variant === "dropdown" ? (
           <DropdownVariant
             inputId={inputId}
@@ -511,6 +584,8 @@ function MultiSelect({
             dir={dir}
             otherInputRef={otherInputRef}
             required={required}
+            searchPlaceholder={searchPlaceholder}
+            searchNoResultsText={searchNoResultsText}
           />
         ) : (
           <ListVariant

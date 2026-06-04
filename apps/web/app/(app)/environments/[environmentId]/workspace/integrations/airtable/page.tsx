@@ -1,28 +1,30 @@
 import { redirect } from "next/navigation";
+import { logger } from "@formbricks/logger";
 import { TIntegrationItem } from "@formbricks/types/integration";
 import { TIntegrationAirtable } from "@formbricks/types/integration/airtable";
 import { AirtableWrapper } from "@/app/(app)/environments/[environmentId]/workspace/integrations/airtable/components/AirtableWrapper";
 import { getSurveys } from "@/app/(app)/environments/[environmentId]/workspace/integrations/lib/surveys";
 import { getAirtableTables } from "@/lib/airtable/service";
-import { AIRTABLE_CLIENT_ID, WEBAPP_URL } from "@/lib/constants";
+import { AIRTABLE_CLIENT_ID, DEFAULT_LOCALE, WEBAPP_URL } from "@/lib/constants";
 import { getIntegrations } from "@/lib/integration/service";
-import { findMatchingLocale } from "@/lib/utils/locale";
+import { getUserLocale } from "@/lib/user/service";
 import { getTranslate } from "@/lingodotdev/server";
 import { getEnvironmentAuth } from "@/modules/environments/lib/utils";
 import { GoBackButton } from "@/modules/ui/components/go-back-button";
 import { PageContentWrapper } from "@/modules/ui/components/page-content-wrapper";
 import { PageHeader } from "@/modules/ui/components/page-header";
 
-const Page = async (props) => {
+const Page = async (props: { params: Promise<{ environmentId: string }> }) => {
   const params = await props.params;
   const t = await getTranslate();
   const isEnabled = !!AIRTABLE_CLIENT_ID;
 
-  const { isReadOnly, environment } = await getEnvironmentAuth(params.environmentId);
+  const { isReadOnly, environment, session } = await getEnvironmentAuth(params.environmentId);
 
-  const [surveys, integrations] = await Promise.all([
+  const [surveys, integrations, locale] = await Promise.all([
     getSurveys(params.environmentId),
     getIntegrations(params.environmentId),
+    getUserLocale(session.user.id),
   ]);
 
   const airtableIntegration: TIntegrationAirtable | undefined = integrations?.find(
@@ -30,12 +32,15 @@ const Page = async (props) => {
   );
 
   let airtableArray: TIntegrationItem[] = [];
+  let isTokenValid = true;
   if (airtableIntegration?.config.key) {
-    airtableArray = await getAirtableTables(params.environmentId);
+    try {
+      airtableArray = await getAirtableTables(params.environmentId);
+    } catch (error) {
+      logger.error(error, "Failed to load Airtable bases — token may be expired or revoked");
+      isTokenValid = false;
+    }
   }
-
-  const locale = await findMatchingLocale();
-
   if (isReadOnly) {
     return redirect("./");
   }
@@ -52,7 +57,8 @@ const Page = async (props) => {
           environmentId={environment.id}
           surveys={surveys}
           webAppUrl={WEBAPP_URL}
-          locale={locale}
+          locale={locale ?? DEFAULT_LOCALE}
+          showReconnectButton={!isTokenValid}
         />
       </div>
     </PageContentWrapper>

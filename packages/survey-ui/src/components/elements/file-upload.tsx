@@ -37,6 +37,8 @@ interface FileUploadProps {
   allowedFileExtensions?: string[];
   /** Whether the field is required (shows asterisk indicator) */
   required?: boolean;
+  /** Custom label for the required indicator */
+  requiredLabel?: string;
   /** Error message to display */
   errorMessage?: string;
   /** Whether the component is in uploading state */
@@ -53,6 +55,8 @@ interface FileUploadProps {
   imageAltText?: string;
   /** Placeholder text for the file upload */
   placeholderText?: string;
+  /** Text to display while uploading */
+  uploadingText?: string;
 }
 
 interface UploadedFileItemProps {
@@ -219,6 +223,7 @@ function FileUpload({
   allowMultiple = false,
   allowedFileExtensions,
   required = false,
+  requiredLabel,
   errorMessage,
   isUploading = false,
   dir = "auto",
@@ -227,6 +232,7 @@ function FileUpload({
   videoUrl,
   imageAltText,
   placeholderText = "Click or drag to upload files",
+  uploadingText = "Uploading...",
 }: Readonly<FileUploadProps>): React.JSX.Element {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -279,13 +285,14 @@ function FileUpload({
         headline={headline}
         description={description}
         required={required}
+        requiredLabel={requiredLabel}
         htmlFor={inputId}
         imageUrl={imageUrl}
         videoUrl={videoUrl}
         imageAltText={imageAltText}
       />
 
-      <div className="relative">
+      <div className="relative" data-element-input>
         <ElementError errorMessage={errorMessage} dir={dir} />
 
         <div
@@ -302,7 +309,7 @@ function FileUpload({
                 <p
                   className="text-muted-foreground font-medium"
                   style={{ fontSize: "var(--fb-input-font-size)" }}>
-                  Uploading...
+                  {uploadingText}
                 </p>
               </div>
             ) : null}

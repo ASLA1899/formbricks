@@ -22,7 +22,7 @@ import { sendManualReminders } from "./lib/reminders";
 const ZSurveyIdInput = z.object({ surveyId: z.string().cuid2() });
 
 export const getInvitationSummaryAction = authenticatedActionClient
-  .schema(ZSurveyIdInput)
+  .inputSchema(ZSurveyIdInput)
   .action(async ({ ctx, parsedInput }) => {
     const organizationId = await getOrganizationIdFromSurveyId(parsedInput.surveyId);
     await checkAuthorizationUpdated({
@@ -41,7 +41,7 @@ export const getInvitationSummaryAction = authenticatedActionClient
   });
 
 export const listSurveyInvitationsAction = authenticatedActionClient
-  .schema(ZSurveyIdInput)
+  .inputSchema(ZSurveyIdInput)
   .action(async ({ ctx, parsedInput }) => {
     const organizationId = await getOrganizationIdFromSurveyId(parsedInput.surveyId);
     await checkAuthorizationUpdated({
@@ -65,7 +65,7 @@ const ZSendInvitationsInput = z.object({
 });
 
 export const sendInvitationsAction = authenticatedActionClient
-  .schema(ZSendInvitationsInput)
+  .inputSchema(ZSendInvitationsInput)
   .action(async ({ ctx, parsedInput }) => {
     const organizationId = await getOrganizationIdFromSurveyId(parsedInput.surveyId);
     await checkAuthorizationUpdated({
@@ -124,7 +124,7 @@ const ZSendRemindersInput = z.object({
 });
 
 export const sendRemindersAction = authenticatedActionClient
-  .schema(ZSendRemindersInput)
+  .inputSchema(ZSendRemindersInput)
   .action(async ({ ctx, parsedInput }) => {
     const organizationId = await getOrganizationIdFromSurveyId(parsedInput.surveyId);
     await checkAuthorizationUpdated({

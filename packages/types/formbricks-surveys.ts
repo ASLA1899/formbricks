@@ -55,7 +55,7 @@ export interface SurveyInlineProps extends SurveyBaseProps {
 
 export interface SurveyModalProps extends SurveyBaseProps {
   clickOutside: boolean;
-  darkOverlay: boolean;
+  overlay: "none" | "light" | "dark";
   placement: "bottomLeft" | "bottomRight" | "topLeft" | "topRight" | "center";
 }
 
@@ -71,7 +71,7 @@ export interface SurveyContainerProps extends Omit<SurveyBaseProps, "onFileUploa
   onOpenExternalURL?: (url: string) => void | Promise<void>;
   mode?: "modal" | "inline";
   containerId?: string;
-  darkOverlay?: boolean;
+  overlay?: "none" | "light" | "dark";
   placement?: "bottomLeft" | "bottomRight" | "topLeft" | "topRight" | "center";
   action?: string;
   singleUseId?: string;
@@ -82,4 +82,10 @@ export interface SurveyContainerProps extends Omit<SurveyBaseProps, "onFileUploa
   getRecaptchaToken?: () => Promise<string | null>;
   resumedResponse?: TResumedResponse;
   onResponseIdReceived?: (responseId: string) => void;
+  offlineSupport?: boolean;
+  onOfflineStatusChange?: (status: {
+    isOnline: boolean;
+    isSyncing: boolean;
+    pendingSyncCount: number;
+  }) => void;
 }

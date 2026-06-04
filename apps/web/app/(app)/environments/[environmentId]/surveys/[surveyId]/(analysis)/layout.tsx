@@ -6,6 +6,7 @@ import { ResponseFilterProvider } from "@/app/(app)/environments/[environmentId]
 import { getResponseCountBySurveyId } from "@/lib/response/service";
 import { canAccessSurvey, getSurveyAccessMembership } from "@/lib/survey/access";
 import { getSurvey } from "@/lib/survey/service";
+import { getTranslate } from "@/lingodotdev/server";
 import { authOptions } from "@/modules/auth/lib/authOptions";
 
 type Props = {
@@ -38,12 +39,12 @@ export const generateMetadata = async (props: Props): Promise<Metadata> => {
     return { title: "" };
   }
 
-  const [survey, responseCount] = await Promise.all([
-    getSurvey(params.surveyId),
-    getResponseCountBySurveyId(params.surveyId),
-  ]);
+  const survey = await getSurvey(params.surveyId);
+  const responseCount = await getResponseCountBySurveyId(params.surveyId);
+  const t = await getTranslate();
+
   return {
-    title: `${responseCount} Responses | ${survey?.name} Results`,
+    title: `${t("common.count_responses", { count: responseCount })} | ${t("environments.surveys.summary.survey_results", { surveyName: survey?.name })}`,
   };
 };
 

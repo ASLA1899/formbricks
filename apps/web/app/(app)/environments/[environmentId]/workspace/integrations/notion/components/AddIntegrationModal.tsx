@@ -22,6 +22,7 @@ import {
   createEmptyMapping,
 } from "@/app/(app)/environments/[environmentId]/workspace/integrations/notion/components/MappingRow";
 import NotionLogo from "@/images/notion.png";
+import { getFormattedErrorMessage } from "@/lib/utils/helper";
 import { recallToHeadline } from "@/lib/utils/recall";
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
 import { Button } from "@/modules/ui/components/button";
@@ -217,7 +218,14 @@ export const AddIntegrationModal = ({
         notionIntegrationData.config.data.push(integrationData);
       }
 
-      await createOrUpdateIntegrationAction({ environmentId, integrationData: notionIntegrationData });
+      const result = await createOrUpdateIntegrationAction({
+        environmentId,
+        integrationData: notionIntegrationData,
+      });
+      if (result?.serverError) {
+        toast.error(getFormattedErrorMessage(result));
+        return;
+      }
       if (selectedIntegration) {
         toast.success(t("environments.integrations.integration_updated_successfully"));
       } else {
@@ -226,7 +234,7 @@ export const AddIntegrationModal = ({
       resetForm();
       setOpen(false);
     } catch (e) {
-      toast.error(e.message);
+      toast.error(e instanceof Error ? e.message : "Unknown error occurred");
     } finally {
       setIsLinkingDatabase(false);
     }
@@ -236,11 +244,18 @@ export const AddIntegrationModal = ({
     notionIntegrationData.config.data.splice(selectedIntegration!.index, 1);
     try {
       setIsDeleting(true);
-      await createOrUpdateIntegrationAction({ environmentId, integrationData: notionIntegrationData });
+      const result = await createOrUpdateIntegrationAction({
+        environmentId,
+        integrationData: notionIntegrationData,
+      });
+      if (result?.serverError) {
+        toast.error(getFormattedErrorMessage(result));
+        return;
+      }
       toast.success(t("environments.integrations.integration_removed_successfully"));
       setOpen(false);
     } catch (error) {
-      toast.error(error.message);
+      toast.error(error instanceof Error ? error.message : "Unknown error occurred");
     } finally {
       setIsDeleting(false);
     }

@@ -22,7 +22,7 @@ import { Small } from "@/modules/ui/components/typography";
 
 interface IndividualInviteTabProps {
   setOpen: (v: boolean) => void;
-  onSubmit: (data: { name: string; email: string; role: TOrganizationRole }[]) => void;
+  onSubmit: (data: { name: string; email: string; role: TOrganizationRole; teamIds: string[] }[]) => void;
   teams: TOrganizationTeam[];
   isAccessControlAllowed: boolean;
   isFormbricksCloud: boolean;
@@ -43,10 +43,18 @@ export const IndividualInviteTab = ({
 }: IndividualInviteTabProps) => {
   const ZFormSchema = z.object({
     name: ZUserName,
-    email: z.string().min(1, { message: "Email is required" }).email({ message: "Invalid email" }),
+    email: z
+      .email({
+        error: "Invalid email",
+      })
+      .min(1, {
+        error: "Email is required",
+      }),
     role: ZOrganizationRole,
     teamIds: showTeamAdminRestrictions
-      ? z.array(ZId).min(1, { message: "Team admins must select at least one team" })
+      ? z.array(ZId).min(1, {
+          error: "Team admins must select at least one team",
+        })
       : z.array(ZId),
   });
 
@@ -185,7 +193,7 @@ export const IndividualInviteTab = ({
                     ? `/environments/${environmentId}/settings/billing`
                     : "https://formbricks.com/upgrade-self-hosting-license"
                 }>
-                {t("common.start_free_trial")}
+                {t("common.upgrade_plan")}
               </Link>
             </AlertDescription>
           </Alert>

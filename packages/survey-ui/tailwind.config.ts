@@ -58,11 +58,12 @@ export default {
         // Input CSS variables (shorter names)
         "input-bg": "var(--fb-input-bg-color)",
         "input-border": "var(--fb-input-border-color, var(--fb-survey-brand-color))",
-        "input-text": "var(--fb-input-color)",
+        "input-text": "var(--fb-input-text-color)",
         "input-placeholder": "var(--fb-input-placeholder-color)",
         // Option CSS variables
         "option-bg": "var(--fb-option-bg-color)",
-        "option-border": "color-mix(in srgb, var(--fb-option-bg-color) 95%, black 5%)",
+        "option-border":
+          "var(--fb-option-border-color, color-mix(in srgb, var(--fb-option-bg-color) 95%, black 5%))",
         "option-label": "var(--fb-option-label-color)",
         "option-selected-bg": "color-mix(in srgb, var(--fb-option-bg-color) 95%, black)",
         "option-hover-bg": "color-mix(in srgb, var(--fb-option-bg-color) 95%, black)",

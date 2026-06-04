@@ -14,9 +14,9 @@ const ZEnterpriseLicenseFeatures = z.object({
   sso: z.boolean(),
   saml: z.boolean(),
   spamProtection: z.boolean(),
-  ai: z.boolean(),
+  aiSmartTools: z.boolean(),
+  aiDataAnalysis: z.boolean(),
   auditLogs: z.boolean(),
-  multiLanguageSurveys: z.boolean(),
   accessControl: z.boolean(),
   quotas: z.boolean(),
 });
@@ -29,3 +29,11 @@ export const ZEnterpriseLicenseDetails = z.object({
 });
 
 export type TEnterpriseLicenseDetails = z.infer<typeof ZEnterpriseLicenseDetails>;
+
+export type TLicenseStatus =
+  | "active"
+  | "expired"
+  | "instance_mismatch"
+  | "unreachable"
+  | "invalid_license"
+  | "no-license";

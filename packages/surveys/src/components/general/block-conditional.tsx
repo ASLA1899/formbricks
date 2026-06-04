@@ -1,20 +1,19 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { type TJsFileUploadParams } from "@formbricks/types/js";
-import { type TResponseData, TResponseDataValue, type TResponseTtc } from "@formbricks/types/responses";
+import { type TResponseData, type TResponseTtc } from "@formbricks/types/responses";
 import { type TUploadFileConfig } from "@formbricks/types/storage";
-import { TSurveyBlock } from "@formbricks/types/surveys/blocks";
-import {
-  TSurveyElement,
-  TSurveyElementTypeEnum,
-  TSurveyMatrixElement,
-  TSurveyRankingElement,
-} from "@formbricks/types/surveys/elements";
+import { type TSurveyBlock } from "@formbricks/types/surveys/blocks";
+import { TSurveyElementTypeEnum } from "@formbricks/types/surveys/constants";
+import { type TSurveyElement, type TSurveyRankingElement } from "@formbricks/types/surveys/elements";
+import { TSurveyLanguage } from "@formbricks/types/surveys/types";
+import { TValidationErrorMap } from "@formbricks/types/surveys/validation-rules";
 import { BackButton } from "@/components/buttons/back-button";
 import { SubmitButton } from "@/components/buttons/submit-button";
 import { ElementConditional } from "@/components/general/element-conditional";
 import { ScrollableContainer } from "@/components/wrappers/scrollable-container";
 import { getLocalizedValue } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { getFirstErrorMessage, validateBlockResponses } from "@/lib/validation/evaluator";
 
 // Element types that trigger auto-advance when answered
 const AUTO_ADVANCE_ELIGIBLE_TYPES = new Set([
@@ -47,6 +46,7 @@ interface BlockConditionalProps {
   fullSizeCards: boolean;
   cardSize?: "normal" | "tall";
   autoAdvance?: boolean;
+  surveyLanguages: TSurveyLanguage[];
 }
 
 export function BlockConditional({
@@ -71,9 +71,13 @@ export function BlockConditional({
   fullSizeCards,
   cardSize,
   autoAdvance,
-}: BlockConditionalProps) {
+  surveyLanguages,
+}: Readonly<BlockConditionalProps>) {
   // Track the current element being filled (for TTC tracking)
   const [currentElementId, setCurrentElementId] = useState(block.elements[0]?.id);
+
+  // State to store validation errors from centralized validation
+  const [elementErrors, setElementErrors] = useState<TValidationErrorMap>({});
 
   // Refs to store form elements for each element so we can trigger their validation
   const elementFormRefs = useRef<Map<string, HTMLFormElement>>(new Map());
@@ -98,6 +102,14 @@ export function BlockConditional({
     // If user moved to a different element, we should track it
     if (elementId !== currentElementId) {
       setCurrentElementId(elementId);
+    }
+    // Clear error for this element when user makes a change
+    if (elementErrors[elementId]) {
+      setElementErrors((prev: TValidationErrorMap) => {
+        const updated = { ...prev };
+        delete updated[elementId];
+        return updated;
+      });
     }
     // Merge with existing block data to preserve other element values
     const mergedData = { ...value, ...responseData };
@@ -212,19 +224,19 @@ export function BlockConditional({
     response: unknown,
     form: HTMLFormElement
   ): boolean => {
-    const rankingElement = element;
-    const hasIncompleteRanking =
-      (rankingElement.required &&
-        (!Array.isArray(response) || response.length !== rankingElement.choices.length)) ||
-      (!rankingElement.required &&
-        Array.isArray(response) &&
-        response.length > 0 &&
-        response.length < rankingElement.choices.length);
+    const isRequired = element.required;
+    const isValueArray = Array.isArray(response);
+    const atLeastOneRanked = isValueArray && response.length >= 1;
 
-    if (hasIncompleteRanking) {
+    // If required: at least 1 option must be ranked
+    if (isRequired && (!isValueArray || !atLeastOneRanked)) {
       form.requestSubmit();
       return false;
     }
+
+    // If not required: allow partial ranking (some items ranked, some not)
+    // No validation needed - user can proceed with any number of ranked items (including 0)
+
     return true;
   };
 
@@ -237,13 +249,6 @@ export function BlockConditional({
       (Array.isArray(response) && response.length === 0) ||
       (typeof response === "object" && !Array.isArray(response) && Object.keys(response).length === 0)
     );
-  };
-
-  const hasUnansweredRows = (responseData: TResponseDataValue, element: TSurveyMatrixElement): boolean => {
-    return element.rows.some((row) => {
-      const rowLabel = getLocalizedValue(row.label, languageCode);
-      return !responseData?.[rowLabel as keyof typeof responseData];
-    });
   };
 
   // Validate a single element's form
@@ -281,21 +286,22 @@ export function BlockConditional({
       return false;
     }
 
-    if (
-      element.type === TSurveyElementTypeEnum.Matrix &&
-      element.required &&
-      response &&
-      hasUnansweredRows(response, element)
-    ) {
-      form.requestSubmit();
-      return false;
+    // Custom validation for matrix questions
+    if (element.type === TSurveyElementTypeEnum.Matrix) {
+      // Required means at least 1 row must be answered
+      if (element.required && (!response || Object.keys(response).length === 0)) {
+        form.requestSubmit();
+        return false;
+      }
     }
 
     // For other element types, check if required fields are empty
     // CTA elements should not block navigation even if marked required (as they are informational)
-    if (element.type !== TSurveyElementTypeEnum.CTA && element.required && isEmptyResponse(response)) {
-      form.requestSubmit();
-      return false;
+    if (element.type !== TSurveyElementTypeEnum.CTA) {
+      if (element.required && isEmptyResponse(response)) {
+        form.requestSubmit();
+        return false;
+      }
     }
 
     return true;
@@ -359,14 +365,35 @@ export function BlockConditional({
       e.preventDefault();
     }
 
-    // Validate all forms and check for custom validation rules
-    const firstInvalidForm = findFirstInvalidForm();
+    // Run centralized validation for elements that support it
+    const errorMap = validateBlockResponses(block.elements, value, languageCode);
 
-    // If any form is invalid, scroll to it and stop
-    if (firstInvalidForm) {
-      firstInvalidForm.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Check if there are any validation errors from centralized validation
+    const hasValidationErrors = Object.keys(errorMap).length > 0;
+
+    if (hasValidationErrors) {
+      setElementErrors(errorMap);
+
+      // Find the first element with an error and scroll to its input area (not the headline)
+      const firstErrorElementId = Object.keys(errorMap)[0];
+      const form = elementFormRefs.current.get(firstErrorElementId);
+      if (form) {
+        const scrollTarget = form.querySelector("[data-element-input]") ?? form;
+        scrollTarget.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
       return;
     }
+
+    // Also run legacy validation for elements not yet migrated to centralized validation
+    const firstInvalidForm = findFirstInvalidForm();
+    if (firstInvalidForm) {
+      const scrollTarget = firstInvalidForm.querySelector("[data-element-input]") ?? firstInvalidForm;
+      scrollTarget.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    // Clear any previous errors
+    setElementErrors({});
 
     // Collect TTC and responses, then submit
     const blockTtc = collectTtcValues();
@@ -386,6 +413,7 @@ export function BlockConditional({
               return (
                 <div key={element.id} id={`element-${element.id}`}>
                   <ElementConditional
+                    surveyLanguages={surveyLanguages}
                     element={element}
                     value={value[element.id]}
                     onChange={(responseData) => handleElementChange(element.id, responseData)}
@@ -406,6 +434,7 @@ export function BlockConditional({
                       }
                     }}
                     onTtcCollect={handleTtcCollect}
+                    errorMessage={getFirstErrorMessage(elementErrors, element.id)}
                   />
                 </div>
               );

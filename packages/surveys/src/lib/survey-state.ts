@@ -6,6 +6,7 @@ export class SurveyState {
   userId: string | null = null;
   contactId: string | null = null;
   surveyId: string;
+  shouldCreateResponseFromState = false;
   responseAcc: TResponseUpdate = { finished: false, data: {}, ttc: {}, variables: {} };
   singleUseId: string | null;
   initialValues: Record<string, string> = {};
@@ -71,7 +72,7 @@ export class SurveyState {
    * Update the display ID after a successful display creation
    * @param id - The display ID
    */
-  updateDisplayId(id: string) {
+  updateDisplayId(id: string | null) {
     this.displayId = id;
   }
 
@@ -91,6 +92,14 @@ export class SurveyState {
     this.contactId = id;
   }
 
+  enableBootstrapResponseCreate() {
+    this.shouldCreateResponseFromState = true;
+  }
+
+  disableBootstrapResponseCreate() {
+    this.shouldCreateResponseFromState = false;
+  }
+
   /**
    * Accumulate the responses
    * @param responseUpdate - The new response data to add
@@ -98,10 +107,14 @@ export class SurveyState {
   accumulateResponse(responseUpdate: TResponseUpdate) {
     this.responseAcc = {
       finished: responseUpdate.finished,
-      ttc: responseUpdate.ttc,
+      ttc: { ...this.responseAcc.ttc, ...responseUpdate.ttc },
       data: { ...this.responseAcc.data, ...responseUpdate.data },
-      variables: responseUpdate.variables,
-      displayId: responseUpdate.displayId,
+      variables: responseUpdate.variables ?? this.responseAcc.variables,
+      displayId: responseUpdate.displayId ?? this.responseAcc.displayId,
+      language: responseUpdate.language ?? this.responseAcc.language,
+      meta: responseUpdate.meta ?? this.responseAcc.meta,
+      hiddenFields: responseUpdate.hiddenFields ?? this.responseAcc.hiddenFields,
+      endingId: responseUpdate.endingId,
     };
   }
 
@@ -117,6 +130,7 @@ export class SurveyState {
    */
   clear() {
     this.responseId = null;
+    this.shouldCreateResponseFromState = false;
     this.responseAcc = { finished: false, data: {}, ttc: {}, variables: {} };
   }
 }

@@ -1,6 +1,6 @@
 import { type TResponseData, type TResponseVariables } from "@formbricks/types/responses";
 import { ALL_COMPOUND_FIELD_INDICES } from "@formbricks/types/surveys/compound-fields";
-import { TSurveyElement, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
+import { type TSurveyElement } from "@formbricks/types/surveys/elements";
 import { formatDateWithOrdinal, formatMonthYear, isMonthYearString, isValidDateString } from "@/lib/date-time";
 import { getLocalizedValue } from "@/lib/i18n";
 
@@ -29,7 +29,8 @@ const extractRecallInfo = (headline: string, id?: string): string | null => {
 export const replaceRecallInfo = (
   text: string,
   responseData: TResponseData,
-  variables: TResponseVariables
+  variables: TResponseVariables,
+  languageCode: string = "en-US"
 ): string => {
   let modifiedText = text;
 
@@ -66,7 +67,7 @@ export const replaceRecallInfo = (
         if (isMonthYearString(value)) {
           value = formatMonthYear(value);
         } else if (isValidDateString(value)) {
-          value = formatDateWithOrdinal(new Date(value));
+          value = formatDateWithOrdinal(new Date(value), languageCode);
         } else if (Array.isArray(value)) {
           value = value.filter((item) => item).join(", "); // Filters out empty values and joins with a comma
         }
@@ -91,7 +92,8 @@ export const parseRecallInformation = (
     modifiedQuestion.headline[languageCode] = replaceRecallInfo(
       getLocalizedValue(modifiedQuestion.headline, languageCode),
       responseData,
-      variables
+      variables,
+      languageCode
     );
   }
   if (
@@ -102,19 +104,8 @@ export const parseRecallInformation = (
     modifiedQuestion.subheader[languageCode] = replaceRecallInfo(
       getLocalizedValue(modifiedQuestion.subheader, languageCode),
       responseData,
-      variables
-    );
-  }
-  if (
-    (question.type === TSurveyElementTypeEnum.CTA || question.type === TSurveyElementTypeEnum.Consent) &&
-    question.subheader &&
-    question.subheader[languageCode].includes("recall:") &&
-    modifiedQuestion.subheader
-  ) {
-    modifiedQuestion.subheader[languageCode] = replaceRecallInfo(
-      getLocalizedValue(modifiedQuestion.subheader, languageCode),
-      responseData,
-      variables
+      variables,
+      languageCode
     );
   }
   return modifiedQuestion;

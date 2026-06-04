@@ -16,8 +16,9 @@ import {
 import { TEmailTemplateLegalProps } from "@formbricks/email/src/types/email";
 import { logger } from "@formbricks/logger";
 import type { TLinkSurveyEmailData } from "@formbricks/types/email";
-import { InvalidInputError } from "@formbricks/types/errors";
+import { InvalidInputError, ResourceNotFoundError } from "@formbricks/types/errors";
 import type { TResponse } from "@formbricks/types/responses";
+import { TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import type { TSurvey } from "@formbricks/types/surveys/types";
 import { TUserEmail, TUserLocale } from "@formbricks/types/user";
 import {
@@ -42,6 +43,8 @@ import { createEmailChangeToken, createInviteToken, createToken, createTokenForL
 import { getOrganizationByEnvironmentId } from "@/lib/organization/service";
 import { getElementResponseMapping } from "@/lib/responses";
 import { getTranslate } from "@/lingodotdev/server";
+import { buildVerificationLinks } from "@/modules/auth/lib/verification-links";
+import { resolveStorageUrl } from "@/modules/storage/utils";
 
 export const IS_SMTP_CONFIGURED = Boolean(SMTP_HOST && SMTP_PORT);
 
@@ -102,9 +105,13 @@ export const sendEmail = async (emailData: SendEmailDataProps): Promise<boolean>
   }
 };
 
-export const sendVerificationNewEmail = async (id: string, email: string): Promise<boolean> => {
+export const sendVerificationNewEmail = async (
+  id: string,
+  email: string,
+  locale: TUserLocale
+): Promise<boolean> => {
   try {
-    const t = await getTranslate();
+    const t = await getTranslate(locale);
     const token = createEmailChangeToken(id, email);
     const verifyLink = `${WEBAPP_URL}/verify-email-change?token=${encodeURIComponent(token)}`;
 
@@ -124,17 +131,24 @@ export const sendVerificationNewEmail = async (id: string, email: string): Promi
 export const sendVerificationEmail = async ({
   id,
   email,
+  locale,
+  callbackUrl,
 }: {
   id: string;
   email: TUserEmail;
+  locale: TUserLocale;
+  callbackUrl?: string;
 }): Promise<boolean> => {
   try {
-    const t = await getTranslate();
+    const t = await getTranslate(locale);
     const token = createToken(id, {
       expiresIn: "1d",
     });
-    const verifyLink = `${WEBAPP_URL}/auth/verify?token=${encodeURIComponent(token)}`;
-    const verificationRequestLink = `${WEBAPP_URL}/auth/verification-requested?token=${encodeURIComponent(token)}`;
+    const { verifyLink, verificationRequestLink } = buildVerificationLinks({
+      token,
+      webAppUrl: WEBAPP_URL,
+      callbackUrl,
+    });
 
     const html = await renderVerificationEmail({
       verificationRequestLink,
@@ -154,17 +168,19 @@ export const sendVerificationEmail = async ({
   }
 };
 
-export const sendForgotPasswordEmail = async (user: {
-  id: string;
+export const sendPasswordResetLinkEmail = async (user: {
   email: TUserEmail;
   locale: TUserLocale;
+  verifyLink: string;
+  linkValidityInMinutes: number;
 }): Promise<boolean> => {
-  const t = await getTranslate();
-  const token = createToken(user.id, {
-    expiresIn: "1d",
+  const t = await getTranslate(user.locale);
+  const html = await renderForgotPasswordEmail({
+    verifyLink: user.verifyLink,
+    linkValidityInMinutes: user.linkValidityInMinutes,
+    t,
+    ...legalProps,
   });
-  const verifyLink = `${WEBAPP_URL}/auth/forgot-password/reset?token=${encodeURIComponent(token)}`;
-  const html = await renderForgotPasswordEmail({ verifyLink, t, ...legalProps });
   return await sendEmail({
     to: user.email,
     subject: t("emails.forgot_password_email_subject"),
@@ -172,8 +188,11 @@ export const sendForgotPasswordEmail = async (user: {
   });
 };
 
-export const sendPasswordResetNotifyEmail = async (user: { email: string }): Promise<boolean> => {
-  const t = await getTranslate();
+export const sendPasswordResetNotifyEmail = async (user: {
+  email: string;
+  locale: TUserLocale;
+}): Promise<boolean> => {
+  const t = await getTranslate(user.locale);
   const html = await renderPasswordResetNotifyEmail({ t, ...legalProps });
   return await sendEmail({
     to: user.email,
@@ -206,9 +225,10 @@ export const sendInviteMemberEmail = async (
 export const sendInviteAcceptedEmail = async (
   inviterName: string,
   inviteeName: string,
-  email: string
+  email: string,
+  inviterLocale?: TUserLocale
 ): Promise<void> => {
-  const t = await getTranslate();
+  const t = await getTranslate(inviterLocale);
   const html = await renderInviteAcceptedEmail({ inviteeName, inviterName, t, ...legalProps });
   await sendEmail({
     to: email,
@@ -219,21 +239,38 @@ export const sendInviteAcceptedEmail = async (
 
 export const sendResponseFinishedEmail = async (
   email: string,
+  locale: TUserLocale,
   environmentId: string,
   survey: TSurvey,
   response: TResponse,
   responseCount: number
 ): Promise<void> => {
-  const t = await getTranslate();
+  const t = await getTranslate(locale);
   const personEmail = response.contactAttributes?.email;
   const organization = await getOrganizationByEnvironmentId(environmentId);
 
   if (!organization) {
-    throw new Error("Organization not found");
+    throw new ResourceNotFoundError("Organization", null);
   }
 
   // Pre-process the element response mapping before passing to email
   const elements = getElementResponseMapping(survey, response);
+
+  // Resolve relative storage URLs to absolute URLs for email rendering
+  const elementsWithResolvedUrls = elements.map((element) => {
+    if (
+      (element.type === TSurveyElementTypeEnum.PictureSelection ||
+        element.type === TSurveyElementTypeEnum.FileUpload) &&
+      Array.isArray(element.response)
+    ) {
+      return {
+        ...element,
+        response: element.response.map((url) => resolveStorageUrl(url)),
+      };
+    }
+
+    return element;
+  });
 
   const html = await renderResponseFinishedEmail({
     survey,
@@ -242,7 +279,7 @@ export const sendResponseFinishedEmail = async (
     WEBAPP_URL,
     environmentId,
     organization,
-    elements,
+    elements: elementsWithResolvedUrls,
     t,
     ...legalProps,
   });
@@ -266,13 +303,16 @@ export const sendEmbedSurveyPreviewEmail = async (
   to: string,
   innerHtml: string,
   environmentId: string,
+  locale: TUserLocale,
   logoUrl?: string
 ): Promise<boolean> => {
-  const t = await getTranslate();
+  const t = await getTranslate(locale);
+  // Resolve relative storage URLs to absolute URLs for email rendering
+  const resolvedLogoUrl = logoUrl ? resolveStorageUrl(logoUrl) : undefined;
   const html = await renderEmbedSurveyPreviewEmail({
     html: innerHtml,
     environmentId,
-    logoUrl,
+    logoUrl: resolvedLogoUrl,
     t,
     ...legalProps,
   });
@@ -286,12 +326,15 @@ export const sendEmbedSurveyPreviewEmail = async (
 export const sendEmailCustomizationPreviewEmail = async (
   to: string,
   userName: string,
+  locale: TUserLocale,
   logoUrl?: string
 ): Promise<boolean> => {
-  const t = await getTranslate();
+  const t = await getTranslate(locale);
+  // Resolve relative storage URLs to absolute URLs for email rendering
+  const resolvedLogoUrl = logoUrl ? resolveStorageUrl(logoUrl) : undefined;
   const emailHtmlBody = await renderEmailCustomizationPreviewEmail({
     userName,
-    logoUrl,
+    logoUrl: resolvedLogoUrl,
     t,
     ...legalProps,
   });
@@ -338,9 +381,10 @@ export const sendLinkSurveyToVerifiedEmail = async (data: TLinkSurveyEmailData):
   const email = data.email;
   const surveyName = data.surveyName;
   const singleUseId = data.suId;
-  const logoUrl = data.logoUrl || "";
+  // Resolve relative storage URLs to absolute URLs for email rendering
+  const logoUrl = data.logoUrl ? resolveStorageUrl(data.logoUrl) : "";
   const token = createTokenForLinkSurvey(surveyId, email);
-  const t = await getTranslate();
+  const t = await getTranslate(data.locale);
   const getSurveyLink = (): string => {
     if (singleUseId) {
       return `${getPublicDomain()}/s/${surveyId}?verify=${encodeURIComponent(token)}&suId=${singleUseId}`;

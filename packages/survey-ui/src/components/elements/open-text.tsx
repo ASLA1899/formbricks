@@ -14,6 +14,7 @@ interface OpenTextProps {
   value?: string;
   onChange: (value: string) => void;
   required?: boolean;
+  requiredLabel?: string;
   longAnswer?: boolean;
   inputType?: "text" | "email" | "url" | "phone" | "number";
   charLimit?: {
@@ -37,6 +38,7 @@ function OpenText({
   inputId,
   onChange,
   required = false,
+  requiredLabel,
   longAnswer = false,
   inputType = "text",
   charLimit,
@@ -72,11 +74,12 @@ function OpenText({
         headline={headline}
         description={description}
         required={required}
+        requiredLabel={requiredLabel}
         htmlFor={inputId}
         imageUrl={imageUrl}
         videoUrl={videoUrl}
       />
-      <div className="relative">
+      <div className="relative" data-element-input>
         <ElementError errorMessage={errorMessage} />
         {/* Input or Textarea */}
         <div className="space-y-1">

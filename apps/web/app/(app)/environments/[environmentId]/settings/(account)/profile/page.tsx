@@ -1,9 +1,16 @@
+import { AuthenticationError } from "@formbricks/types/errors";
 import { AccountSettingsNavbar } from "@/app/(app)/environments/[environmentId]/settings/(account)/components/AccountSettingsNavbar";
 import { AccountSecurity } from "@/app/(app)/environments/[environmentId]/settings/(account)/profile/components/AccountSecurity";
-import { EMAIL_VERIFICATION_DISABLED, IS_FORMBRICKS_CLOUD, PASSWORD_RESET_DISABLED } from "@/lib/constants";
+import {
+  DISABLE_ACCOUNT_DELETION_SSO_CONFIRMATION,
+  EMAIL_VERIFICATION_DISABLED,
+  IS_FORMBRICKS_CLOUD,
+  PASSWORD_RESET_DISABLED,
+} from "@/lib/constants";
 import { getOrganizationsWhereUserIsSingleOwner } from "@/lib/organization/service";
 import { getUser } from "@/lib/user/service";
 import { getTranslate } from "@/lingodotdev/server";
+import { requiresPasswordConfirmationForAccountDeletion } from "@/modules/account/lib/account-deletion-auth";
 import { getIsMultiOrgEnabled, getIsTwoFactorAuthEnabled } from "@/modules/ee/license-check/lib/utils";
 import { getEnvironmentAuth } from "@/modules/environments/lib/utils";
 import { IdBadge } from "@/modules/ui/components/id-badge";
@@ -14,10 +21,14 @@ import { SettingsCard } from "../../components/SettingsCard";
 import { DeleteAccount } from "./components/DeleteAccount";
 import { EditProfileDetailsForm } from "./components/EditProfileDetailsForm";
 
-const Page = async (props: { params: Promise<{ environmentId: string }> }) => {
+const Page = async (props: {
+  params: Promise<{ environmentId: string }>;
+  searchParams: Promise<{ accountDeletionError?: string | string[] }>;
+}) => {
   const isTwoFactorAuthEnabled = await getIsTwoFactorAuthEnabled();
   const isMultiOrgEnabled = await getIsMultiOrgEnabled();
   const params = await props.params;
+  const searchParams = await props.searchParams;
   const t = await getTranslate();
   const { environmentId } = params;
 
@@ -28,10 +39,11 @@ const Page = async (props: { params: Promise<{ environmentId: string }> }) => {
   const user = session?.user ? await getUser(session.user.id) : null;
 
   if (!user) {
-    throw new Error(t("common.user_not_found"));
+    throw new AuthenticationError(t("common.not_authenticated"));
   }
 
   const isPasswordResetEnabled = !PASSWORD_RESET_DISABLED && user.identityProvider === "email";
+  const requiresPasswordConfirmation = requiresPasswordConfirmationForAccountDeletion(user);
 
   return (
     <PageContentWrapper>
@@ -60,7 +72,7 @@ const Page = async (props: { params: Promise<{ environmentId: string }> }) => {
                   buttons={[
                     {
                       text: IS_FORMBRICKS_CLOUD
-                        ? t("common.start_free_trial")
+                        ? t("common.upgrade_plan")
                         : t("common.request_trial_license"),
                       href: IS_FORMBRICKS_CLOUD
                         ? `/environments/${params.environmentId}/settings/billing`
@@ -89,6 +101,9 @@ const Page = async (props: { params: Promise<{ environmentId: string }> }) => {
               user={user}
               organizationsWithSingleOwner={organizationsWithSingleOwner}
               isMultiOrgEnabled={isMultiOrgEnabled}
+              accountDeletionError={searchParams.accountDeletionError}
+              requiresPasswordConfirmation={requiresPasswordConfirmation}
+              isSsoIdentityConfirmationDisabled={DISABLE_ACCOUNT_DELETION_SSO_CONFIRMATION}
             />
           </SettingsCard>
           <IdBadge id={user.id} label={t("common.profile_id")} variant="column" />

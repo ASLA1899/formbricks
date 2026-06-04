@@ -18,7 +18,7 @@ const ZImportContactsAction = z.object({
  * Creates contacts and their attributes in the database
  */
 export const importContactsAction = authenticatedActionClient
-  .schema(ZImportContactsAction)
+  .inputSchema(ZImportContactsAction)
   .action(async ({ ctx, parsedInput }) => {
     await checkAuthorizationUpdated({
       userId: ctx.user.id,

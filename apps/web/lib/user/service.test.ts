@@ -58,18 +58,16 @@ describe("User Service", () => {
       updatedAt: new Date(),
       billing: {
         stripeCustomerId: null,
-        plan: "free",
-        period: "monthly",
         limits: {
           projects: 3,
           monthly: {
             responses: 1500,
-            miu: 2000,
           },
         },
-        periodStart: new Date(),
+        usageCycleAnchor: new Date(),
       },
-      isAIEnabled: false,
+      isAISmartToolsEnabled: false,
+      isAIDataAnalysisEnabled: false,
     },
     {
       id: "org2",
@@ -78,18 +76,16 @@ describe("User Service", () => {
       updatedAt: new Date(),
       billing: {
         stripeCustomerId: null,
-        plan: "free",
-        period: "monthly",
         limits: {
           projects: 3,
           monthly: {
             responses: 1500,
-            miu: 2000,
           },
         },
-        periodStart: new Date(),
+        usageCycleAnchor: new Date(),
       },
-      isAIEnabled: false,
+      isAISmartToolsEnabled: false,
+      isAIDataAnalysisEnabled: false,
     },
   ];
 

@@ -24,10 +24,11 @@ const selectProject = {
   config: true,
   placement: true,
   clickOutsideClose: true,
-  darkOverlay: true,
+  overlay: true,
   environments: true,
   styling: true,
   logo: true,
+  customHeadScripts: true,
 };
 
 export const updateProject = async (
@@ -63,7 +64,7 @@ export const updateProject = async (
     return project;
   } catch (error) {
     if (error instanceof z.ZodError) {
-      logger.error(error.errors, "Error updating project");
+      logger.error(error.issues, "Error updating project");
     }
     throw new ValidationError("Data validation of project failed");
   }

@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth";
 import { notFound, redirect } from "next/navigation";
+import { ResourceNotFoundError } from "@formbricks/types/errors";
 import { getMembershipByUserIdOrganizationId } from "@/lib/membership/service";
 import { getAccessFlags } from "@/lib/membership/utils";
 import { getOrganization } from "@/lib/organization/service";
@@ -8,7 +9,10 @@ import { getTranslate } from "@/lingodotdev/server";
 import { authOptions } from "@/modules/auth/lib/authOptions";
 import { getOrganizationProjectsLimit } from "@/modules/ee/license-check/lib/utils";
 
-const OnboardingLayout = async (props) => {
+const OnboardingLayout = async (props: {
+  params: Promise<{ organizationId: string }>;
+  children: React.ReactNode;
+}) => {
   const params = await props.params;
 
   const { children } = props;
@@ -25,11 +29,13 @@ const OnboardingLayout = async (props) => {
 
   const organization = await getOrganization(params.organizationId);
   if (!organization) {
-    throw new Error(t("common.organization_not_found"));
+    throw new ResourceNotFoundError(t("common.organization"), params.organizationId);
   }
 
-  const organizationProjectsLimit = await getOrganizationProjectsLimit(organization.billing.limits);
-  const organizationProjectsCount = await getOrganizationProjectsCount(organization.id);
+  const [organizationProjectsLimit, organizationProjectsCount] = await Promise.all([
+    getOrganizationProjectsLimit(organization.id),
+    getOrganizationProjectsCount(organization.id),
+  ]);
 
   if (organizationProjectsCount >= organizationProjectsLimit) {
     return redirect(`/`);
