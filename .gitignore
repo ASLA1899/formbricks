@@ -91,3 +91,6 @@ i18n.cache
 stats.html
 # next-agents-md
 .next-docs/
+
+# Local SSO-loop repro harness (fb-bm6.12) — never commit
+.sso-repro/

@@ -1,16 +1,14 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { getProxySession, getSessionTokenFromRequest } from "./proxy-session";
 
-const { mockFindUnique } = vi.hoisted(() => ({
-  mockFindUnique: vi.fn(),
+const { mockGetToken } = vi.hoisted(() => ({
+  mockGetToken: vi.fn(),
 }));
 
-vi.mock("@formbricks/database", () => ({
-  prisma: {
-    session: {
-      findUnique: mockFindUnique,
-    },
-  },
+// ASLA fork uses JWT sessions: the proxy gate validates the encrypted JWT cookie
+// via next-auth's getToken, NOT a DB Session-table lookup (see fb-bm6.12).
+vi.mock("next-auth/jwt", () => ({
+  getToken: mockGetToken,
 }));
 
 const createRequest = (cookies: Record<string, string> = {}) => ({
@@ -35,54 +33,40 @@ describe("proxy-session", () => {
     expect(getSessionTokenFromRequest(request)).toBe("secure-token");
   });
 
-  test("returns null when no session cookie is present", async () => {
+  test("reads the non-secure session cookie when present", () => {
+    const request = createRequest({
+      "next-auth.session-token": "plain-token",
+    });
+
+    expect(getSessionTokenFromRequest(request)).toBe("plain-token");
+  });
+
+  test("returns null when no session cookie is present (without decoding a JWT)", async () => {
     const request = createRequest();
 
     const session = await getProxySession(request);
 
     expect(session).toBeNull();
-    expect(mockFindUnique).not.toHaveBeenCalled();
+    expect(mockGetToken).not.toHaveBeenCalled();
   });
 
-  test("returns null when the session is expired", async () => {
-    mockFindUnique.mockResolvedValue({
-      userId: "user-1",
-      expires: new Date(Date.now() - 60_000),
-      user: {
-        isActive: true,
-      },
-    });
+  test("returns null when the JWT cannot be decoded", async () => {
+    mockGetToken.mockResolvedValue(null);
 
     const request = createRequest({
-      "next-auth.session-token": "expired-token",
+      "__Secure-next-auth.session-token": "garbage",
     });
 
     const session = await getProxySession(request);
 
     expect(session).toBeNull();
-    expect(mockFindUnique).toHaveBeenCalledWith({
-      where: {
-        sessionToken: "expired-token",
-      },
-      select: {
-        userId: true,
-        expires: true,
-        user: {
-          select: {
-            isActive: true,
-          },
-        },
-      },
-    });
+    expect(mockGetToken).toHaveBeenCalledTimes(1);
   });
 
   test("returns null when the session belongs to an inactive user", async () => {
-    mockFindUnique.mockResolvedValue({
-      userId: "user-1",
-      expires: new Date(Date.now() + 60_000),
-      user: {
-        isActive: false,
-      },
+    mockGetToken.mockResolvedValue({
+      profile: { id: "user-1" },
+      isActive: false,
     });
 
     const request = createRequest({
@@ -94,22 +78,33 @@ describe("proxy-session", () => {
     expect(session).toBeNull();
   });
 
-  test("returns the session when the cookie maps to a valid session", async () => {
-    const validSession = {
-      userId: "user-1",
-      expires: new Date(Date.now() + 60_000),
-      user: {
-        isActive: true,
-      },
+  test("returns the decoded token when the JWT cookie is valid", async () => {
+    const token = {
+      profile: { id: "user-1" },
+      isActive: true,
+      email: "repro@asla.org",
     };
-    mockFindUnique.mockResolvedValue(validSession);
+    mockGetToken.mockResolvedValue(token);
 
     const request = createRequest({
-      "next-auth.session-token": "valid-token",
+      "__Secure-next-auth.session-token": "valid-jwt",
     });
 
     const session = await getProxySession(request);
 
-    expect(session).toEqual(validSession);
+    expect(session).toEqual(token);
+  });
+
+  test("returns the token when isActive is undefined (older tokens)", async () => {
+    const token = { profile: { id: "user-1" } };
+    mockGetToken.mockResolvedValue(token);
+
+    const request = createRequest({
+      "__Secure-next-auth.session-token": "valid-jwt",
+    });
+
+    const session = await getProxySession(request);
+
+    expect(session).toEqual(token);
   });
 });

@@ -1,4 +1,4 @@
-import { prisma } from "@formbricks/database";
+import { getToken } from "next-auth/jwt";
 
 const NEXT_AUTH_SESSION_COOKIE_NAMES = [
   "__Secure-next-auth.session-token",
@@ -24,31 +24,38 @@ export const getSessionTokenFromRequest = (request: TRequestWithCookies): string
   return null;
 };
 
+/**
+ * Validate the request's auth session for the edge `proxy.ts` gate.
+ *
+ * ASLA fork keeps JWT sessions (`strategy:"jwt"`, no PrismaAdapter) — see
+ * FORK_DIVERGENCE Auth §1. Upstream #7594 migrated this gate to a database
+ * `Session`-table lookup (`prisma.session.findUnique`). Our fork never writes
+ * `Session` rows, so that lookup always returned `null`, which made the proxy
+ * bounce every auth-protected route to `/auth/login` — the M365/credentials SSO
+ * redirect loop (fb-bm6.12). The session cookie holds an encrypted JWT, not a DB
+ * session id, so validate it by decrypting the JWT, mirroring the pre-merge
+ * middleware's `getToken()` gate (which is what proved working in prod).
+ */
 export const getProxySession = async (request: TRequestWithCookies) => {
-  const sessionToken = getSessionTokenFromRequest(request);
-
-  if (!sessionToken) {
+  // Fast path: no next-auth session cookie at all → unauthenticated.
+  if (!getSessionTokenFromRequest(request)) {
     return null;
   }
 
-  const session = await prisma.session.findUnique({
-    where: {
-      sessionToken,
-    },
-    select: {
-      userId: true,
-      expires: true,
-      user: {
-        select: {
-          isActive: true,
-        },
-      },
-    },
-  });
+  // getToken decrypts the JWE session cookie with NEXTAUTH_SECRET and derives the
+  // secure cookie name from NEXTAUTH_URL (https → `__Secure-` prefix), so it works
+  // behind the TLS-terminating proxy exactly as the old middleware did.
+  const token = await getToken({ req: request as never });
 
-  if (!session || session.expires <= new Date() || session.user.isActive === false) {
+  if (!token) {
     return null;
   }
 
-  return session;
+  // The `jwt` callback stamps `isActive` onto the token; treat an explicit false
+  // as logged-out so deactivated users cannot pass the gate.
+  if (token.isActive === false) {
+    return null;
+  }
+
+  return token;
 };
