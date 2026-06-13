@@ -9,7 +9,7 @@ import { TSurvey } from "@formbricks/types/surveys/types";
 import { TUser, TUserLocale } from "@formbricks/types/user";
 import { timeSince } from "@/lib/time";
 import { getContactIdentifier } from "@/lib/utils/contact";
-import { formatDurationClock, getFormattedDateTimeString } from "@/lib/utils/datetime";
+import { formatDateTimeForDisplay, formatDurationClock } from "@/lib/utils/datetime";
 import { PersonAvatar } from "@/modules/ui/components/avatars";
 import { Button } from "@/modules/ui/components/button";
 import { IdBadge } from "@/modules/ui/components/id-badge";
@@ -104,7 +104,7 @@ export const SingleResponseCardHeader = ({
             {response.finished && (
               <>
                 {" · "}
-                {t("common.completed")} {getFormattedDateTimeString(response.updatedAt)}
+                {t("common.completed")} {formatDateTimeForDisplay(response.updatedAt, locale)}
                 {typeof response.ttc?._total === "number" && response.ttc._total > 0
                   ? ` · ${formatDurationClock(response.ttc._total)}`
                   : ""}
