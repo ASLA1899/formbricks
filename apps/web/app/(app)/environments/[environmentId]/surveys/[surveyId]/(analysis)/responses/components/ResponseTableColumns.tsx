@@ -12,7 +12,7 @@ import { TUserLocale } from "@formbricks/types/user";
 import { getLocalizedValue } from "@/lib/i18n/utils";
 import { extractChoiceIdsFromResponse } from "@/lib/response/utils";
 import { getContactIdentifier } from "@/lib/utils/contact";
-import { formatDateTimeForDisplay } from "@/lib/utils/datetime";
+import { formatDateTimeForDisplay, formatDurationClock } from "@/lib/utils/datetime";
 import { recallToHeadline } from "@/lib/utils/recall";
 import { RenderResponse } from "@/modules/analysis/components/SingleResponseCard/components/RenderResponse";
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
@@ -299,11 +299,35 @@ export const generateResponseTableColumns = (
 
   const dateColumn: ColumnDef<TResponseTableData> = {
     accessorKey: "createdAt",
-    header: () => t("common.date"),
+    header: () => t("common.started"),
     size: 200,
     cell: ({ row }) => {
       const date = new Date(row.original.createdAt);
       return <p className="text-slate-900">{formatDateTimeForDisplay(date, locale)}</p>;
+    },
+  };
+
+  const completedColumn: ColumnDef<TResponseTableData> = {
+    accessorKey: "completedAt",
+    header: () => t("common.completed"),
+    size: 200,
+    cell: ({ row }) => {
+      const completedAt = row.original.completedAt;
+      return (
+        <p className="text-slate-900">
+          {completedAt ? formatDateTimeForDisplay(new Date(completedAt), locale) : "—"}
+        </p>
+      );
+    },
+  };
+
+  const durationColumn: ColumnDef<TResponseTableData> = {
+    accessorKey: "duration",
+    header: () => t("common.duration"),
+    size: 120,
+    cell: ({ row }) => {
+      const duration = row.original.duration;
+      return <p className="text-slate-900">{duration != null ? formatDurationClock(duration) : "—"}</p>;
     },
   };
 
@@ -456,6 +480,8 @@ export const generateResponseTableColumns = (
     singleUseIdColumn,
     responseIdColumn,
     dateColumn,
+    completedColumn,
+    durationColumn,
     ...(showQuotasColumn ? [quotasColumn] : []),
     statusColumn,
     ...(survey.isVerifyEmailEnabled ? [verifiedEmailColumn] : []),
