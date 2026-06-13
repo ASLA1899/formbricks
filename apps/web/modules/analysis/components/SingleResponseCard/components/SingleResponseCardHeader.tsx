@@ -9,6 +9,7 @@ import { TSurvey } from "@formbricks/types/surveys/types";
 import { TUser, TUserLocale } from "@formbricks/types/user";
 import { timeSince } from "@/lib/time";
 import { getContactIdentifier } from "@/lib/utils/contact";
+import { formatDurationClock, getFormattedDateTimeString } from "@/lib/utils/datetime";
 import { PersonAvatar } from "@/modules/ui/components/avatars";
 import { Button } from "@/modules/ui/components/button";
 import { IdBadge } from "@/modules/ui/components/id-badge";
@@ -98,8 +99,17 @@ export const SingleResponseCardHeader = ({
         </div>
 
         <div className="flex items-center space-x-2 text-sm">
-          <time className="text-slate-500" dateTime={timeSince(response.createdAt.toISOString(), locale)}>
-            {timeSince(response.createdAt.toISOString(), locale)}
+          <time className="text-slate-500" dateTime={response.createdAt.toISOString()}>
+            {t("common.started")} {timeSince(response.createdAt.toISOString(), locale)}
+            {response.finished && (
+              <>
+                {" · "}
+                {t("common.completed")} {getFormattedDateTimeString(response.updatedAt)}
+                {typeof response.ttc?._total === "number" && response.ttc._total > 0
+                  ? ` · ${formatDurationClock(response.ttc._total)}`
+                  : ""}
+              </>
+            )}
           </time>
           {user &&
             !isReadOnly &&
