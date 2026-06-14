@@ -4,7 +4,6 @@ import { cache as reactCache } from "react";
 import { z } from "zod";
 import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
-import { deleteSurveyResponseByResponseId } from "@/app/api/member-lookup/snowflake-service";
 import { ZId, ZOptionalNumber, ZString } from "@formbricks/types/common";
 import { DatabaseError, ResourceNotFoundError } from "@formbricks/types/errors";
 import {
@@ -19,6 +18,7 @@ import {
 import { TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { TTag } from "@formbricks/types/tags";
+import { deleteSurveyResponseByResponseId } from "@/app/api/member-lookup/snowflake-service";
 import { getElementsFromBlocks } from "@/lib/survey/utils";
 import { getIsQuotasEnabled } from "@/modules/ee/license-check/lib/utils";
 import { reduceQuotaLimits } from "@/modules/ee/quotas/lib/quotas";
@@ -392,7 +392,9 @@ export const getResponseDownloadFile = async (
     const headers = [
       "No.",
       "Response ID",
-      "Timestamp",
+      "Started At",
+      "Completed At",
+      "Duration",
       "Finished",
       ...(isQuotasAllowed ? ["Quotas"] : []),
       "Survey ID",

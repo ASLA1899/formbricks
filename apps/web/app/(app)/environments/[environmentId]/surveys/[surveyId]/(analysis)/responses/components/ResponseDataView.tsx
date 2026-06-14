@@ -104,6 +104,9 @@ const mapResponsesToTableData = (
   return responses.map((response) => ({
     responseData: extractResponseData(response, survey),
     createdAt: response.createdAt,
+    completedAt: response.finished ? response.updatedAt : null,
+    duration:
+      typeof response.ttc?._total === "number" && response.ttc._total > 0 ? response.ttc._total : null,
     status: response.finished
       ? t("environments.surveys.responses.completed")
       : t("environments.surveys.responses.not_completed"),

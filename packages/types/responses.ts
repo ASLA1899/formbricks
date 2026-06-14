@@ -420,6 +420,8 @@ export const ZResponseTableData = z.object({
   responseId: z.string(),
   singleUseId: z.string().nullable(),
   createdAt: z.date(),
+  completedAt: z.date().nullable(),
+  duration: z.number().nullable(),
   status: z.string(),
   verifiedEmail: z.string(),
   tags: z.array(ZTag),

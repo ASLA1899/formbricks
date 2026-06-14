@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { TResponse } from "@formbricks/types/responses";
 import { TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
+import { getFormattedDateTimeString } from "@/lib/utils/datetime";
 import {
   buildWhereClause,
   calculateTtcTotal,
@@ -475,8 +476,9 @@ describe("Response Utils", () => {
         meta: { userAgent: { browser: "Chrome" } },
         contactAttributes: { email: "test@example.com" },
         finished: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: new Date("2026-06-10T19:15:44Z"),
+        updatedAt: new Date("2026-06-10T20:00:04Z"),
+        ttc: { q1: 2650411, _total: 2650411 },
         tags: [],
       },
     ];
@@ -497,6 +499,10 @@ describe("Response Utils", () => {
       expect(result[0]["userAgent - browser"]).toBe("Chrome");
       expect(result[0]["1. Question 1"]).toBe("answer1");
       expect(result[0]["email"]).toBe("test@example.com");
+      expect(result[0]["Started At"]).toBe(getFormattedDateTimeString(new Date("2026-06-10T19:15:44Z")));
+      expect(result[0]["Completed At"]).toBe(getFormattedDateTimeString(new Date("2026-06-10T20:00:04Z")));
+      expect(result[0]["Duration"]).toBe("0:44:10");
+      expect(result[0]["Timestamp"]).toBeUndefined();
     });
   });
 

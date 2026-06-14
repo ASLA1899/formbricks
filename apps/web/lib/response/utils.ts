@@ -22,7 +22,7 @@ import { replaceHeadlineRecall } from "@/lib/utils/recall";
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
 import { processResponseData } from "../responses";
 import { getTodaysDateTimeFormatted } from "../time";
-import { getFormattedDateTimeString } from "../utils/datetime";
+import { formatDurationClock, getFormattedDateTimeString } from "../utils/datetime";
 import { sanitizeString } from "../utils/strings";
 
 /**
@@ -719,7 +719,12 @@ export const getResponsesJson = (
     jsonData.push({
       "No.": idx + 1,
       "Response ID": response.id,
-      Timestamp: getFormattedDateTimeString(response.createdAt),
+      "Started At": getFormattedDateTimeString(response.createdAt),
+      "Completed At": response.finished ? getFormattedDateTimeString(response.updatedAt) : "",
+      Duration:
+        typeof response.ttc?._total === "number" && response.ttc._total > 0
+          ? formatDurationClock(response.ttc._total)
+          : "",
       Finished: response.finished ? "Yes" : "No",
       "Survey ID": response.surveyId,
       "Formbricks ID (internal)": response.contact?.id || "",
@@ -790,7 +795,12 @@ export const getResponsesJson = (
           const choiceIds = extractChoiceIdsFromResponse(answer, element, response.language || "default");
           jsonData[idx][elementHeadline[1]] = choiceIds.join(", ");
         }
-      } else if (element.type === "contactInfo" && answer && typeof answer === "object" && !Array.isArray(answer)) {
+      } else if (
+        element.type === "contactInfo" &&
+        answer &&
+        typeof answer === "object" &&
+        !Array.isArray(answer)
+      ) {
         // Map custom field IDs to human-readable labels
         const BUILTIN_LABELS: Record<string, string> = {
           firstName: "First Name",

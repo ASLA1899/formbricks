@@ -4,6 +4,7 @@ import {
   formatDateForDisplay,
   formatDateTimeForDisplay,
   formatDateWithOrdinal,
+  formatDurationClock,
   getFormattedDateTimeString,
   isValidDateString,
 } from "./datetime";
@@ -66,5 +67,23 @@ describe("datetime utils", () => {
   test("getFormattedDateTimeString formats a date-time string correctly", () => {
     const date = new Date("2025-05-06T14:30:00");
     expect(getFormattedDateTimeString(date)).toBe("2025-05-06 14:30:00");
+  });
+});
+
+describe("formatDurationClock", () => {
+  test("formats sub-minute durations", () => {
+    expect(formatDurationClock(38000)).toBe("0:00:38");
+  });
+  test("formats minutes and seconds", () => {
+    expect(formatDurationClock(2650411)).toBe("0:44:10");
+  });
+  test("rounds fractional milliseconds", () => {
+    expect(formatDurationClock(2650411.5)).toBe("0:44:10");
+  });
+  test("formats durations over an hour", () => {
+    expect(formatDurationClock(3750000)).toBe("1:02:30");
+  });
+  test("formats zero", () => {
+    expect(formatDurationClock(0)).toBe("0:00:00");
   });
 });
