@@ -36,27 +36,11 @@ const ENV_ID = "clh3k2p0000001234abcdefgh";
 const TOKEN = generateFileLinkToken();
 
 const buildLinkRow = (storageKey = `${ENV_ID}/private/guide--fid--uuid.pdf`) => ({
-  followUp: {
-    action: {
-      type: "send-email",
-      properties: {
-        to: "email",
-        from: "no-reply@example.org",
-        replyTo: ["help@example.org"],
-        subject: "Thanks",
-        body: "<p>Hi</p>",
-        attachResponseData: false,
-        attachment: {
-          storageKey,
-          fileName: "Guide.pdf",
-          contentType: "application/pdf",
-          size: 1000,
-          attachToEmail: false,
-        },
-      },
-    },
-    survey: { environmentId: ENV_ID },
-  },
+  storageKey,
+  fileName: "Guide.pdf",
+  contentType: "application/pdf",
+  fileSize: 1000,
+  followUp: { survey: { environmentId: ENV_ID } },
 });
 
 describe("follow-up file link helpers", () => {
@@ -164,6 +148,30 @@ describe("resolveFollowUpFileLink / registerFollowUpFileDownload", () => {
       })
     );
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  test("serves the file snapshotted on the link, not whatever the follow-up has now", async () => {
+    vi.mocked(prisma.surveyFollowUpFileLink.findUnique).mockResolvedValue(buildLinkRow() as never);
+    const resolved = await resolveFollowUpFileLink(TOKEN);
+    expect(resolved?.attachment).toEqual({
+      storageKey: `${ENV_ID}/private/guide--fid--uuid.pdf`,
+      fileName: "Guide.pdf",
+      contentType: "application/pdf",
+      size: 1000,
+    });
+  });
+
+  test("cancels the open stream and returns null when counting fails", async () => {
+    vi.mocked(prisma.surveyFollowUpFileLink.findUnique).mockResolvedValue(buildLinkRow() as never);
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(getFileStream).mockResolvedValue({
+      ok: true,
+      data: { body: { cancel } as unknown as ReadableStream<Uint8Array>, contentType: "x", contentLength: 3 },
+    });
+    vi.mocked(prisma.$transaction).mockRejectedValue(new Error("P2025"));
+
+    expect(await registerFollowUpFileDownload(TOKEN)).toBeNull();
+    expect(cancel).toHaveBeenCalled();
   });
 
   test("does not count when the file cannot be opened", async () => {

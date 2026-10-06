@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { TooManyRequestsError } from "@formbricks/types/errors";
+import { getLocale } from "@/lingodotdev/language";
 import { getTranslate } from "@/lingodotdev/server";
 import { applyIPRateLimit } from "@/modules/core/rate-limit/helpers";
 import { rateLimitConfigs } from "@/modules/core/rate-limit/rate-limit-configs";
@@ -16,6 +17,11 @@ import {
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
+// Same masthead logo, background, and font stack as the follow-up email, so the page looks like it
+// belongs to the email the recipient just clicked.
+const LOGO_URL = "https://surveys.asla.org/asla-logo-email.png";
+const FONT_STACK = "'Retina','Calibri','Helvetica Neue','Helvetica','Arial',sans-serif";
+
 const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 
 const formatSize = (bytes: number): string =>
@@ -23,24 +29,40 @@ const formatSize = (bytes: number): string =>
     ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
     : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
-const htmlResponse = (title: string, body: string): Response =>
-  new NextResponse(
-    `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer"><title>${escapeHtml(title)}</title></head><body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;font-family:Calibri,'Helvetica Neue',Arial,sans-serif;color:#0f172a">${body}</body></html>`,
-    { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", ...NO_STORE } }
-  );
+const brandedPage = async (title: string, inner: string, status: number): Promise<Response> => {
+  const locale = await getLocale();
+  const html = `<!DOCTYPE html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer"><title>${escapeHtml(
+    title
+  )}</title><style>body{margin:0;background:#FBF8F1;color:#1A1A1A;font-family:${FONT_STACK}}header{background:#003A49;padding:24px 36px}header img{display:block;max-width:100%;height:auto}main{box-sizing:border-box;max-width:640px;margin:0 auto;padding:40px 36px;background:#fff}h1{margin:0 0 16px;font-size:22px;font-weight:600}p{margin:0 0 8px;font-size:15px;line-height:1.5;word-break:break-word}.meta{font-size:13px;color:#4b5563}button{margin-top:24px;min-height:44px;padding:0 28px;border:0;border-radius:24px;background:#003A49;color:#fff;font:600 15px ${FONT_STACK};cursor:pointer}button:hover{background:#00546a}button:focus-visible{outline:3px solid #7fb4c2;outline-offset:2px}@media(max-width:480px){header{padding:20px}main{padding:28px 20px}}</style></head><body><header><img src="${LOGO_URL}" alt="American Society of Landscape Architects" width="220" height="56"></header><main>${inner}</main></body></html>`;
+  return new NextResponse(html, {
+    status,
+    headers: { "Content-Type": "text/html; charset=utf-8", ...NO_STORE },
+  });
+};
+
+const messagePage = async (message: string, status: number): Promise<Response> => {
+  const t = await getTranslate();
+  return brandedPage(t("common.follow_up_file_title"), `<p>${escapeHtml(message)}</p>`, status);
+};
 
 const applyLimit = async (
   config: (typeof rateLimitConfigs.followUpFile)[keyof typeof rateLimitConfigs.followUpFile]
-) => {
+): Promise<Response | null> => {
   try {
     await applyIPRateLimit(config);
     return null;
   } catch (error) {
     if (error instanceof TooManyRequestsError) {
-      return new NextResponse("Too many requests", { status: 429, headers: NO_STORE });
+      const t = await getTranslate();
+      return messagePage(t("common.follow_up_file_too_many_requests"), 429);
     }
     throw error;
   }
+};
+
+const notFound = async (): Promise<Response> => {
+  const t = await getTranslate();
+  return messagePage(t("common.follow_up_file_not_found"), 404);
 };
 
 export const GET = async (
@@ -52,24 +74,19 @@ export const GET = async (
 
   const { token } = await props.params;
   const resolved = await resolveFollowUpFileLink(token);
-  if (!resolved) return new NextResponse("Not found", { status: 404, headers: NO_STORE });
+  if (!resolved) return notFound();
 
   const t = await getTranslate();
   const { fileName, size } = resolved.attachment;
 
-  return htmlResponse(
+  return brandedPage(
     t("common.follow_up_file_title"),
-    `<main style="width:100%;max-width:28rem;margin:1.5rem;padding:2rem;text-align:center;background:#fff;border:1px solid #e2e8f0;border-radius:0.5rem"><h1 style="margin:0;font-size:1.125rem">${escapeHtml(
-      t("common.follow_up_file_title")
-    )}</h1><p style="margin:0.75rem 0 0;font-size:0.875rem;word-break:break-word">${escapeHtml(
-      fileName
-    )}</p><p style="margin:0.25rem 0 0;font-size:0.75rem;color:#64748b">${formatSize(
+    `<h1>${escapeHtml(t("common.follow_up_file_title"))}</h1><p>${escapeHtml(fileName)}</p><p class="meta">${formatSize(
       size
-    )}</p><form method="POST" action="/f/${encodeURIComponent(
-      token
-    )}" style="margin-top:1.5rem"><button type="submit" style="background:#003A49;color:#fff;border:0;border-radius:0.375rem;padding:0.625rem 1.25rem;font-size:0.875rem;font-weight:600;cursor:pointer">${escapeHtml(
-      t("common.download")
-    )}</button></form></main>`
+    )}</p><form method="POST" action="/f/${encodeURIComponent(token)}"><button type="submit">${escapeHtml(
+      t("common.follow_up_file_download")
+    )}</button></form>`,
+    200
   );
 };
 
@@ -82,7 +99,7 @@ export const POST = async (
 
   const { token } = await props.params;
   const download = await registerFollowUpFileDownload(token);
-  if (!download) return new NextResponse("Not found", { status: 404, headers: NO_STORE });
+  if (!download) return notFound();
 
   return new NextResponse(download.body, {
     status: 200,

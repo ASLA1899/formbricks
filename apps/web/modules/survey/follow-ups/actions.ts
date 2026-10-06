@@ -13,6 +13,8 @@ import {
   getProjectIdFromEnvironmentId,
   getProjectIdFromSurveyId,
 } from "@/lib/utils/helper";
+import { applyRateLimit } from "@/modules/core/rate-limit/helpers";
+import { rateLimitConfigs } from "@/modules/core/rate-limit/rate-limit-configs";
 import { getSignedUrlForUpload } from "@/modules/storage/service";
 import { isAllowedFileExtension } from "@/modules/storage/utils";
 import { getSurveyFollowUpsPermission } from "@/modules/survey/follow-ups/lib/utils";
@@ -32,6 +34,7 @@ export const getFollowUpFileUploadUrlAction = authenticatedActionClient
   .inputSchema(ZGetFollowUpFileUploadUrl)
   .action(async ({ ctx, parsedInput }) => {
     const { environmentId, fileName, fileType, fileSize } = parsedInput;
+    await applyRateLimit(rateLimitConfigs.storage.upload, ctx.user.id);
     const organizationId = await getOrganizationIdFromEnvironmentId(environmentId);
 
     await checkAuthorizationUpdated({

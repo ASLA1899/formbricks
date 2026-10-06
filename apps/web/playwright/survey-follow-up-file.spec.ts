@@ -77,6 +77,10 @@ test.describe("Survey follow-up file", () => {
           followUpId: followUp.id,
           responseId: response.id,
           recipientEmail: "member@example.org",
+          storageKey: String(attachment?.storageKey),
+          fileName: "Resource guide.pdf",
+          contentType: "application/pdf",
+          fileSize: PDF_BYTES.length,
         },
       });
 

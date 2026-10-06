@@ -34,7 +34,7 @@ export function FollowUpEmail({
         <div dangerouslySetInnerHTML={{ __html: body }} />
 
         {fileLink ? (
-          <Row>
+          <Row style={{ paddingBottom: "24px" }}>
             <Column className="w-full">
               <Text className="mb-3 text-sm text-slate-700">{fileLink.fileName}</Text>
               <EmailButton label={t("emails.follow_up_file_download")} href={fileLink.url} />

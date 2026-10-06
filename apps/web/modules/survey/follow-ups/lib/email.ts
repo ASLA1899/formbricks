@@ -40,7 +40,10 @@ export const readFollowUpAttachment = async (
     logger.error({ code: stream.error.code }, "Could not read follow-up file for email attachment");
     return null;
   }
-  if (stream.data.contentLength > FOLLOW_UP_ATTACHMENT_MAX_EMAIL_BYTES) return null;
+  if (stream.data.contentLength > FOLLOW_UP_ATTACHMENT_MAX_EMAIL_BYTES) {
+    await stream.data.body.cancel().catch(() => undefined);
+    return null;
+  }
 
   const content = Buffer.from(await new Response(stream.data.body).arrayBuffer());
   if (content.byteLength > FOLLOW_UP_ATTACHMENT_MAX_EMAIL_BYTES) return null;
@@ -153,7 +156,12 @@ export const sendFollowUpEmail = async ({
 
   // One tracked link per sent email, so downloads can be attributed to a recipient.
   const fileLinkToken = attachment
-    ? await createFollowUpFileLink({ followUpId: followUp.id, responseId: response.id, recipientEmail: to })
+    ? await createFollowUpFileLink({
+        followUpId: followUp.id,
+        responseId: response.id,
+        recipientEmail: to,
+        attachment,
+      })
     : null;
 
   try {

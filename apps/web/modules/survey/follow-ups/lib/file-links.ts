@@ -4,7 +4,6 @@ import { prisma } from "@formbricks/database";
 import {
   FOLLOW_UP_ATTACHMENT_MAX_EMAIL_BYTES,
   TSurveyFollowUpAttachment,
-  ZSurveyFollowUpAction,
 } from "@formbricks/database/types/survey-follow-up";
 import { logger } from "@formbricks/logger";
 import { getFileStream } from "@formbricks/storage";
@@ -39,14 +38,27 @@ export const createFollowUpFileLink = async ({
   followUpId,
   responseId,
   recipientEmail,
+  attachment,
 }: {
   followUpId: string;
   responseId: string;
   recipientEmail: string;
+  attachment: TSurveyFollowUpAttachment;
 }): Promise<string> => {
   const token = generateFileLinkToken();
+  // The file is snapshotted on the link, so links already sent keep working if the follow-up's file is
+  // later replaced or removed.
   await prisma.surveyFollowUpFileLink.create({
-    data: { token, followUpId, responseId, recipientEmail },
+    data: {
+      token,
+      followUpId,
+      responseId,
+      recipientEmail,
+      storageKey: attachment.storageKey,
+      fileName: attachment.fileName,
+      contentType: attachment.contentType,
+      fileSize: attachment.size,
+    },
     select: { id: true },
   });
   return token;
@@ -57,13 +69,13 @@ export const deleteFollowUpFileLinkByToken = async (token: string): Promise<void
 };
 
 type TResolvedFileLink = {
-  attachment: TSurveyFollowUpAttachment;
+  attachment: Pick<TSurveyFollowUpAttachment, "storageKey" | "fileName" | "contentType" | "size">;
   environmentId: string;
 };
 
 /**
- * Resolves a token to its file. Returns null for unknown tokens, follow-ups that no longer carry a file,
- * or keys outside the survey's own environment.
+ * Resolves a token to the file that was emailed. Returns null for unknown tokens or keys outside the
+ * survey's own environment.
  */
 export const resolveFollowUpFileLink = async (token: string): Promise<TResolvedFileLink | null> => {
   if (!isValidFileLinkToken(token)) return null;
@@ -71,22 +83,30 @@ export const resolveFollowUpFileLink = async (token: string): Promise<TResolvedF
   const link = await prisma.surveyFollowUpFileLink.findUnique({
     where: { token },
     select: {
-      followUp: { select: { action: true, survey: { select: { environmentId: true } } } },
+      storageKey: true,
+      fileName: true,
+      contentType: true,
+      fileSize: true,
+      followUp: { select: { survey: { select: { environmentId: true } } } },
     },
   });
   if (!link) return null;
 
-  const action = ZSurveyFollowUpAction.safeParse(link.followUp.action);
-  const attachment = action.success ? action.data.properties.attachment : undefined;
-  if (!attachment) return null;
-
   const environmentId = link.followUp.survey.environmentId;
-  if (!isAttachmentKeyInEnvironment(attachment.storageKey, environmentId)) {
+  if (!isAttachmentKeyInEnvironment(link.storageKey, environmentId)) {
     logger.warn({ environmentId }, "Follow-up file link points outside its environment");
     return null;
   }
 
-  return { attachment, environmentId };
+  return {
+    attachment: {
+      storageKey: link.storageKey,
+      fileName: link.fileName,
+      contentType: link.contentType,
+      size: link.fileSize,
+    },
+    environmentId,
+  };
 };
 
 export type TFollowUpFileDownload = {
@@ -113,18 +133,25 @@ export const registerFollowUpFileDownload = async (token: string): Promise<TFoll
     return null;
   }
 
-  const now = new Date();
-  await prisma.$transaction([
-    prisma.surveyFollowUpFileLink.updateMany({
-      where: { token, firstDownloadedAt: null },
-      data: { firstDownloadedAt: now },
-    }),
-    prisma.surveyFollowUpFileLink.update({
-      where: { token },
-      data: { lastDownloadedAt: now, downloadCount: { increment: 1 } },
-      select: { id: true },
-    }),
-  ]);
+  try {
+    const now = new Date();
+    await prisma.$transaction([
+      prisma.surveyFollowUpFileLink.updateMany({
+        where: { token, firstDownloadedAt: null },
+        data: { firstDownloadedAt: now },
+      }),
+      prisma.surveyFollowUpFileLink.update({
+        where: { token },
+        data: { lastDownloadedAt: now, downloadCount: { increment: 1 } },
+        select: { id: true },
+      }),
+    ]);
+  } catch (error) {
+    // e.g. the link was deleted between lookup and count: release the open S3 stream.
+    await stream.data.body.cancel().catch(() => undefined);
+    logger.warn({ error }, "Could not count follow-up file download");
+    return null;
+  }
 
   return {
     body: stream.data.body,

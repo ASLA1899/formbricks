@@ -527,6 +527,11 @@ model SurveyFollowUpFileLink {
   response          Response       @relation(fields: [responseId], references: [id], onDelete: Cascade)
   responseId        String
   recipientEmail    String
+  /// Snapshot of the file at send time, so links already sent keep serving the file that was emailed.
+  storageKey        String
+  fileName          String
+  contentType       String
+  fileSize          Int            @map(name: "file_size")
   firstDownloadedAt DateTime?      @map(name: "first_downloaded_at")
   lastDownloadedAt  DateTime?      @map(name: "last_downloaded_at")
   downloadCount     Int            @default(0) @map(name: "download_count")

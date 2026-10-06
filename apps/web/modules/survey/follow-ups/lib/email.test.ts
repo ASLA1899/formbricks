@@ -108,6 +108,7 @@ describe("sendFollowUpEmail with a file", () => {
       followUpId: "f1",
       responseId: "r1",
       recipientEmail: "member@example.org",
+      attachment: expect.objectContaining({ fileName: "Guide.pdf", size: 1000 }),
     });
     expect(renderFollowUpEmail).toHaveBeenCalledWith(
       expect.objectContaining({
