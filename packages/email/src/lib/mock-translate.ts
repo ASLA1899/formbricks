@@ -11,6 +11,7 @@ const translations: Record<TranslationKey, TranslationValue> = {
   "emails.email_customization_preview_email_subject": "Formbricks Email Customization Preview",
   "emails.email_customization_preview_email_text":
     "This is an email preview to show you which logo will be rendered in the emails.",
+  "emails.follow_up_file_download": "Download file",
   "emails.email_footer_text_1": "Thank you,",
   "emails.email_footer_text_2": "ASLA",
   "emails.email_template_text_1": "American Society of Landscape Architects",

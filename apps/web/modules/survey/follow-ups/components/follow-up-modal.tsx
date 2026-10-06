@@ -29,6 +29,8 @@ import {
   ZCreateSurveyFollowUpFormSchema,
 } from "@/modules/survey/editor/types/survey-follow-up";
 import FollowUpActionMultiEmailInput from "@/modules/survey/follow-ups/components/follow-up-action-multi-email-input";
+import { FollowUpAttachmentField } from "@/modules/survey/follow-ups/components/follow-up-attachment-field";
+import { FollowUpFileDownloads } from "@/modules/survey/follow-ups/components/follow-up-file-downloads";
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
 import { getElementIconMap } from "@/modules/survey/lib/elements";
 import { AdvancedOptionToggle } from "@/modules/ui/components/advanced-option-toggle";
@@ -190,6 +192,7 @@ export const FollowUpModal = ({
       attachResponseData: defaultValues?.attachResponseData ?? false,
       includeVariables: defaultValues?.includeVariables ?? false,
       includeHiddenFields: defaultValues?.includeHiddenFields ?? false,
+      attachment: defaultValues?.attachment,
     },
     resolver: zodResolver(ZCreateSurveyFollowUpFormSchema),
     mode: "onChange",
@@ -275,6 +278,7 @@ export const FollowUpModal = ({
             attachResponseData: data.attachResponseData,
             includeVariables: data.includeVariables,
             includeHiddenFields: data.includeHiddenFields,
+            attachment: data.attachment,
           },
         },
       };
@@ -324,6 +328,7 @@ export const FollowUpModal = ({
           attachResponseData: data.attachResponseData,
           includeVariables: data.includeVariables,
           includeHiddenFields: data.includeHiddenFields,
+          attachment: data.attachment,
         },
       },
     };
@@ -381,6 +386,7 @@ export const FollowUpModal = ({
         attachResponseData: defaultValues?.attachResponseData ?? false,
         includeVariables: defaultValues?.includeVariables ?? false,
         includeHiddenFields: defaultValues?.includeHiddenFields ?? false,
+        attachment: defaultValues?.attachment,
       });
     }
   }, [open, defaultValues, emailSendToOptions, form, userEmail, locale, t]);
@@ -867,6 +873,15 @@ export const FollowUpModal = ({
                         );
                       }}
                     />
+
+                    <FollowUpAttachmentField environmentId={localSurvey.environmentId} />
+
+                    {mode === "edit" && defaultValues?.surveyFollowUpId && defaultValues.attachment ? (
+                      <FollowUpFileDownloads
+                        surveyId={localSurvey.id}
+                        followUpId={defaultValues.surveyFollowUpId}
+                      />
+                    ) : null}
 
                     <FormField
                       control={form.control}

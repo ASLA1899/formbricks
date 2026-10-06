@@ -28,6 +28,12 @@ export const rateLimitConfigs = {
     licenseRecheck: { interval: 60, allowedPerInterval: 5, namespace: "action:license-recheck" }, // 5 per minute
   },
 
+  // Public follow-up file links (/f/<token>), limited per client IP
+  followUpFile: {
+    view: { interval: 60, allowedPerInterval: 60, namespace: "followup-file:view" }, // 60 per minute
+    download: { interval: 60, allowedPerInterval: 20, namespace: "followup-file:download" }, // 20 per minute
+  },
+
   storage: {
     upload: { interval: 60, allowedPerInterval: 5, namespace: "storage:upload" }, // 5 per minute
     uploadPerEnvironment: {

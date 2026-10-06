@@ -139,6 +139,7 @@ export const exampleData = {
   },
 
   followUpEmail: {
+    fileLink: { url: "https://example.org/f/EXAMPLE_TOKEN", fileName: "Resource guide.pdf" },
     body: "<p>Thank you for your feedback! We've received your response and will review it shortly.</p><p>Here's a summary of what you submitted:</p>",
     responseData: [
       {

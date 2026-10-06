@@ -319,6 +319,13 @@ describe("endpoint-validator", () => {
       expect(isPublicDomainRoute("/c/token.with.dots")).toBe(true);
     });
 
+    test("should return true for follow-up file link routes", () => {
+      expect(isPublicDomainRoute("/f/abc123_-token")).toBe(true);
+      expect(isPublicDomainRoute("/f/abc123_-token/download")).toBe(true);
+      expect(isPublicDomainRoute("/f/")).toBe(false);
+      expect(isPublicDomainRoute("/files/token")).toBe(false);
+    });
+
     test("should return false for malformed contact survey routes", () => {
       expect(isPublicDomainRoute("/c/")).toBe(false);
       expect(isPublicDomainRoute("/c")).toBe(false);

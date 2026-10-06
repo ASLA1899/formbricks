@@ -62,6 +62,7 @@ interface SendEmailDataProps {
   text?: string;
   html: string;
   fromName?: string;
+  attachments?: { filename: string; content: Buffer; contentType?: string }[];
 }
 
 export const sendEmail = async (emailData: SendEmailDataProps): Promise<boolean> => {

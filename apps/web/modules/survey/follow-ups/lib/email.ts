@@ -1,11 +1,17 @@
 import sanitizeHtml from "sanitize-html";
-import { TSurveyFollowUp } from "@formbricks/database/types/survey-follow-up";
+import {
+  FOLLOW_UP_ATTACHMENT_MAX_EMAIL_BYTES,
+  TSurveyFollowUp,
+  TSurveyFollowUpAttachment,
+} from "@formbricks/database/types/survey-follow-up";
 import {
   ProcessedHiddenField,
   ProcessedResponseElement,
   ProcessedVariable,
   renderFollowUpEmail,
 } from "@formbricks/email";
+import { logger } from "@formbricks/logger";
+import { getFileStream } from "@formbricks/storage";
 import { TResponse } from "@formbricks/types/responses";
 import { TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
@@ -15,6 +21,35 @@ import { parseRecallInfo } from "@/lib/utils/recall";
 import { getTranslate } from "@/lingodotdev/server";
 import { sendEmail } from "@/modules/email";
 import { resolveStorageUrl } from "@/modules/storage/utils";
+import {
+  canAttachFileToEmail,
+  createFollowUpFileLink,
+  deleteFollowUpFileLinkByToken,
+  getFollowUpFileUrl,
+  isAttachmentKeyInEnvironment,
+} from "@/modules/survey/follow-ups/lib/file-links";
+
+/** Reads the file for a real email attachment. The byte count is checked here, not trusted from the editor. */
+export const readFollowUpAttachment = async (
+  attachment: TSurveyFollowUpAttachment
+): Promise<{ filename: string; content: Buffer; contentType: string } | null> => {
+  if (!canAttachFileToEmail(attachment)) return null;
+
+  const stream = await getFileStream(attachment.storageKey);
+  if (!stream.ok) {
+    logger.error({ code: stream.error.code }, "Could not read follow-up file for email attachment");
+    return null;
+  }
+  if (stream.data.contentLength > FOLLOW_UP_ATTACHMENT_MAX_EMAIL_BYTES) {
+    await stream.data.body.cancel().catch(() => undefined);
+    return null;
+  }
+
+  const content = Buffer.from(await new Response(stream.data.body).arrayBuffer());
+  if (content.byteLength > FOLLOW_UP_ATTACHMENT_MAX_EMAIL_BYTES) return null;
+
+  return { filename: attachment.fileName, content, contentType: attachment.contentType };
+};
 
 export const sendFollowUpEmail = async ({
   followUp,
@@ -39,9 +74,13 @@ export const sendFollowUpEmail = async ({
 }): Promise<void> => {
   const {
     action: {
-      properties: { subject, body },
+      properties: { subject, body, attachment },
     },
   } = followUp;
+
+  if (attachment && !isAttachmentKeyInEnvironment(attachment.storageKey, survey.environmentId)) {
+    throw new Error(`Follow-up file does not belong to this survey's environment: ${followUp.id}`);
+  }
 
   const t = await getTranslate();
 
@@ -115,23 +154,48 @@ export const sendFollowUpEmail = async ({
           })) ?? [])
       : [];
 
-  const emailHtmlBody = await renderFollowUpEmail({
-    body: processedBody,
-    responseData,
-    variables,
-    hiddenFields,
-    logoUrl,
-    t,
-    privacyUrl: PRIVACY_URL || undefined,
-    termsUrl: TERMS_URL || undefined,
-    imprintUrl: IMPRINT_URL || undefined,
-    imprintAddress: IMPRINT_ADDRESS || undefined,
-  });
+  // One tracked link per sent email, so downloads can be attributed to a recipient.
+  const fileLinkToken = attachment
+    ? await createFollowUpFileLink({
+        followUpId: followUp.id,
+        responseId: response.id,
+        recipientEmail: to,
+        attachment,
+      })
+    : null;
 
-  await sendEmail({
-    to,
-    replyTo: replyTo.join(", "),
-    subject,
-    html: emailHtmlBody,
-  });
+  try {
+    const emailHtmlBody = await renderFollowUpEmail({
+      body: processedBody,
+      responseData,
+      variables,
+      hiddenFields,
+      fileLink:
+        attachment && fileLinkToken
+          ? { url: getFollowUpFileUrl(fileLinkToken), fileName: attachment.fileName }
+          : undefined,
+      logoUrl,
+      t,
+      privacyUrl: PRIVACY_URL || undefined,
+      termsUrl: TERMS_URL || undefined,
+      imprintUrl: IMPRINT_URL || undefined,
+      imprintAddress: IMPRINT_ADDRESS || undefined,
+    });
+
+    const fileAttachment = attachment ? await readFollowUpAttachment(attachment) : null;
+
+    const sent = await sendEmail({
+      to,
+      replyTo: replyTo.join(", "),
+      subject,
+      html: emailHtmlBody,
+      ...(fileAttachment && { attachments: [fileAttachment] }),
+    });
+
+    // Nothing was sent (e.g. SMTP not configured), so the link must not stay around as a dead record.
+    if (!sent && fileLinkToken) await deleteFollowUpFileLinkByToken(fileLinkToken);
+  } catch (error) {
+    if (fileLinkToken) await deleteFollowUpFileLinkByToken(fileLinkToken);
+    throw error;
+  }
 };

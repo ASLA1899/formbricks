@@ -221,6 +221,13 @@ export const deleteSurvey = async (surveyId: string): Promise<boolean> => {
   }
 };
 
+const withoutFollowUpAttachment = (action: unknown): Prisma.InputJsonValue => {
+  const value = action as { properties?: { attachment?: unknown } } | null;
+  if (!value?.properties || !("attachment" in value.properties)) return value as Prisma.InputJsonValue;
+  const { attachment: _attachment, ...properties } = value.properties;
+  return { ...value, properties } as Prisma.InputJsonValue;
+};
+
 const getExistingSurvey = async (surveyId: string) => {
   return await prisma.survey.findUnique({
     where: {
@@ -492,7 +499,8 @@ export const copySurveyToOtherEnvironment = async (
           data: existingSurvey.followUps.map((followUp) => ({
             name: followUp.name,
             trigger: followUp.trigger,
-            action: followUp.action,
+            // Follow-up files live in the source environment's private storage, so they are not carried over.
+            action: isSameEnvironment ? followUp.action : withoutFollowUpAttachment(followUp.action),
           })),
         },
       },
