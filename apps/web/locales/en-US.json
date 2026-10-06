@@ -242,6 +242,7 @@
     "first_name": "First Name",
     "follow_these": "Follow these",
     "follow_up_file_download": "Download file",
+    "follow_up_file_error_title": "Download unavailable",
     "follow_up_file_not_found": "This download link is no longer available. If you need the file, contact the person who sent you the email.",
     "follow_up_file_title": "Your file is ready",
     "follow_up_file_too_many_requests": "Too many requests. Please try again in a minute.",
