@@ -38,4 +38,5 @@ export const buildFollowUpFormDefaultValues = ({
   attachResponseData: defaultValues?.attachResponseData ?? false,
   includeVariables: defaultValues?.includeVariables ?? false,
   includeHiddenFields: defaultValues?.includeHiddenFields ?? false,
+  attachment: defaultValues?.attachment,
 });

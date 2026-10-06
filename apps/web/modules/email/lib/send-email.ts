@@ -48,6 +48,7 @@ interface SendEmailDataProps {
   html: string;
   /** Optional RFC 5322 Message-ID; nodemailer emits it as the `Message-ID` header. */
   messageId?: string;
+  attachments?: { filename: string; content: Buffer; contentType?: string }[];
 }
 
 const MAX_ADDRESS_LENGTH = 320;
