@@ -10,6 +10,11 @@ const PUBLIC_ROUTES = {
     /^\/p\/[^/]+/, // /p/[prettyUrl] - pretty URL pages
   ],
 
+  // Tracked download links for follow-up email files
+  FILE_LINK_ROUTES: [
+    /^\/f\/[^/]+/, // /f/[token] (GET page, POST download)
+  ],
+
   // API routes accessible from public domain
   API_ROUTES: [
     /^\/api\/v[12]\/client\//, // /api/v1/client/** and /api/v2/client/**

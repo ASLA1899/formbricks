@@ -203,6 +203,7 @@ export const FollowUpItem = ({
           attachResponseData: followUp.action.properties.attachResponseData,
           includeVariables: followUp.action.properties.includeVariables ?? false,
           includeHiddenFields: followUp.action.properties.includeHiddenFields ?? false,
+          attachment: followUp.action.properties.attachment,
         }}
         mode="edit"
         teamMemberDetails={teamMemberDetails}

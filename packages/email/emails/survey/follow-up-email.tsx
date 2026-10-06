@@ -1,4 +1,5 @@
 import { Column, Hr, Row, Text } from "@react-email/components";
+import { EmailButton } from "../../src/components/email-button";
 import { EmailTemplate } from "../../src/components/email-template";
 import { renderEmailResponseValue } from "../../src/lib/email-utils";
 import { exampleData } from "../../src/lib/example-data";
@@ -12,6 +13,7 @@ export interface FollowUpEmailProps extends TEmailTemplateLegalProps {
   readonly responseData?: ProcessedResponseElement[]; // Already mapped elements
   readonly variables?: ProcessedVariable[]; // Already filtered variables
   readonly hiddenFields?: ProcessedHiddenField[]; // Already filtered hidden fields
+  readonly fileLink?: { url: string; fileName: string }; // Tracked download link for the attached file
   readonly logoUrl?: string;
   readonly t?: TFunction;
 }
@@ -21,6 +23,7 @@ export function FollowUpEmail({
   responseData = [],
   variables = [],
   hiddenFields = [],
+  fileLink,
   logoUrl,
   t = mockT,
   ...legalProps
@@ -29,6 +32,15 @@ export function FollowUpEmail({
     <EmailTemplate logoUrl={logoUrl} t={t} {...legalProps}>
       <>
         <div dangerouslySetInnerHTML={{ __html: body }} />
+
+        {fileLink ? (
+          <Row>
+            <Column className="w-full">
+              <Text className="mb-3 text-sm text-slate-700">{fileLink.fileName}</Text>
+              <EmailButton label={t("emails.follow_up_file_download")} href={fileLink.url} />
+            </Column>
+          </Row>
+        ) : null}
 
         {responseData.length > 0 ? (
           <>
