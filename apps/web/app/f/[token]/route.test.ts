@@ -8,6 +8,7 @@ import {
 import { GET, POST } from "./route";
 
 vi.mock("@/modules/core/rate-limit/helpers", () => ({ applyIPRateLimit: vi.fn() }));
+vi.mock("@/lingodotdev/language", () => ({ getLocale: vi.fn(async () => "en-US") }));
 vi.mock("@/lingodotdev/server", () => ({
   getTranslate: vi.fn(async () => (key: string) => key),
 }));
@@ -27,7 +28,9 @@ describe("GET /f/[token]", () => {
 
   test("returns 404 for an unknown token", async () => {
     vi.mocked(resolveFollowUpFileLink).mockResolvedValue(null);
-    expect((await GET(request("GET"), props("unknown"))).status).toBe(404);
+    const response = await GET(request("GET"), props("unknown"));
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain("common.follow_up_file_not_found");
   });
 
   test("shows the file page without counting a download", async () => {
@@ -38,7 +41,6 @@ describe("GET /f/[token]", () => {
         fileName: "<b>Guide</b>.pdf",
         contentType: "application/pdf",
         size: 2048,
-        attachToEmail: false,
       },
     });
 
@@ -49,12 +51,15 @@ describe("GET /f/[token]", () => {
     expect(html).toContain("&#60;b&#62;Guide&#60;/b&#62;.pdf");
     expect(html).not.toContain("<b>Guide</b>");
     expect(html).toContain('method="POST"');
+    expect(html).toContain('<html lang="en-US">');
     expect(registerFollowUpFileDownload).not.toHaveBeenCalled();
   });
 
   test("returns 429 when rate limited", async () => {
     vi.mocked(applyIPRateLimit).mockRejectedValue(new TooManyRequestsError("slow down"));
-    expect((await GET(request("GET"), props())).status).toBe(429);
+    const response = await GET(request("GET"), props());
+    expect(response.status).toBe(429);
+    expect(await response.text()).toContain("common.follow_up_file_too_many_requests");
     expect(resolveFollowUpFileLink).not.toHaveBeenCalled();
   });
 });

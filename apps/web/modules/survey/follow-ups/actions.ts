@@ -8,6 +8,8 @@ import { FOLLOW_UP_ATTACHMENT_MAX_UPLOAD_BYTES } from "@formbricks/types/surveys
 import { assertCan } from "@/lib/authorization";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
 import { getOrganizationIdFromWorkspaceId } from "@/lib/utils/helper";
+import { applyRateLimit } from "@/modules/core/rate-limit/helpers";
+import { rateLimitConfigs } from "@/modules/core/rate-limit/rate-limit-configs";
 import { getSignedUrlForUpload } from "@/modules/storage/service";
 import { isAllowedFileExtension } from "@/modules/storage/utils";
 import { getSurveyFollowUpsPermission } from "@/modules/survey/follow-ups/lib/utils";
@@ -27,6 +29,7 @@ export const getFollowUpFileUploadUrlAction = authenticatedActionClient
   .inputSchema(ZGetFollowUpFileUploadUrl)
   .action(async ({ ctx, parsedInput }) => {
     const { workspaceId, fileName, fileType, fileSize } = parsedInput;
+    await applyRateLimit(rateLimitConfigs.storage.upload, ctx.user.id);
     const organizationId = await getOrganizationIdFromWorkspaceId(workspaceId);
 
     await assertCan({ type: "user", id: ctx.user.id }, "workspace.write", {

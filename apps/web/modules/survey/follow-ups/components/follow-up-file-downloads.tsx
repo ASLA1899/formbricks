@@ -53,14 +53,18 @@ export const FollowUpFileDownloads = ({ surveyId, followUpId }: FollowUpFileDown
         <p className="text-sm text-red-500">{t("workspace.surveys.edit.follow_up_downloads_load_failed")}</p>
       ) : null}
 
+      {!rows && !hasError ? (
+        <p className="text-sm text-slate-500">{t("environments.surveys.edit.follow_up_downloads_loading")}</p>
+      ) : null}
+
       {rows && rows.length === 0 ? (
         <p className="text-sm text-slate-500">{t("workspace.surveys.edit.follow_up_downloads_empty")}</p>
       ) : null}
 
       {rows && rows.length > 0 ? (
         <div className="max-h-64 overflow-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="text-slate-500">
+          <table className="w-full text-left text-xs whitespace-nowrap">
+            <thead className="sticky top-0 bg-white text-slate-500">
               <tr>
                 <th className="py-1 pr-2 font-medium">
                   {t("workspace.surveys.edit.follow_up_downloads_recipient")}
@@ -88,7 +92,10 @@ export const FollowUpFileDownloads = ({ surveyId, followUpId }: FollowUpFileDown
                     {formatDateTime(row.firstDownloadedAt) ||
                       t("workspace.surveys.edit.follow_up_downloads_not_downloaded")}
                   </td>
-                  <td className="py-1 pr-2">{formatDateTime(row.lastDownloadedAt)}</td>
+                  <td className="py-1 pr-2">
+                    {formatDateTime(row.lastDownloadedAt) ||
+                      t("environments.surveys.edit.follow_up_downloads_not_downloaded")}
+                  </td>
                   <td className="py-1 text-right">{row.downloadCount}</td>
                 </tr>
               ))}
