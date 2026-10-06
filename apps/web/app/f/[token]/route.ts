@@ -33,7 +33,7 @@ const brandedPage = async (title: string, inner: string, status: number): Promis
   const locale = await getLocale();
   const html = `<!DOCTYPE html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer"><title>${escapeHtml(
     title
-  )}</title><style>body{margin:0;background:#FBF8F1;color:#1A1A1A;font-family:${FONT_STACK}}header{background:#003A49;padding:24px 36px}header img{display:block;max-width:100%;height:auto}main{box-sizing:border-box;max-width:640px;margin:0 auto;padding:40px 36px;background:#fff}h1{margin:0 0 16px;font-size:22px;font-weight:600}p{margin:0 0 8px;font-size:15px;line-height:1.5;word-break:break-word}.meta{font-size:13px;color:#4b5563}button{margin-top:24px;min-height:44px;padding:0 28px;border:0;border-radius:24px;background:#003A49;color:#fff;font:600 15px ${FONT_STACK};cursor:pointer}button:hover{background:#00546a}button:focus-visible{outline:3px solid #7fb4c2;outline-offset:2px}@media(max-width:480px){header{padding:20px}main{padding:28px 20px}}</style></head><body><header><img src="${LOGO_URL}" alt="American Society of Landscape Architects" width="220" height="56"></header><main>${inner}</main></body></html>`;
+  )}</title><style>body{margin:0;background:#FBF8F1;color:#1A1A1A;font-family:${FONT_STACK}}header{background:#003A49;padding:24px 36px}header img{display:block;max-width:100%;height:auto}main{box-sizing:border-box;max-width:640px;margin:0 auto;padding:40px 36px;background:#fff}h1{margin:0 0 16px;font-size:22px;font-weight:600}p{margin:0 0 8px;font-size:15px;line-height:1.5;word-break:break-word}.meta{font-size:13px;color:#4b5563}button{margin-top:24px;min-height:44px;padding:0 28px;border:0;border-radius:24px;background:#003A49;color:#fff;font:600 15px ${FONT_STACK};cursor:pointer}button:hover{background:#00546a}button:focus-visible{outline:3px solid #003A49;outline-offset:2px}@media(max-width:480px){header{padding:20px}main{padding:28px 20px}}</style></head><body><header><img src="${LOGO_URL}" alt="American Society of Landscape Architects" width="220" height="56"></header><main>${inner}</main></body></html>`;
   return new NextResponse(html, {
     status,
     headers: { "Content-Type": "text/html; charset=utf-8", ...NO_STORE },
@@ -42,7 +42,7 @@ const brandedPage = async (title: string, inner: string, status: number): Promis
 
 const messagePage = async (message: string, status: number): Promise<Response> => {
   const t = await getTranslate();
-  return brandedPage(t("common.follow_up_file_title"), `<p>${escapeHtml(message)}</p>`, status);
+  return brandedPage(t("common.follow_up_file_error_title"), `<p>${escapeHtml(message)}</p>`, status);
 };
 
 const applyLimit = async (
