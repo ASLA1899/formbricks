@@ -242,7 +242,13 @@ export const ElementFormInput = ({
           const [parent, child] = id.split(".");
           updateElement(elementIdx, {
             [parent]: {
-              ...((currentElement as Record<string, unknown>)[parent] as Record<string, unknown>),
+              // Parent may be absent on older surveys (e.g. address name/organization): start hidden and optional
+              ...(((currentElement as Record<string, unknown>)[parent] as
+                | Record<string, unknown>
+                | undefined) ?? {
+                show: false,
+                required: false,
+              }),
               [child]: translatedText,
             },
           });
@@ -331,31 +337,25 @@ export const ElementFormInput = ({
     }
 
     if (currentElement.type === TSurveyElementTypeEnum.Address) {
-      const allFieldsAreOptional = [
+      // name/organization are absent on surveys created before they existed
+      const shownFields = [
+        currentElement.name,
+        currentElement.organization,
         currentElement.addressLine1,
         currentElement.addressLine2,
         currentElement.city,
         currentElement.state,
         currentElement.zip,
         currentElement.country,
-      ]
-        .filter((field) => field.show)
-        .every((field) => !field.required);
+      ].filter((field) => field?.show);
+
+      const allFieldsAreOptional = shownFields.every((field) => !field?.required);
 
       if (allFieldsAreOptional) {
         return true;
       }
 
-      return [
-        currentElement.addressLine1,
-        currentElement.addressLine2,
-        currentElement.city,
-        currentElement.state,
-        currentElement.zip,
-        currentElement.country,
-      ]
-        .filter((field) => field.show)
-        .some((condition) => condition.required === true);
+      return shownFields.some((condition) => condition?.required === true);
     }
 
     if (currentElement.type === TSurveyElementTypeEnum.ContactInfo) {

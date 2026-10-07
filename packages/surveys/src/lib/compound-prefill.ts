@@ -1,18 +1,12 @@
 import { type TResponseData } from "@formbricks/types/responses";
-import { ALL_COMPOUND_FIELD_INDICES } from "@formbricks/types/surveys/compound-fields";
+import { ADDRESS_FIELDS, ALL_COMPOUND_FIELD_INDICES } from "@formbricks/types/surveys/compound-fields";
 import { TSurveyElement, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 
 const COMPOUND_TYPES = new Set([TSurveyElementTypeEnum.ContactInfo, TSurveyElementTypeEnum.Address]);
 
 const CONTACT_FIELD_KEYS = ["firstName", "lastName", "email", "phone", "company"] as const;
-const ADDRESS_FIELD_KEYS = [
-  "addressLine1",
-  "addressLine2",
-  "city",
-  "state",
-  "zip",
-  "country",
-] as const;
+// Storage order (positional array); display order is handled by the renderer.
+const ADDRESS_FIELD_KEYS = ADDRESS_FIELDS;
 
 /**
  * Resolves a prefillFrom source ID to a value from response data.

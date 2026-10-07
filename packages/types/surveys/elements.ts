@@ -354,6 +354,9 @@ export type TCustomField = z.infer<typeof ZCustomField>;
 
 export const ZSurveyAddressElement = ZSurveyElementBase.extend({
   type: z.literal(TSurveyElementTypeEnum.Address),
+  // Optional for backward compatibility: surveys created before these lines existed omit them (treated as hidden).
+  name: ZToggleInputConfig.optional(),
+  organization: ZToggleInputConfig.optional(),
   addressLine1: ZToggleInputConfig,
   addressLine2: ZToggleInputConfig,
   city: ZToggleInputConfig,

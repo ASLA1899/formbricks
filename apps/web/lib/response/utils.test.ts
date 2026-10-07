@@ -506,6 +506,61 @@ describe("Response Utils", () => {
     });
   });
 
+  describe("getResponsesJson address elements", () => {
+    const addressSurvey = {
+      id: "survey1",
+      name: "Address Survey",
+      blocks: [
+        {
+          id: "block1",
+          name: "Block 1",
+          elements: [
+            {
+              id: "addr1",
+              type: TSurveyElementTypeEnum.Address,
+              headline: { default: "Mailing address" },
+              required: false,
+            },
+          ],
+        },
+      ],
+      hiddenFields: { enabled: true, fieldIds: [] },
+    } as unknown as TSurvey;
+
+    const exportAddress = (addressValue: string[]) =>
+      getResponsesJson(
+        addressSurvey,
+        [
+          {
+            id: "response1",
+            data: { addr1: addressValue },
+            meta: {},
+            contactAttributes: {},
+            variables: {},
+            tags: [],
+            finished: true,
+            createdAt: new Date("2026-06-10T19:15:44Z"),
+            updatedAt: new Date("2026-06-10T20:00:04Z"),
+            ttc: {},
+          },
+        ] as unknown as TResponse[],
+        [["1. Mailing address"]],
+        [],
+        [],
+        false
+      );
+
+    test("exports name and organization first, then the address lines", () => {
+      const result = exportAddress(["1 Main St", "", "Austin", "TX", "78701", "USA", "Jane Doe", "ASLA"]);
+      expect(result[0]["1. Mailing address"]).toBe("Jane Doe; ASLA; 1 Main St; Austin; TX; 78701; USA");
+    });
+
+    test("exports legacy 6-element responses unchanged", () => {
+      const result = exportAddress(["1 Main St", "", "Austin", "TX", "78701", "USA"]);
+      expect(result[0]["1. Mailing address"]).toBe("1 Main St; Austin; TX; 78701; USA");
+    });
+  });
+
   describe("getResponseContactAttributes", () => {
     test("should extract contact attributes correctly", () => {
       const responses = [

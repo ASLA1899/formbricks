@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
+import { getAddressValuesInDisplayOrder } from "@formbricks/types/surveys/compound-fields";
 import { TSurvey, TSurveyElementSummaryAddress } from "@formbricks/types/surveys/types";
 import { TUserLocale } from "@formbricks/types/user";
 import { timeSince } from "@/lib/time";
@@ -62,7 +63,7 @@ export const AddressSummary = ({ elementSummary, environmentId, survey, locale }
                     )}
                   </div>
                   <div className="ph-no-capture col-span-2 pl-6 font-semibold">
-                    <ArrayResponse value={response.value} />
+                    <ArrayResponse value={getAddressValuesInDisplayOrder(response.value)} />
                   </div>
 
                   <div className="px-4 text-slate-500 md:px-6">

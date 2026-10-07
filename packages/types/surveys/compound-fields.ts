@@ -1,8 +1,25 @@
 // Sub-field definitions for compound question types (ContactInfo, Address).
-// Field order matches the array storage format used in response data.
+// CONTACT_INFO_FIELDS and ADDRESS_FIELDS are in STORAGE order: they match the positional array
+// format used in response data. Address display order differs (see ADDRESS_DISPLAY_FIELDS).
 
 export const CONTACT_INFO_FIELDS = ["firstName", "lastName", "email", "phone", "company"] as const;
 export const ADDRESS_FIELDS = [
+  "addressLine1",
+  "addressLine2",
+  "city",
+  "state",
+  "zip",
+  "country",
+  // Appended after the original six so existing responses keep their meaning.
+  "name",
+  "organization",
+] as const;
+
+// Address fields in the order shown to respondents and editors (mailing-label order).
+// Decoupled from storage order: name/organization display first but are stored last.
+export const ADDRESS_DISPLAY_FIELDS = [
+  "name",
+  "organization",
   "addressLine1",
   "addressLine2",
   "city",
@@ -26,6 +43,8 @@ export const COMPOUND_FIELD_LABELS: Record<string, string> = {
   state: "State",
   zip: "Zip",
   country: "Country",
+  name: "Name",
+  organization: "Organization",
 };
 
 // Combined index lookup — field names are globally unique across compound types,
@@ -44,12 +63,25 @@ export const ALL_COMPOUND_FIELD_INDICES: Record<string, number> = {
   state: 3,
   zip: 4,
   country: 5,
+  name: 6,
+  organization: 7,
 };
 
 export function getCompoundFields(elementType: string): readonly string[] | null {
   if (elementType === "contactInfo") return CONTACT_INFO_FIELDS;
-  if (elementType === "address") return ADDRESS_FIELDS;
+  if (elementType === "address") return ADDRESS_DISPLAY_FIELDS;
   return null;
+}
+
+/**
+ * Reorders a positional address response array (storage order) into display order.
+ * Older responses have only 6 entries; missing entries come back as empty strings.
+ */
+export function getAddressValuesInDisplayOrder(value: readonly unknown[]): string[] {
+  return ADDRESS_DISPLAY_FIELDS.map((field) => {
+    const item = value[ALL_COMPOUND_FIELD_INDICES[field]];
+    return typeof item === "string" ? item : "";
+  });
 }
 
 /**

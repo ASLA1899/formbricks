@@ -95,8 +95,11 @@ const handleI18nCheckForContactAndAddressFields = (
     const { firstName, lastName, phone, email, company } = element;
     fields = [firstName, lastName, phone, email, company];
   } else if (element.type === "address") {
-    const { addressLine1, addressLine2, city, state, zip, country } = element;
-    fields = [addressLine1, addressLine2, city, state, zip, country];
+    const { name, organization, addressLine1, addressLine2, city, state, zip, country } = element;
+    // name/organization are absent on surveys created before they existed
+    fields = [name, organization, addressLine1, addressLine2, city, state, zip, country].filter(
+      (field): field is TInputFieldConfig => field !== undefined
+    );
   }
 
   const builtInValid = fields.every((field) => {

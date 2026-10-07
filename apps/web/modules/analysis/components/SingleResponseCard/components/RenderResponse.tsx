@@ -1,7 +1,10 @@
 import { CheckCheckIcon, MousePointerClickIcon, PhoneIcon } from "lucide-react";
 import React from "react";
 import { TResponseDataValue } from "@formbricks/types/responses";
-import { normalizeContactInfoResponse } from "@formbricks/types/surveys/compound-fields";
+import {
+  getAddressValuesInDisplayOrder,
+  normalizeContactInfoResponse,
+} from "@formbricks/types/surveys/compound-fields";
 import { TSurveyElement, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { TUserLocale } from "@formbricks/types/user";
@@ -127,7 +130,7 @@ export const RenderResponse: React.FC<RenderResponseProps> = ({
       break;
     case TSurveyElementTypeEnum.Address:
       if (Array.isArray(responseData)) {
-        return <ArrayResponse value={responseData} />;
+        return <ArrayResponse value={getAddressValuesInDisplayOrder(responseData)} />;
       }
       break;
     case TSurveyElementTypeEnum.ContactInfo:

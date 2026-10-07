@@ -12,6 +12,10 @@ import { TResponseMeta } from "@formbricks/types/responses";
 
 export const getAddressFieldLabel = (field: string, t: TFunction) => {
   switch (field) {
+    case "name":
+      return t("common.name");
+    case "organization":
+      return t("common.organization");
     case "addressLine1":
       return t("environments.surveys.responses.address_line_1");
     case "addressLine2":

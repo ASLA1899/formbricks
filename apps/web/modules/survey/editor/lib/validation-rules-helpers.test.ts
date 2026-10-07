@@ -21,8 +21,10 @@ const mockT = (key: string): string => key;
 describe("getAddressFields", () => {
   test("should return all address fields with correct labels", () => {
     const fields = getAddressFields(mockT);
-    expect(fields).toHaveLength(6);
+    expect(fields).toHaveLength(8);
     expect(fields.map((f) => f.value)).toEqual([
+      "name",
+      "organization",
       "addressLine1",
       "addressLine2",
       "city",
@@ -30,7 +32,8 @@ describe("getAddressFields", () => {
       "zip",
       "country",
     ]);
-    expect(fields[0].label).toBe("environments.surveys.edit.address_line_1");
+    expect(fields[0].label).toBe("common.name");
+    expect(fields[2].label).toBe("environments.surveys.edit.address_line_1");
   });
 });
 
