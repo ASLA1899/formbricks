@@ -9,6 +9,7 @@ import {
   TSurveyContactAttributes,
   TSurveyMetaFieldFilter,
 } from "@formbricks/types/responses";
+import { getAddressValuesInDisplayOrder } from "@formbricks/types/surveys/compound-fields";
 import {
   TSurveyElement,
   TSurveyMultipleChoiceElement,
@@ -795,6 +796,9 @@ export const getResponsesJson = (
           const choiceIds = extractChoiceIdsFromResponse(answer, element, response.language || "default");
           jsonData[idx][elementHeadline[1]] = choiceIds.join(", ");
         }
+      } else if (element.type === "address" && Array.isArray(answer)) {
+        // Stored name/organization come last (storage order); export them first (display order).
+        jsonData[idx][elementHeadline[0]] = processResponseData(getAddressValuesInDisplayOrder(answer));
       } else if (
         element.type === "contactInfo" &&
         answer &&

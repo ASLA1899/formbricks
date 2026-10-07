@@ -20,6 +20,8 @@ const stringRules: TValidationRuleType[] = [
 // Rules applicable per field for Address elements
 // General text fields don't support format-specific validators (email, url, phone)
 export const RULES_BY_ADDRESS_FIELD: Record<TAddressField, TValidationRuleType[]> = {
+  name: stringRules,
+  organization: stringRules,
   addressLine1: stringRules,
   addressLine2: stringRules,
   city: stringRules,

@@ -470,6 +470,54 @@ describe("validateElementResponse", () => {
     });
   });
 
+  describe("field-specific validation for Address name and organization", () => {
+    const buildElement = () =>
+      ({
+        id: "address1",
+        type: TSurveyElementTypeEnum.Address,
+        headline: { default: "Address" },
+        name: { show: true, required: false, placeholder: { default: "Name" } },
+        organization: { show: true, required: false, placeholder: { default: "Organization" } },
+        addressLine1: { show: true, required: false, placeholder: { default: "Address Line 1" } },
+        addressLine2: { show: false, required: false, placeholder: { default: "Address Line 2" } },
+        city: { show: true, required: false, placeholder: { default: "City" } },
+        state: { show: true, required: false, placeholder: { default: "State" } },
+        zip: { show: true, required: false, placeholder: { default: "ZIP" } },
+        country: { show: true, required: false, placeholder: { default: "Country" } },
+        required: false,
+        validation: {
+          rules: [{ id: "rule1", type: "minLength", field: "name", params: { min: 3 } }],
+        },
+      }) as unknown as TSurveyAddressElement;
+
+    test("reads name from storage index 6 and fails when too short", () => {
+      const result = validateElementResponse(
+        buildElement(),
+        ["123 Main St", "", "NY", "", "", "", "Jo", "ASLA"],
+        "en"
+      );
+      expect(result.valid).toBe(false);
+    });
+
+    test("passes when name meets the rule", () => {
+      const result = validateElementResponse(
+        buildElement(),
+        ["123 Main St", "", "NY", "", "", "", "Jane Doe", ""],
+        "en"
+      );
+      expect(result.valid).toBe(true);
+    });
+
+    test("does not read address line 1 as name for legacy 6-element responses", () => {
+      const element = buildElement();
+      element.validation = {
+        rules: [{ id: "rule1", type: "minLength", field: "organization", params: { min: 3 } }],
+      } as typeof element.validation;
+      const result = validateElementResponse(element, ["123 Main St", "", "NY", "", "", ""], "en");
+      expect(result.valid).toBe(true);
+    });
+  });
+
   describe("field-specific validation for ContactInfo", () => {
     test("should validate specific field in contact info element", () => {
       const element: TSurveyElement = {

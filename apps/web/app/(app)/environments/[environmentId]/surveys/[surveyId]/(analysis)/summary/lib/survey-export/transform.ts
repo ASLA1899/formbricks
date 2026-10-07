@@ -193,6 +193,8 @@ function extractRichData(el: TSurveyElement, q: ExportableQuestion): void {
     case TSurveyElementTypeEnum.Address: {
       const addr = el as TSurveyAddressElement;
       const addrFields = [
+        { key: "Name", cfg: addr.name },
+        { key: "Organization", cfg: addr.organization },
         { key: "Address Line 1", cfg: addr.addressLine1 },
         { key: "Address Line 2", cfg: addr.addressLine2 },
         { key: "City", cfg: addr.city },
@@ -200,13 +202,12 @@ function extractRichData(el: TSurveyElement, q: ExportableQuestion): void {
         { key: "ZIP", cfg: addr.zip },
         { key: "Country", cfg: addr.country },
       ];
-      q.addressFields = addrFields
-        .filter((f) => f.cfg.show)
-        .map((f) => ({
-          name: f.key,
-          required: f.cfg.required,
-          placeholder: i18n(f.cfg.placeholder) || undefined,
-        }));
+      // name/organization are absent on surveys created before they existed
+      q.addressFields = addrFields.flatMap((f) =>
+        f.cfg?.show
+          ? [{ name: f.key, required: f.cfg.required, placeholder: i18n(f.cfg.placeholder) || undefined }]
+          : []
+      );
       break;
     }
 
@@ -332,11 +333,7 @@ function findChoiceLabel(choiceId: string, elementId: string, survey: TSurvey): 
   return null;
 }
 
-function resolveStaticValue(
-  val: string | number | string[],
-  leftElementId: string,
-  survey: TSurvey
-): string {
+function resolveStaticValue(val: string | number | string[], leftElementId: string, survey: TSurvey): string {
   if (Array.isArray(val)) {
     const resolved = val.map((v) => {
       const label = findChoiceLabel(v, leftElementId, survey);

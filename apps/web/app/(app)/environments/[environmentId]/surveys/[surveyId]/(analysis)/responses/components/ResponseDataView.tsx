@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { TEnvironment } from "@formbricks/types/environment";
 import { TSurveyQuota } from "@formbricks/types/quota";
 import { TResponseDataValue, TResponseTableData, TResponseWithQuotas } from "@formbricks/types/responses";
+import { ADDRESS_FIELDS } from "@formbricks/types/surveys/compound-fields";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { TTag } from "@formbricks/types/tags";
 import { TUser, TUserLocale } from "@formbricks/types/user";
@@ -42,8 +43,8 @@ const formatArrayToRecord = (responseValue: TResponseDataValue, keys: string[]):
 
 // Export for testing
 export const formatAddressData = (responseValue: TResponseDataValue): Record<string, string> => {
-  const addressKeys = ["addressLine1", "addressLine2", "city", "state", "zip", "country"];
-  return formatArrayToRecord(responseValue, addressKeys);
+  // Storage order; arrays from before name/organization existed are shorter and leave them unset.
+  return formatArrayToRecord(responseValue, [...ADDRESS_FIELDS]);
 };
 
 // Export for testing

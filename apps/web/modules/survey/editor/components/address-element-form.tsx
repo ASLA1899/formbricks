@@ -40,7 +40,31 @@ export const AddressElementForm = ({
 }: AddressElementFormProps): JSX.Element => {
   const surveyLanguageCodes = extractLanguageCodes(localSurvey.languages ?? []);
   const { t } = useTranslation();
+  // Surveys created before Name/Organization existed omit them: treat as hidden and optional.
+  const nameConfig = element.name ?? {
+    show: false,
+    required: false,
+    placeholder: createI18nString(t("common.name"), surveyLanguageCodes),
+  };
+  const organizationConfig = element.organization ?? {
+    show: false,
+    required: false,
+    placeholder: createI18nString(t("common.organization"), surveyLanguageCodes),
+  };
+  // Display order (mailing-label order); storage order is defined in compound-fields.ts.
   const fields = [
+    {
+      id: "name",
+      label: t("common.name"),
+      ...nameConfig,
+      prefillFrom: nameConfig.prefillFrom,
+    },
+    {
+      id: "organization",
+      label: t("common.organization"),
+      ...organizationConfig,
+      prefillFrom: organizationConfig.prefillFrom,
+    },
     {
       id: "addressLine1",
       label: t("environments.surveys.edit.address_line_1"),
@@ -81,6 +105,8 @@ export const AddressElementForm = ({
 
   useEffect(() => {
     const allFieldsAreOptional = [
+      element.name,
+      element.organization,
       element.addressLine1,
       element.addressLine2,
       element.city,
@@ -88,12 +114,21 @@ export const AddressElementForm = ({
       element.zip,
       element.country,
     ]
-      .filter((field) => field.show)
-      .every((field) => !field.required);
+      .filter((field) => field?.show)
+      .every((field) => !field?.required);
 
     updateElement(elementIdx, { required: !allFieldsAreOptional });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [element.addressLine1, element.addressLine2, element.city, element.state, element.zip, element.country]);
+  }, [
+    element.name,
+    element.organization,
+    element.addressLine1,
+    element.addressLine2,
+    element.city,
+    element.state,
+    element.zip,
+    element.country,
+  ]);
 
   const [parent] = useAutoAnimate();
 
