@@ -1,8 +1,10 @@
 # PRD: Formbricks survey building and response analysis from ASLA Chat
 
-Status: draft v6, 10/28/2026. gcohen answered rounds 1 and 2. Path decided: upgrade, then port our features, all in a sandbox first because live surveys are in the field. v6 applies the second Copy Editor and feasibility reviews: every OAuth client-mutation path is covered, `summarize_responses` is built before the guard gate, and limits gcohen didn't set are marked as proposed defaults. Owner: Product Strategist. Source: ASL-1794 (Paperclip), ASL-1795 (Paperclip).
+Status: draft v7, 10/28/2026. gcohen answered rounds 1 and 2. Path decided: upgrade, then port our features, all in a sandbox first because live surveys are in the field. v6 applied the second Copy Editor and feasibility reviews: every OAuth client-mutation path is covered, `summarize_responses` is built before the guard gate, and limits gcohen didn't set are marked as proposed defaults. v7 applies the third feasibility review: each deployment accepts exactly one LibreChat callback, set by env, so the sandbox connector works and neither deployment accepts the other's callback. Owner: Product Strategist. Source: ASL-1794 (Paperclip), ASL-1795 (Paperclip).
 
 ## Recommendation
+
+In this PRD, "v1" means the first release (as in "Tools (v1)"). The fork's REST API versions are written "API v1" and "API v1/v2".
 
 **Upgrade our Formbricks fork to upstream 6.1.2 in a sandbox, port our features there, build and test the ASLA MCP guards there, and cut production over only after gcohen signs off. Then connect the MCP server that ships with Formbricks to ASLA Chat (LibreChat) as an opt-in OAuth connector, the same way Microsoft 365 is connected today.** The ASLA patches are a tool allowlist, a draft-only and publish-token guard, one PII projection for every response tool, a server-side `summarize_responses` tool, a first-release question-type allowlist, and restricting MCP sign-in to ASLA Chat. gcohen chose this path on 10/28/2026.
 
@@ -72,8 +74,6 @@ Checked 10/28/2026. Research notes are attached to ASL-1795 (Paperclip) as `rese
 
 ## Non-goals (first release)
 
-In this PRD, "v1" means the first release (as in "Tools (v1)"). The fork's REST API versions are written "API v1" and "API v1/v2".
-
 - Members using it. LibreChat is staff-only.
 - Pausing, closing, reopening or deleting a published survey from chat, or editing a survey once it's live. Those stay in the Formbricks UI.
 - Sending invitations or reminders from chat. Publishing never triggers a send.
@@ -88,10 +88,12 @@ In this PRD, "v1" means the first release (as in "Tools (v1)"). The fork's REST 
 ### Must
 
 1. **Per-user identity, ASLA Chat only.** Every call runs as the signed-in ASLA staff member and is limited by their Formbricks role. No shared admin key is ever sent to or stored in LibreChat.
-   - Best long-term: upstream OAuth 2.1, with the LibreChat callback `https://chat.aslalabs.org/api/mcp/formbricks/oauth/callback` as the only accepted redirect, so no other MCP client (a desktop app, a script) can reach survey data. The ASLA patch closes every path to another client:
+   - Best long-term: upstream OAuth 2.1, with one exact LibreChat callback per deployment as the only accepted redirect, so no other MCP client (a desktop app, a script) can reach survey data. "The LibreChat callback" below means that deployment's callback:
+     - **One callback per deployment, set by one env var** (`MCP_LIBRECHAT_CALLBACK_URI`), and used everywhere this Must checks a callback: DCR, the admin client and the per-request check. LibreChat v0.8.8 builds the callback from the connector name and has no override, so each Formbricks deployment pairs with one connector name. Production: `https://chat.aslalabs.org/api/mcp/formbricks/oauth/callback`. Sandbox: `https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback`. Neither deployment accepts the other's callback.
+   - The ASLA patch closes every path to another client:
      - **Every HTTP route that creates or changes an OAuth client** either is disabled or accepts only the exact LibreChat callback. In 6.1.2 with Better Auth's oauth-provider 1.7.0 that is `/oauth2/register` (DCR), `/oauth2/create-client`, `/oauth2/update-client`, `/oauth2/client/rotate-secret`, `/oauth2/delete-client`, and `/admin/oauth2/create-client` and `/admin/oauth2/update-client` if they are reachable over HTTP. Default: add the client-management routes to Better Auth's `disabledPaths`. The route list is rechecked at every upgrade.
      - **DCR**, if spike 2.1 keeps it, accepts only the LibreChat callback. The loopback and built-in hosted-client callbacks are removed. If DCR can't be limited that way, it is turned off and LibreChat uses one client created server-side (`adminCreateOAuthClient`).
-     - **`/api/mcp` checks the client on every request.** It accepts a token only if the token's OAuth client currently has exactly the LibreChat callback registered (read at request time, so a client changed after the token was issued is refused).
+     - **`/api/mcp` checks the client on every request.** It accepts a token only if the token's OAuth client currently has exactly the LibreChat callback registered (read at request time, so a client changed after the token was issued is refused). After bearer verification in `modules/mcp/auth.ts`, take the client id from the token (`azp`, falling back to `client_id`), read that client's `redirectUris` with no cross-request cache, and refuse a missing client id, a missing client, or any `redirectUris` other than the one configured callback. Don't require the client's creator to be the token's user: one server-created client serves every staff member.
      - **No API keys on `/api/mcp`**, through either `x-api-key` or `Authorization: Bearer`.
    - Fastest: Entra sign-in to the wrapper, using the same pattern as the ms365 connector.
 2. **Tool allowlist.** `/api/mcp` exposes only the tools in the "Tools (v1)" table (the first-release tool set). Every other registered tool (workflow, feedback-record, custom-CSS, response-write tools, and any tool a later upgrade adds, such as creatives) is hidden from `tools/list` and refused if called. The allowlist applies on the server for every client, not only in the LibreChat config.
@@ -183,7 +185,7 @@ Scopes requested by LibreChat: `surveys:read surveys:write responses:read offlin
 
 - **Best long-term:**
   - The MCP server runs inside the Formbricks container on nan01 at `https://surveys.asla.org/api/mcp`, over streamable HTTP. There is no new container.
-  - Env: correct public `WEBAPP_URL` / `BETTER_AUTH_URL` / `PUBLIC_URL`, `MCP_DCR_ALLOWED_REDIRECT_URIS`, and `AUDIT_LOG_ENABLED=1`.
+  - Env: correct public `WEBAPP_URL` / `BETTER_AUTH_URL` / `PUBLIC_URL`, `MCP_LIBRECHAT_CALLBACK_URI` (and `MCP_DCR_ALLOWED_REDIRECT_URIS` set to the same single value, if DCR stays), and `AUDIT_LOG_ENABLED=1`.
   - LibreChat sends the OAuth `resource` parameter. Don't copy ms365's `send_resource_parameter: false`, because upstream audience-binds tokens.
   - The publish token needs a new table and migration, applied through the Formbricks migration runner like every other migration.
 - **Fastest:**
@@ -217,7 +219,7 @@ gcohen's condition (10/28/2026): do the upgrade in a sandbox, because surveys ar
 - Every ported fork feature works (the Phase 0 list).
 - Microsoft sign-in and SSO-only mode work.
 - Migrations run through the Formbricks runner, and stored surveys and responses match before and after (counts per survey, and a sample of answers compared field by field).
-- The MCP guards (Phase 2) are built and pass here before cutover. LibreChat reaches the sandbox through a temporary opt-in `formbricks-sandbox` connector over the private Docker network. Task 2.1 adds it; task 4.2 removes it after cutover.
+- The MCP guards (Phase 2) are built and pass here before cutover. LibreChat reaches the sandbox through a temporary opt-in `formbricks-sandbox` connector over the private Docker network. Task 2.1 adds it; task 4.2 removes it after cutover. The sandbox's `MCP_LIBRECHAT_CALLBACK_URI` is the `formbricks-sandbox` callback (Must 1), so the guards are tested with the same code and only the env value differs from production.
 
 **Cutover (gcohen's go required):**
 - Prerequisites: sandbox sign-off (1.5) and the guard gate (2.8) have both passed.
@@ -291,7 +293,7 @@ Each is sized for one issue. The CEO files them after gcohen approves. Phases ru
 
 **Phase 2: ASLA guards and analysis (fork patches; built and tested in the sandbox, before 1.5)**
 - 2.1 Spike, first: LibreChat OAuth against the sandbox. Add the temporary opt-in `formbricks-sandbox` connector to LibreChat over the private Docker network, try DCR limited to the LibreChat callback, and fall back to a server-side admin client. The outcome decides how 2.2 registers LibreChat. *Repo Worker*
-- 2.2 Tool allowlist and MCP client restriction (Must 1, Must 2): only the Tools (v1) table; every HTTP client-mutation route disabled or held to the LibreChat callback; per-request client check on `/api/mcp`; no API keys through `x-api-key` or `Authorization: Bearer`; Vitest coverage of each route. *Repo Worker*
+- 2.2 Tool allowlist and MCP client restriction (Must 1, Must 2): only the Tools (v1) table; `MCP_LIBRECHAT_CALLBACK_URI` read once and used by DCR, the admin client and the request check; every HTTP client-mutation route disabled or held to that callback; per-request client check on `/api/mcp`; no API keys through `x-api-key` or `Authorization: Bearer`; Vitest coverage of each route. *Repo Worker*
 - 2.3 Draft-only guard on `create_survey`, `patch_survey`, `edit_survey_blocks`, `set_survey_block_order` and `delete_survey`; Must 5 type allowlist; Vitest coverage. *Repo Worker*
 - 2.4 `prepare_publish` and `publish_survey`: stored single-use token bound to user, client, survey and `updatedAt`, atomic consume, recheck at publish, its migration, no self-confirm path, no sends or schedules; Vitest coverage. *Repo Worker*
 - 2.5 The Must 6 projection on `list_responses` and `get_response`, with Vitest fixtures for embedded URL and identity fields, deleted PII elements, text output and `structuredContent`. *Repo Worker*
@@ -300,7 +302,7 @@ Each is sized for one issue. The CEO files them after gcohen approves. Phases ru
 - 2.8 Guard gate: in the sandbox, through the `formbricks-sandbox` connector, every item under "Done when: guard gate" passes. *Repo Worker*
 
 **Phase 3: Connect production (after 1.6)**
-- 3.1 Set `MCP_DCR_ALLOWED_REDIRECT_URIS` (or create the admin client, per 2.1), verify `/.well-known` metadata on `surveys.asla.org`, then lift the Caddy block. Rerun the client-restriction and audit gate items against production. *Infra Engineer*
+- 3.1 Set production's `MCP_LIBRECHAT_CALLBACK_URI` to the `formbricks` callback, and `MCP_DCR_ALLOWED_REDIRECT_URIS` to the same value (or create the admin client, per 2.1). Verify `/.well-known` metadata on `surveys.asla.org`, then lift the Caddy block. Rerun the client-restriction, cross-deployment and audit gate items against production. *Infra Engineer*
 - 3.2 Add the `formbricks` entry to `librechat.yaml`: opt-in, scopes as above, allowedDomains, provider-rule comment. *Repo Worker*
 - 3.3 Server instructions text for the interview and publish-confirmation flow (Must 3, Must 4). *Repo Worker; Copy Editor review*
 
@@ -320,6 +322,7 @@ Each is sized for one issue. The CEO files them after gcohen approves. Phases ru
 - [ ] A DCR registration with a loopback, hosted-client or any non-LibreChat callback is refused (or DCR returns 403 if 2.1 turned it off).
 - [ ] As a signed-in Formbricks user, `/oauth2/create-client`, `/oauth2/update-client`, `/oauth2/client/rotate-secret` and `/oauth2/delete-client` (and `/admin/oauth2/create-client` and `/admin/oauth2/update-client`, if reachable over HTTP) are disabled or refuse any callback other than the LibreChat one.
 - [ ] A token issued to a client whose redirect URIs are not exactly the LibreChat callback, including a client changed after the token was issued, is refused by `/api/mcp`.
+- [ ] Cross-deployment refusal: the sandbox refuses the production callback (`/api/mcp/formbricks/oauth/callback`) at registration and at authorization. After cutover (3.1), production refuses the `formbricks-sandbox` callback the same way.
 - [ ] A request to `/api/mcp` with an API key in `x-api-key` is refused, and so is one with an API key in `Authorization: Bearer`.
 - [ ] `create_survey_draft` creates a survey whose status is `draft` in Formbricks. Its editor link opens it.
 - [ ] Calling create with `status: "inProgress"`, or patching any survey's status, is rejected by the server. Editing or deleting a published survey through MCP is rejected.
