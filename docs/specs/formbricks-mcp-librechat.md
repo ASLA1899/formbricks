@@ -1,4 +1,4 @@
-# PRD: Formbricks survey building and response analysis from LibreChat
+# PRD: Formbricks survey building and response analysis from ASLA Chat
 
 Status: draft v4, 10/28/2026. gcohen answered rounds 1 and 2. Path decided: upgrade, then port our features, all in a sandbox first because live surveys are in the field. Owner: Product Strategist. Source: ASL-1794 (Paperclip), ASL-1795 (Paperclip).
 
@@ -53,7 +53,7 @@ Checked 10/28/2026. Research notes are attached to ASL-1795 (Paperclip) as `rese
 - **LibreChat can't show an MCP server's confirmation prompt yet.** MCP elicitation support is an open request (LibreChat-AI/LibreChat#11526), and optional MCP tool-call confirmation is an open PR (#13304), both checked 10/28/2026. On v0.8.8, a server can't prove that a person, rather than the model, said yes.
 - **ASLA precedent: the Member Survey MCP** (`membersurvey.aslalabs.org/mcp`) already sends 2026 member survey results to those same models.
 - **Data catalog:** `~/dev/asla-metrics/DATA_SOURCES.md:321` lists `formbricks` as medium PII, not integrated, disposition TBD.
-- **Member voice:** none gathered yet. This is a staff tool. A pilot interview with 3 survey owners is in Phase 4.
+- **Member voice:** none gathered yet. This is a staff tool. A pilot with survey owners is in Phase 4 (4.3).
 
 ## Goals and success metrics
 
@@ -183,7 +183,7 @@ gcohen's condition (10/28/2026): do the upgrade in a sandbox, because surveys ar
 - Data: a restore of the latest production backup, so every real survey can be tested.
 - Built from the upgrade branch. Production keeps deploying from `main`.
 
-**Sandbox rules (non-negotiable).** A restored production database carries live side effects. Each one is turned off before the sandbox first boots:
+**Sandbox rules.** A restored production database carries live side effects. Each one is turned off before the sandbox first boots:
 - **Email.** SMTP points at a mail sink that delivers nothing. No invitation, reminder, follow-up or notification email can reach a real person.
 - **Reminders and schedule windows.** `/api/cron/reminders` is not scheduled in the sandbox, and its `CRON_SECRET` differs from production. Schedule-window automation does not run.
 - **Snowflake.** Member lookup and response sync use a dev schema or a read-only role. The sandbox never writes to production Snowflake tables.
@@ -195,7 +195,7 @@ gcohen's condition (10/28/2026): do the upgrade in a sandbox, because surveys ar
 - Every in-progress and scheduled production survey opens in the editor, renders, and accepts a test response.
 - Every ported fork feature works (the Phase 0 list).
 - Microsoft sign-in and SSO-only mode work.
-- The MCP connector (Phases 2 and 3) is built and tested here first. LibreChat reaches the sandbox through a temporary opt-in `formbricks-staging` connector over the private Docker network. It is removed at cutover.
+- The MCP connector (Phases 2 and 3) is built and tested here first. LibreChat reaches the sandbox through a temporary opt-in `formbricks-sandbox` connector over the private Docker network. It is removed at cutover.
 
 **Cutover (gcohen's go required):**
 - Freeze window agreed with survey owners, a fresh backup, and a tested restore.
@@ -212,7 +212,7 @@ gcohen's condition (10/28/2026): do the upgrade in a sandbox, because surveys ar
 | Cutover breaks a survey in the field | Respondents can't finish; responses are lost | Sandbox test of every live survey; freeze window; backup, tested restore and rollback; gcohen's go |
 | Porting the fork to 6.1.x is large: 220 conflicted files, ~20 features to carry across, 5 migrations | The upgrade runs long; a feature regresses | Phase 0 turns the trial merge into a per-feature estimate and a go/no-go; port feature by feature with tests; Fastest is the fallback |
 | Our sign-in (Microsoft without EE, SSO-only, proxy JWT gate) is built on NextAuth; upstream moved to Better Auth | Staff can't sign in after the upgrade | Rewrite as its own Phase 1 issue; verify in the sandbox before cutover |
-| Existing surveys store fork-only fields (custom contact fields, month/year dates, auto-advance, schedule window) | Upstream validators reject them and existing surveys break | Phase 0 loads every prod survey in the sandbox through the 6.1.2 validators |
+| Existing surveys store fork-only fields (custom contact fields, month/year dates, auto-advance, schedule window) | Upstream validators reject them and existing surveys break | Phase 0 loads every production survey in the sandbox through the 6.1.2 validators |
 | Deploy applies schema with `prisma db push --accept-data-loss` (`~/dev/azure_vm/docs/apps/formbricks.md`) | A major upgrade could drop data | Cutover uses reviewed `prisma migrate deploy` and a tested restore from backup |
 | LibreChat v0.8.8 can't show a server's confirmation prompt | The model could publish without a real yes | Two-step publish token; no self-confirm flag; draft-only for everything else; audit log; switch to client confirmation when LibreChat ships it (#11526, #13304). A wrongly published link survey reaches no one until its link is shared, and can be closed in Formbricks |
 | LibreChat registers OAuth clients as confidential. Unverified whether Formbricks' anonymous DCR accepts that; asla-metrics did not | Connect fails | Phase 2 spike; fallback is an admin-registered confidential client, as done for asla-metrics |
@@ -258,7 +258,7 @@ Each is sized for one issue. The CEO files them after gcohen approves.
 - 1.5 Sandbox sign-off: every live survey and ported feature checked. Then gcohen's go. *Repo Worker → CEO → gcohen*
 - 1.6 Cut production over per the runbook and run the in-field survey checks. *Infra Engineer*
 
-**Phase 2: Connect** (sandbox first through the temporary `formbricks-staging` connector, then production after cutover)
+**Phase 2: Connect** (sandbox first through the temporary `formbricks-sandbox` connector, then production after cutover)
 - 2.1 Set `MCP_DCR_ALLOWED_REDIRECT_URIS` and verify `/.well-known` metadata on `surveys.asla.org`. *Infra Engineer*
 - 2.2 Spike: LibreChat OAuth against Formbricks (DCR first, admin client fallback). *Repo Worker*
 - 2.3 Add the `formbricks` entry to `librechat.yaml`: opt-in, scopes as above, allowedDomains, provider-rule comment. *Repo Worker*
@@ -282,14 +282,14 @@ Each is sized for one issue. The CEO files them after gcohen approves.
 - [ ] Following the interview, `create_survey_draft` creates a survey whose status is `draft` in Formbricks. Its editor link opens it.
 - [ ] Calling create with `status: "inProgress"`, or patching any survey's status, is rejected by the server. Editing or deleting a published survey through MCP is rejected.
 - [ ] `publish_survey` succeeds only with a valid token from `prepare_publish` for the same survey and user. A missing, expired (over 10 minutes) or reused token is rejected. No tool argument skips the token.
-- [ ] Publishing sends no invitation or reminder email and doesn't start a schedule window (verified on staging).
+- [ ] Publishing sends no invitation or reminder email and doesn't start a schedule window (verified in the sandbox).
 - [ ] Every publish appears in the audit log with the Formbricks user, survey id, time and token id.
 - [ ] Creating a survey with an element type outside the v1 list is rejected with a clear message.
 - [ ] Every creative tool and `patch_workspace_custom_css` is rejected or absent for the ASLA Chat connector.
-- [ ] `list_responses` and `get_response` output contain no `meta.ipAddress`, `meta.userAgent`, `meta.url`, `contactAttributes`, or contactInfo/address/fileUpload answers (Vitest fixtures prove it).
-- [ ] For a test survey with 500+ responses, `summarize_responses` counts and NPS match the Formbricks summary page exactly, and no single tool result exceeds 50 responses or 200 open-text answers.
+- [ ] `list_responses` and `get_response` output contain no `meta.ipAddress`, `meta.userAgent`, `meta.url`, `contactAttributes`, `contact`, contactInfo/address/fileUpload answers, or hidden fields named like `email`, `recordnumber`, `customerid` or `contactid` (Vitest fixtures prove it).
+- [ ] For a test survey with 500+ responses, `summarize_responses` counts and NPS match the Formbricks summary page exactly, and no single tool result exceeds 50 responses or 200 open-text answers of at most 1,000 characters each.
 - [ ] The `librechat.yaml` change keeps the connector opt-in, lists the host in `allowedDomains`, and updates the provider-rule comment.
-- [ ] No Formbricks API key appears in `librechat.yaml`, LibreChat's database, or any chat transcript.
+- [ ] No Formbricks API key appears in `librechat.yaml`, LibreChat's database, or the transcripts of the test sessions.
 - [ ] Before the sandbox first boots: SMTP goes to a sink, `/api/cron/reminders` is not scheduled, Snowflake access is dev or read-only, webhook and integration rows are deleted, and `WEBAPP_URL` is the sandbox host. A test invitation sent in the sandbox reaches no real inbox.
 - [ ] The sandbox answers only from the allowed IP addresses.
 - [ ] In the sandbox, every fork feature on the Phase 0 list works, Microsoft sign-in works, and every in-progress or scheduled production survey opens in the editor and accepts a test response.
