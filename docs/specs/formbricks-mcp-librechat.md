@@ -89,7 +89,7 @@ In this PRD, "v1" means the first release (as in "Tools (v1)"). The fork's REST 
 
 1. **Per-user identity, ASLA Chat only.** Every call runs as the signed-in ASLA staff member and is limited by their Formbricks role. No shared admin key is ever sent to or stored in LibreChat.
    - Best long-term: upstream OAuth 2.1, with the LibreChat callback `https://chat.aslalabs.org/api/mcp/formbricks/oauth/callback` as the only accepted redirect, so no other MCP client (a desktop app, a script) can reach survey data. The ASLA patch closes every path to another client:
-     - **Every HTTP route that creates or changes an OAuth client** either is disabled or accepts only the exact LibreChat callback. In 6.1.2 with Better Auth 1.7.0 that is `/oauth2/register` (DCR), `/oauth2/create-client`, `/oauth2/update-client`, `/oauth2/client/rotate-secret`, `/oauth2/delete-client`, and `/admin/oauth2/create-client` and `/admin/oauth2/update-client` if they are reachable over HTTP. Default: add the managed routes to Better Auth's `disabledPaths`. The route list is rechecked at every upgrade.
+     - **Every HTTP route that creates or changes an OAuth client** either is disabled or accepts only the exact LibreChat callback. In 6.1.2 with Better Auth's oauth-provider 1.7.0 that is `/oauth2/register` (DCR), `/oauth2/create-client`, `/oauth2/update-client`, `/oauth2/client/rotate-secret`, `/oauth2/delete-client`, and `/admin/oauth2/create-client` and `/admin/oauth2/update-client` if they are reachable over HTTP. Default: add the client-management routes to Better Auth's `disabledPaths`. The route list is rechecked at every upgrade.
      - **DCR**, if spike 2.1 keeps it, accepts only the LibreChat callback. The loopback and built-in hosted-client callbacks are removed. If DCR can't be limited that way, it is turned off and LibreChat uses one client created server-side (`adminCreateOAuthClient`).
      - **`/api/mcp` checks the client on every request.** It accepts a token only if the token's OAuth client currently has exactly the LibreChat callback registered (read at request time, so a client changed after the token was issued is refused).
      - **No API keys on `/api/mcp`**, through either `x-api-key` or `Authorization: Bearer`.
@@ -159,7 +159,7 @@ These are the only tools `/api/mcp` exposes (Must 2). Names follow upstream 6.1.
 | `get_response` | `responseId` | one response in the Must 6 projection | upstream + ASLA projection |
 | `summarize_responses` | `workspaceId`, `surveyId`, optional filters, optional `crossTab: {rowElementId, colElementId}`, optional `openTextElementId` + `sampleSize` (≤200) | per-element stats, NPS, completion rate, cross-tab table, open-text sample with total count | ASLA patch (new) |
 
-That is 15 tools in the Best long-term option. The Fastest wrapper has 14; deleting a draft stays in the Formbricks UI.
+The `limit` (≤50) and `sampleSize` (≤200) caps are proposed defaults (Must 8; open question 9). That is 15 tools in the Best long-term option. The Fastest wrapper has 14; deleting a draft stays in the Formbricks UI.
 
 Scopes requested by LibreChat: `surveys:read surveys:write responses:read offline_access`. Not requested: `responses:write`, `workflows:*`, `dashboards:*`, `feedbackRecords:*`. `surveys:write` also covers `patch_workspace_custom_css`, so the allowlist (Must 2), not the scope, keeps it out.
 
@@ -328,7 +328,7 @@ Each is sized for one issue. The CEO files them after gcohen approves. Phases ru
 - [ ] Publishing sends no invitation or reminder email and doesn't start a schedule window.
 - [ ] With `AUDIT_LOG_ENABLED=1`, a real MCP write and a publish both appear in the kept audit sink with the Formbricks user, client, tool, survey id, time and, for the publish, the token id.
 - [ ] Neither the text output nor `structuredContent` of `list_responses`, `get_response` or the `summarize_responses` sample contains v3 `data`, `contact`, contact attributes, any `embeddedData` key, any `unresolved[].rawValue`, IP address, user agent, URL, answers to `contactInfo`, `address` or `fileUpload` elements, or answers to deleted elements (Vitest fixtures prove it, including a hidden field named `email` and a deleted `contactInfo` element).
-- [ ] On a restored survey with 500+ responses, `summarize_responses` counts and NPS match the Formbricks summary page exactly, and no single tool result exceeds the Must 8 caps.
+- [ ] On a restored survey with 500+ responses (proposed default; open question 9), `summarize_responses` counts and NPS match the Formbricks summary page exactly, and no single tool result exceeds the Must 8 caps.
 - [ ] No Formbricks API key appears in the `formbricks-sandbox` connector config, LibreChat's database, or the transcripts of the test sessions.
 
 ### Sandbox
