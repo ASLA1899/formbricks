@@ -14,6 +14,7 @@ describe("Survey Editor Library Tests", () => {
     vi.clearAllMocks();
   });
 
+<<<<<<< HEAD
   const mockSurvey = {
     id: "survey123",
     createdAt: new Date(),
@@ -25,6 +26,74 @@ describe("Survey Editor Library Tests", () => {
     status: "draft",
     displayOption: "displayOnce",
     questions: [
+=======
+  describe("updateSurvey", () => {
+    const mockSurvey = {
+      id: "survey123",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      name: "Test Survey",
+      type: "app",
+      environmentId: "env123",
+      createdBy: "user123",
+      status: "draft",
+      displayOption: "displayOnce",
+      questions: [
+        {
+          id: "q1",
+          type: TSurveyQuestionTypeEnum.OpenText,
+          headline: { default: "Question 1" },
+          required: false,
+          inputType: "text",
+          charLimit: { enabled: false },
+        },
+      ],
+      welcomeCard: {
+        enabled: false,
+        timeToFinish: true,
+        showResponseCount: false,
+      },
+      triggers: [],
+      endings: [],
+      hiddenFields: { enabled: false },
+      delay: 0,
+      autoComplete: null,
+      runOnDate: null,
+      closeOnDate: null,
+      scheduleTimezone: null,
+      projectOverwrites: null,
+      styling: null,
+      showLanguageSwitch: false,
+      segment: null,
+      surveyClosedMessage: null,
+      singleUse: null,
+      isVerifyEmailEnabled: false,
+      recaptcha: null,
+      isSingleResponsePerEmailEnabled: false,
+      isBackButtonHidden: false,
+      pin: null,
+      displayPercentage: null,
+      languages: [
+        {
+          language: {
+            id: "en",
+            code: "en",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            alias: null,
+            projectId: "project1",
+          },
+          default: true,
+          enabled: true,
+        },
+      ],
+      variables: [],
+      followUps: [],
+    } as unknown as TSurvey;
+
+    const mockCurrentSurvey = { ...mockSurvey };
+    const mockActionClasses: ActionClass[] = [
+>>>>>>> origin/main
       {
         id: "q1",
         type: TSurveyQuestionTypeEnum.OpenText,
@@ -304,6 +373,59 @@ describe("Survey Editor Library Tests", () => {
   });
 
   describe("updateSurveyDraft", () => {
+<<<<<<< HEAD
+=======
+    const mockSurvey = {
+      id: "survey123",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      name: "Draft Survey",
+      type: "app",
+      environmentId: "env123",
+      createdBy: "user123",
+      status: "draft",
+      displayOption: "displayOnce",
+      questions: [
+        {
+          id: "q1",
+          type: TSurveyQuestionTypeEnum.OpenText,
+          headline: { default: "Question 1" },
+          required: false,
+          inputType: "text",
+          charLimit: { enabled: false },
+        },
+      ],
+      welcomeCard: {
+        enabled: false,
+        timeToFinish: true,
+        showResponseCount: false,
+      },
+      triggers: [],
+      endings: [],
+      hiddenFields: { enabled: false },
+      delay: 0,
+      autoComplete: null,
+      runOnDate: null,
+      closeOnDate: null,
+      scheduleTimezone: null,
+      projectOverwrites: null,
+      styling: null,
+      showLanguageSwitch: false,
+      segment: null,
+      surveyClosedMessage: null,
+      singleUse: null,
+      isVerifyEmailEnabled: false,
+      recaptcha: null,
+      isSingleResponsePerEmailEnabled: false,
+      isBackButtonHidden: false,
+      pin: null,
+      displayPercentage: null,
+      languages: [],
+      variables: [],
+      followUps: [],
+    } as unknown as TSurvey;
+
+>>>>>>> origin/main
     beforeEach(() => {
       vi.mocked(updateSurveyInternal).mockResolvedValue(mockSurvey);
     });

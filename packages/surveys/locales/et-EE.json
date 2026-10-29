@@ -41,7 +41,10 @@
     "terms_of_service": "Teenusetingimused",
     "the_servers_cannot_be_reached_at_the_moment": "Serveritega ei saa hetkel ühendust.",
     "they_will_be_redirected_immediately": "Nad suunatakse kohe ümber",
+<<<<<<< HEAD:packages/surveys/locales/et-EE.json
     "time_remaining_before_the_survey_closes": "Aega jäänud enne küsitluse sulgemist",
+=======
+>>>>>>> origin/main:packages/surveys/locales/et.json
     "welcome_video": "Tervituskaardi video",
     "your_feedback_is_stuck": "Sinu tagasiside on kinni jäänud :("
   },

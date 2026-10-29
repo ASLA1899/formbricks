@@ -13,11 +13,15 @@ import { TSurvey, TSurveyLanguage, TSurveyStyling } from "@formbricks/types/surv
 import { TUserLocale } from "@formbricks/types/user";
 import { TWorkspaceStyling } from "@formbricks/types/workspace";
 import { cn } from "@/lib/cn";
+<<<<<<< HEAD
 import { type TStylingAppearance } from "@/lib/styling/dark-mode";
 import { toJsWorkspaceStateSurvey } from "@/lib/survey/client-utils";
 import { type TWorkspaceWithoutCustomCss } from "@/modules/custom-css/lib/types";
 import { isRTLLanguage } from "@/modules/survey/link/lib/utils";
 import { CardlessPreviewLogo } from "@/modules/ui/components/cardless-preview-logo";
+=======
+import { toJsEnvironmentStateSurvey } from "@/lib/survey/client-utils";
+>>>>>>> origin/main
 import { ClientLogo } from "@/modules/ui/components/client-logo";
 import {
   DropdownMenu,
@@ -286,6 +290,7 @@ export const PreviewSurvey = ({
   };
 
   return (
+<<<<<<< HEAD
     <MotionConfig reducedMotion="user">
       <div
         className="flex h-full w-full flex-col items-center justify-items-center p-2 py-4"
@@ -337,6 +342,197 @@ export const PreviewSurvey = ({
                 )}
                 <ResetProgressButton onClick={resetProgress} />
               </div>
+=======
+    <div
+      className="flex h-full w-full flex-col items-center justify-items-center p-2 py-4"
+      id="survey-preview">
+      <motion.div
+        className={cn(
+          "z-50 flex h-full w-fit items-center justify-center",
+          isFullScreenPreview && "h-full w-full bg-zinc-500/50 backdrop-blur-md"
+        )}
+        style={{
+          position: isFullScreenPreview ? "fixed" : "absolute",
+          zIndex: 50,
+          left: isFullScreenPreview ? 0 : undefined,
+          top: isFullScreenPreview ? 0 : undefined,
+        }}
+        transition={{
+          ease: "easeInOut",
+          delay: 1.5,
+        }}
+      />
+      <motion.div
+        layout
+        style={{
+          left: isFullScreenPreview ? "2.5%" : undefined,
+          top: isFullScreenPreview ? 0 : undefined,
+        }}
+        transition={{
+          duration: 0.8,
+          ease: "easeInOut",
+          type: "spring",
+        }}
+        className={cn(
+          "z-50 flex h-[95%] w-full items-center justify-center overflow-hidden rounded-lg border border-slate-300",
+          isFullScreenPreview && "absolute z-50 h-[95%] w-[95%]"
+        )}>
+        {previewMode === "mobile" && (
+          <>
+            <p className="absolute left-0 top-0 m-2 rounded bg-slate-100 px-2 py-1 text-xs text-slate-400">
+              {t("common.preview")}
+            </p>
+            <div className="absolute right-0 top-0 m-2">
+              <ResetProgressButton onClick={resetProgress} />
+            </div>
+            <MediaBackground
+              surveyType={survey.type}
+              styling={styling}
+              ContentRef={ContentRef as React.RefObject<HTMLDivElement>}
+              isMobilePreview>
+              {previewType === "modal" ? (
+                <Modal
+                  isOpen={isModalOpen}
+                  placement={placement}
+                  previewMode="mobile"
+                  overlay={overlay}
+                  clickOutsideClose={clickOutsideClose}
+                  borderRadius={styling?.roundness ?? 8}
+                  background={styling?.cardBackgroundColor?.light}>
+                  <SurveyInline
+                    appUrl={publicDomain}
+                    isPreviewMode={true}
+                    survey={toJsEnvironmentStateSurvey(survey)}
+                    isBrandingEnabled={project.inAppSurveyBranding}
+                    isRedirectDisabled={true}
+                    languageCode={languageCode}
+                    styling={styling}
+                    isCardBorderVisible={!styling.highlightBorderColor?.light}
+                    onClose={handlePreviewModalClose}
+                    getSetBlockId={(f: (value: string) => void) => {
+                      setBlockId = f;
+                    }}
+                    onFinished={onFinished}
+                    placement={placement}
+                    isSpamProtectionEnabled={isSpamProtectionEnabled}
+                    cardSize={styling.cardSize ?? "normal"}
+                    autoAdvance={survey.autoAdvance ?? false}
+                  />
+                </Modal>
+              ) : (
+                <div className="flex h-full w-full flex-col justify-center px-1">
+                  <div className="absolute left-5 top-5">
+                    {!styling.isLogoHidden && (
+                      <ClientLogo
+                        environmentId={environment.id}
+                        projectLogo={project.logo}
+                        surveyLogo={styling.logo}
+                        previewSurvey
+                      />
+                    )}
+                  </div>
+                  <div className="z-10 w-full rounded-lg border border-transparent">
+                    <SurveyInline
+                      appUrl={publicDomain}
+                      isPreviewMode={true}
+                      survey={toJsEnvironmentStateSurvey({ ...survey, type: "link" })}
+                      isBrandingEnabled={project.linkSurveyBranding}
+                      languageCode={languageCode}
+                      responseCount={42}
+                      styling={styling}
+                      getSetBlockId={(f: (value: string) => void) => {
+                        setBlockId = f;
+                      }}
+                      isSpamProtectionEnabled={isSpamProtectionEnabled}
+                      cardSize={styling.cardSize ?? "normal"}
+                      autoAdvance={survey.autoAdvance ?? false}
+                    />
+                  </div>
+                </div>
+              )}
+            </MediaBackground>
+          </>
+        )}
+        {previewMode === "desktop" && (
+          <div className="flex h-full w-full flex-1 flex-col">
+            <div className="flex h-8 w-full items-center rounded-t-lg bg-slate-100">
+              <div className="ml-6 flex space-x-2">
+                <div className="h-3 w-3 rounded-full bg-red-500"></div>
+                <div className="h-3 w-3 rounded-full bg-amber-500"></div>
+                <button
+                  className="h-3 w-3 cursor-pointer rounded-full bg-emerald-500"
+                  onClick={() => {
+                    if (isFullScreenPreview) {
+                      setIsFullScreenPreview(false);
+                    } else {
+                      setIsFullScreenPreview(true);
+                    }
+                  }}
+                  aria-label={
+                    isFullScreenPreview
+                      ? t("environments.surveys.edit.shrink_preview")
+                      : t("environments.surveys.edit.expand_preview")
+                  }></button>
+              </div>
+              <div className="ml-4 flex w-full justify-between font-mono text-sm text-slate-400">
+                <p>
+                  {previewType === "modal"
+                    ? t("environments.surveys.edit.your_web_app")
+                    : t("common.preview")}
+                </p>
+
+                <div className="flex items-center">
+                  {isFullScreenPreview ? (
+                    <ShrinkIcon
+                      className="mr-1 h-[22px] w-[22px] cursor-pointer rounded-md bg-white p-1 text-slate-500 hover:text-slate-700"
+                      onClick={() => {
+                        setIsFullScreenPreview(false);
+                      }}
+                    />
+                  ) : (
+                    <ExpandIcon
+                      className="mr-1 h-[22px] w-[22px] cursor-pointer rounded-md bg-white p-1 text-slate-500 hover:text-slate-700"
+                      onClick={() => {
+                        setIsFullScreenPreview(true);
+                      }}
+                    />
+                  )}
+                  <ResetProgressButton onClick={resetProgress} />
+                </div>
+              </div>
+            </div>
+
+            {previewType === "modal" ? (
+              <Modal
+                isOpen={isModalOpen}
+                placement={placement}
+                clickOutsideClose={clickOutsideClose}
+                overlay={overlay}
+                previewMode="desktop"
+                borderRadius={styling.roundness ?? 8}
+                background={styling.cardBackgroundColor?.light}>
+                <SurveyInline
+                  appUrl={publicDomain}
+                  isPreviewMode={true}
+                  survey={toJsEnvironmentStateSurvey(survey)}
+                  isBrandingEnabled={project.inAppSurveyBranding}
+                  isRedirectDisabled={true}
+                  languageCode={languageCode}
+                  styling={styling}
+                  isCardBorderVisible={!styling.highlightBorderColor?.light}
+                  onClose={handlePreviewModalClose}
+                  getSetBlockId={(f: (value: string) => void) => {
+                    setBlockId = f;
+                  }}
+                  onFinished={onFinished}
+                  isSpamProtectionEnabled={isSpamProtectionEnabled}
+                  placement={placement}
+                  cardSize={styling.cardSize ?? "normal"}
+                  autoAdvance={survey.autoAdvance ?? false}
+                />
+              </Modal>
+            ) : (
+>>>>>>> origin/main
               <MediaBackground
                 surveyType={survey.type}
                 styling={styling}
@@ -374,6 +570,7 @@ export const PreviewSurvey = ({
                       placement={placement}
                       isSpamProtectionEnabled={isSpamProtectionEnabled}
                     />
+<<<<<<< HEAD
                   </Modal>
                 ) : (
                   <div
@@ -426,6 +623,28 @@ export const PreviewSurvey = ({
                     </div>
                   </div>
                 )}
+=======
+                  )}
+                </div>
+                <div className="z-0 w-full max-w-4xl rounded-lg border-transparent">
+                  <SurveyInline
+                    appUrl={publicDomain}
+                    isPreviewMode={true}
+                    survey={toJsEnvironmentStateSurvey({ ...survey, type: "link" })}
+                    isBrandingEnabled={project.linkSurveyBranding}
+                    isRedirectDisabled={true}
+                    languageCode={languageCode}
+                    responseCount={42}
+                    styling={styling}
+                    getSetBlockId={(f: (value: string) => void) => {
+                      setBlockId = f;
+                    }}
+                    isSpamProtectionEnabled={isSpamProtectionEnabled}
+                    cardSize={styling.cardSize ?? "normal"}
+                    autoAdvance={survey.autoAdvance ?? false}
+                  />
+                </div>
+>>>>>>> origin/main
               </MediaBackground>
             </>
           )}

@@ -36,41 +36,73 @@ export const AddressElementForm = ({
 }: AddressElementFormProps): JSX.Element => {
   const surveyLanguageCodes = extractLanguageCodes(localSurvey.languages ?? []);
   const { t } = useTranslation();
+  // Surveys created before Name/Organization existed omit them: treat as hidden and optional.
+  const nameConfig = element.name ?? {
+    show: false,
+    required: false,
+    placeholder: createI18nString(t("common.name"), surveyLanguageCodes),
+  };
+  const organizationConfig = element.organization ?? {
+    show: false,
+    required: false,
+    placeholder: createI18nString(t("common.organization"), surveyLanguageCodes),
+  };
+  // Display order (mailing-label order); storage order is defined in compound-fields.ts.
   const fields = [
+    {
+      id: "name",
+      label: t("common.name"),
+      ...nameConfig,
+      prefillFrom: nameConfig.prefillFrom,
+    },
+    {
+      id: "organization",
+      label: t("common.organization"),
+      ...organizationConfig,
+      prefillFrom: organizationConfig.prefillFrom,
+    },
     {
       id: "addressLine1",
       label: t("workspace.surveys.edit.address_line_1"),
       ...element.addressLine1,
+      prefillFrom: element.addressLine1.prefillFrom,
     },
     {
       id: "addressLine2",
       label: t("workspace.surveys.edit.address_line_2"),
       ...element.addressLine2,
+      prefillFrom: element.addressLine2.prefillFrom,
     },
     {
       id: "city",
       label: t("workspace.surveys.edit.city"),
       ...element.city,
+      prefillFrom: element.city.prefillFrom,
     },
     {
       id: "state",
       label: t("workspace.surveys.edit.state"),
       ...element.state,
+      prefillFrom: element.state.prefillFrom,
     },
     {
       id: "zip",
       label: t("workspace.surveys.edit.zip"),
       ...element.zip,
+      prefillFrom: element.zip.prefillFrom,
     },
     {
       id: "country",
       label: t("workspace.surveys.edit.country"),
       ...element.country,
+      prefillFrom: element.country.prefillFrom,
     },
   ];
 
   useEffect(() => {
     const allFieldsAreOptional = [
+      element.name,
+      element.organization,
       element.addressLine1,
       element.addressLine2,
       element.city,
@@ -78,12 +110,26 @@ export const AddressElementForm = ({
       element.zip,
       element.country,
     ]
-      .filter((field) => field.show)
-      .every((field) => !field.required);
+      .filter((field) => field?.show)
+      .every((field) => !field?.required);
 
     updateElement(elementIdx, { required: !allFieldsAreOptional });
+<<<<<<< HEAD
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sync-only effect; adding updateElement/elementIdx would loop as it writes back into the survey
   }, [element.addressLine1, element.addressLine2, element.city, element.state, element.zip, element.country]);
+=======
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    element.name,
+    element.organization,
+    element.addressLine1,
+    element.addressLine2,
+    element.city,
+    element.state,
+    element.zip,
+    element.country,
+  ]);
+>>>>>>> origin/main
 
   const [parent] = useAutoAnimate();
 

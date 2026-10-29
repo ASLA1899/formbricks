@@ -1,4 +1,5 @@
 import { logger } from "@formbricks/logger";
+<<<<<<< HEAD
 import { ZSurveyCreateInputWithWorkspaceId } from "@formbricks/types/surveys/types";
 import { resolveBodyIds } from "@/app/api/v1/management/lib/workspace-resolver";
 import { checkSurveyWritePermissions } from "@/app/api/v1/management/surveys/lib/utils";
@@ -13,6 +14,14 @@ import {
   addLegacyEnvironmentIdToList,
 } from "@/app/lib/api/legacy-environment-id";
 import { RequestBodyTooLargeError, parseJsonBodyWithLimit } from "@/app/lib/api/request-body";
+=======
+import { DatabaseError } from "@formbricks/types/errors";
+import { ZSurveyCreateInputWithEnvironmentId } from "@formbricks/types/surveys/types";
+import {
+  checkFeaturePermissions,
+  getReadableEnvironmentIds,
+} from "@/app/api/v1/management/surveys/lib/utils";
+>>>>>>> origin/main
 import { responses } from "@/app/lib/api/response";
 import {
   transformQuestionsToBlocks,
@@ -44,6 +53,7 @@ export const GET = withV1ApiWrapper({
       const limit = searchParams.has("limit") ? Number(searchParams.get("limit")) : undefined;
       const offset = searchParams.has("offset") ? Number(searchParams.get("offset")) : undefined;
 
+<<<<<<< HEAD
       const workspaceIds = [
         ...new Set(authentication.workspacePermissions.map((permission) => permission.workspaceId)),
       ];
@@ -55,6 +65,12 @@ export const GET = withV1ApiWrapper({
       const surveysWithQuestions = surveys.map((survey) =>
         withoutInternalSurveyProjections(withDerivedQuestions(survey))
       );
+=======
+      const environmentIds = await getReadableEnvironmentIds(authentication);
+      if (!environmentIds) {
+        return { response: responses.unauthorizedResponse() };
+      }
+>>>>>>> origin/main
 
       return {
         response: responses.successResponse(

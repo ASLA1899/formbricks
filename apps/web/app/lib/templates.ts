@@ -4994,6 +4994,9 @@ export const previewSurvey = (workspaceName: string, t: TFunction): TSurvey => {
     autoClose: null,
     recaptcha: null,
     delay: 0,
+    runOnDate: null,
+    closeOnDate: null,
+    scheduleTimezone: null,
     displayPercentage: null,
     autoComplete: 50,
     isVerifyEmailEnabled: false,
@@ -5010,7 +5013,12 @@ export const previewSurvey = (workspaceName: string, t: TFunction): TSurvey => {
     autoSelectLanguage: false,
     followUps: [],
     isBackButtonHidden: false,
+<<<<<<< HEAD
     isAutoProgressingEnabled: true,
+=======
+    autoAdvance: false,
+    snowflakeSync: false,
+>>>>>>> origin/main
     isCaptureIpEnabled: false,
     isAnonymizeResponsesEnabled: false,
     metadata: {},

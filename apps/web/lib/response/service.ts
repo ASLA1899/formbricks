@@ -18,6 +18,11 @@ import {
 } from "@formbricks/types/responses";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { TTag } from "@formbricks/types/tags";
+<<<<<<< HEAD
+=======
+import { deleteSurveyResponseByResponseId } from "@/app/api/member-lookup/snowflake-service";
+import { getElementsFromBlocks } from "@/lib/survey/utils";
+>>>>>>> origin/main
 import { getIsQuotasEnabled } from "@/modules/ee/license-check/lib/utils";
 import { reduceQuotaLimits } from "@/modules/ee/quotas/lib/quotas";
 import { deleteResponseFileUrls } from "@/modules/storage/lib/delete-response-files";
@@ -481,7 +486,9 @@ export const getResponseDownloadFile = async (
     const headers = [
       "No.",
       "Response ID",
-      "Timestamp",
+      "Started At",
+      "Completed At",
+      "Duration",
       "Finished",
       ...(isQuotasAllowed ? ["Quotas"] : []),
       "Survey ID",
@@ -734,6 +741,13 @@ export const deleteResponse = async (
 
     if (survey) {
       await findAndDeleteUploadedFilesInResponse(txResponse, survey);
+
+      // Fire-and-forget: clean up Snowflake rows for this response
+      if (survey.snowflakeSync) {
+        deleteSurveyResponseByResponseId(txResponse.id).catch((error) => {
+          logger.error({ error, responseId }, "Snowflake cleanup failed for deleted response");
+        });
+      }
     }
 
     return txResponse;

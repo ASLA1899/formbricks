@@ -104,6 +104,7 @@ export function DateElement({
         imageUrl={element.imageUrl}
         imageAltText={getLocalizedValue(element.imageAltText, languageCode)}
         videoUrl={element.videoUrl}
+        dateKind={element.dateKind}
       />
     </form>
   );

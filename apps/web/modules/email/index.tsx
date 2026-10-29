@@ -3,6 +3,7 @@ import {
   renderEmailCustomizationPreviewEmail,
   renderEmbedSurveyPreviewEmail,
   renderForgotPasswordEmail,
+  renderInvitationEmail,
   renderInviteAcceptedEmail,
   renderInviteEmail,
   renderLinkSurveyEmail,
@@ -53,10 +54,63 @@ const legalProps: TEmailTemplateLegalProps = {
   imprintAddress: IMPRINT_ADDRESS || undefined,
 };
 
+<<<<<<< HEAD
 export type TResponseFinishedEmailSurvey = TElementResponseMappingSurvey &
   // `variables` / `hiddenFields` are the resolver's fallback; `embeddedFields` carries the joined
   // EmbeddedData rows the template resolves definitions through (ENG-1837).
   Pick<TSurvey, "id" | "name" | "variables" | "hiddenFields" | "embeddedFields">;
+=======
+interface SendEmailDataProps {
+  to: string;
+  replyTo?: string;
+  subject: string;
+  text?: string;
+  html: string;
+  fromName?: string;
+  attachments?: { filename: string; content: Buffer; contentType?: string }[];
+}
+
+export const sendEmail = async (emailData: SendEmailDataProps): Promise<boolean> => {
+  if (!IS_SMTP_CONFIGURED) {
+    logger.info("SMTP is not configured, skipping email sending");
+    return false;
+  }
+  try {
+    const transporter = createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE_ENABLED, // true for 465, false for other ports
+      ...(SMTP_AUTHENTICATED
+        ? {
+            auth: {
+              type: "LOGIN",
+              user: SMTP_USER,
+              pass: SMTP_PASSWORD,
+            },
+          }
+        : {}),
+      tls: {
+        rejectUnauthorized: SMTP_REJECT_UNAUTHORIZED_TLS,
+      },
+      logger: DEBUG,
+      debug: DEBUG,
+    } as SMTPTransport.Options);
+
+    const { fromName, ...rest } = emailData;
+    const fromAddress = MAIL_FROM ?? "noreply@formbricks.com";
+    const fromDisplayName = (fromName?.trim() || MAIL_FROM_NAME) ?? "Formbricks";
+    const emailDefaults = {
+      from: `${fromDisplayName} <${fromAddress}>`,
+    };
+    await transporter.sendMail({ ...emailDefaults, ...rest });
+
+    return true;
+  } catch (error) {
+    logger.error(error, "Error in sendEmail");
+    throw new InvalidInputError("Incorrect SMTP credentials");
+  }
+};
+>>>>>>> origin/main
 
 export const sendVerificationNewEmail = async (
   id: string,
@@ -442,6 +496,36 @@ export const sendEmailCustomizationPreviewEmail = async (
     to,
     subject: t("emails.email_customization_preview_email_subject"),
     html: emailHtmlBody,
+  });
+};
+
+export const sendSurveyInvitationEmail = async (data: {
+  to: string;
+  subject: string;
+  body: string;
+  surveyLink: string;
+  logoUrl?: string;
+  buttonLabel?: string;
+  heading?: string;
+  fromName?: string;
+}): Promise<boolean> => {
+  const t = await getTranslate();
+  const html = await renderInvitationEmail({
+    subject: data.subject,
+    body: data.body,
+    surveyLink: data.surveyLink,
+    logoUrl: data.logoUrl,
+    buttonLabel: data.buttonLabel?.trim() || undefined,
+    // Pass through as-is: undefined = use default heading, "" = suppress, text = override.
+    heading: data.heading,
+    t,
+    ...legalProps,
+  });
+  return await sendEmail({
+    to: data.to,
+    subject: data.subject,
+    html,
+    fromName: data.fromName,
   });
 };
 

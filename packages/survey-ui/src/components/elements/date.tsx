@@ -1,6 +1,11 @@
 import * as React from "react";
 import { Calendar } from "@/components/general/calendar";
+<<<<<<< HEAD
 import { ElementError, getElementErrorAria } from "@/components/general/element-error";
+=======
+import { MonthPicker } from "@/components/general/month-picker";
+import { ElementError } from "@/components/general/element-error";
+>>>>>>> origin/main
 import { ElementHeader } from "@/components/general/element-header";
 import { getDateFnsLocale } from "@/lib/locale";
 
@@ -39,6 +44,8 @@ interface DateElementProps {
   imageAltText?: string;
   /** Video URL to display above the headline */
   videoUrl?: string;
+  /** Whether to show full date or month+year only picker. Defaults to "full" */
+  dateKind?: "full" | "monthYear";
 }
 
 function DateElement({
@@ -59,23 +66,38 @@ function DateElement({
   imageUrl,
   imageAltText,
   videoUrl,
+  dateKind = "full",
 }: Readonly<DateElementProps>): React.JSX.Element {
+<<<<<<< HEAD
   const errorAria = getElementErrorAria(inputId, errorMessage);
+=======
+  const isMonthYear = dateKind === "monthYear";
+>>>>>>> origin/main
 
   // Initialize date from value string, parsing as local time to avoid timezone issues
   const [date, setDate] = React.useState<Date | undefined>(() => {
     if (!value) return undefined;
+    const parts = value.split("-").map(Number);
+    if (isMonthYear && parts.length === 2) {
+      // Parse YYYY-MM format
+      return new Date(parts[0], parts[1] - 1, 1);
+    }
     // Parse YYYY-MM-DD format as local date (not UTC)
-    const [year, month, day] = value.split("-").map(Number);
+    const [year, month, day] = parts;
     return new Date(year, month - 1, day);
   });
 
   // Sync date state when value prop changes
   React.useEffect(() => {
     if (value) {
-      // Parse YYYY-MM-DD format as local date (not UTC)
-      const [year, month, day] = value.split("-").map(Number);
-      const newDate = new Date(year, month - 1, day);
+      const parts = value.split("-").map(Number);
+      let newDate: Date;
+      if (isMonthYear && parts.length === 2) {
+        newDate = new Date(parts[0], parts[1] - 1, 1);
+      } else {
+        const [year, month, day] = parts;
+        newDate = new Date(year, month - 1, day);
+      }
       setDate((prevDate) => {
         // Only update if the date actually changed to avoid unnecessary re-renders
         if (newDate.getTime() !== prevDate?.getTime()) {
@@ -86,18 +108,20 @@ function DateElement({
     } else {
       setDate(undefined);
     }
-  }, [value]);
+  }, [value, isMonthYear]);
 
-  // Convert Date to ISO string (YYYY-MM-DD) when date changes
+  // Convert Date to ISO string when date changes
   const handleDateSelect = (selectedDate: Date | undefined): void => {
     setDate(selectedDate);
     if (selectedDate) {
-      // Convert to ISO format (YYYY-MM-DD) using local time to avoid timezone issues
       const year = String(selectedDate.getFullYear());
       const month = String(selectedDate.getMonth() + 1).padStart(2, "0");
-      const day = String(selectedDate.getDate()).padStart(2, "0");
-      const isoString = `${year}-${month}-${day}`;
-      onChange(isoString);
+      if (isMonthYear) {
+        onChange(`${year}-${month}`);
+      } else {
+        const day = String(selectedDate.getDate()).padStart(2, "0");
+        onChange(`${year}-${month}-${day}`);
+      }
     } else {
       onChange("");
     }
@@ -169,6 +193,7 @@ function DateElement({
       />
 
       <div className="relative" data-element-input>
+<<<<<<< HEAD
         <ElementError errorMessage={errorMessage} dir={dir} id={errorAria.errorId} />
         {/* Calendar - Always visible. The value is picked from a grid of day buttons, so there is
             no single native control to flag: a native <fieldset> wraps them and carries the invalid
@@ -200,6 +225,36 @@ function DateElement({
             className="rounded-input border-input-border bg-input-bg text-input-text shadow-input mx-auto h-[stretch] w-full max-w-[25rem] border"
           />
         </fieldset>
+=======
+        <ElementError errorMessage={errorMessage} dir={dir} />
+        <div className="w-full">
+          {isMonthYear ? (
+            <MonthPicker
+              selected={date}
+              onSelect={handleDateSelect}
+              locale={dateLocale}
+              startMonth={startMonth}
+              endMonth={endMonth}
+              disabled={disabled}
+              required={required}
+            />
+          ) : (
+            <Calendar
+              mode="single"
+              selected={date}
+              defaultMonth={date}
+              captionLayout="dropdown"
+              startMonth={startMonth}
+              endMonth={endMonth}
+              disabled={isDateDisabled}
+              onSelect={handleDateSelect}
+              locale={dateLocale}
+              required={required}
+              className="rounded-input border-input-border bg-input-bg text-input-text shadow-input mx-auto h-[stretch] w-full max-w-[25rem] border"
+            />
+          )}
+        </div>
+>>>>>>> origin/main
       </div>
     </div>
   );

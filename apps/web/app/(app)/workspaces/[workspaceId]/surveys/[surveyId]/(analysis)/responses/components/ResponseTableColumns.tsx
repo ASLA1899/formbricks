@@ -10,14 +10,19 @@ import {
   getIngestedEmbeddedFields,
 } from "@formbricks/types/embedded-data-resolver";
 import { TResponseTableData } from "@formbricks/types/responses";
-import { TSurveyElement, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
+import { ADDRESS_DISPLAY_FIELDS } from "@formbricks/types/surveys/compound-fields";
+import {
+  TSurveyAddressElement,
+  TSurveyElement,
+  TSurveyElementTypeEnum,
+} from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { getTextContent } from "@formbricks/types/surveys/validation";
 import { TUserLocale } from "@formbricks/types/user";
 import { getLocalizedValue } from "@/lib/i18n/utils";
 import { extractChoiceIdsFromResponse } from "@/lib/response/utils";
 import { getContactIdentifier } from "@/lib/utils/contact";
-import { formatDateTimeForDisplay } from "@/lib/utils/datetime";
+import { formatDateTimeForDisplay, formatDurationClock } from "@/lib/utils/datetime";
 import { recallToHeadline } from "@/lib/utils/recall";
 import { RenderResponse } from "@/modules/analysis/components/SingleResponseCard/components/RenderResponse";
 import { displayEmbeddedValue } from "@/modules/embedded-data/lib/value-display";
@@ -45,7 +50,11 @@ const getElementColumnsData = (
   t: TFunction
 ): ColumnDef<TResponseTableData>[] => {
   const ELEMENTS_ICON_MAP = getElementIconMap(t);
-  const addressFields = ["addressLine1", "addressLine2", "city", "state", "zip", "country"];
+  // Display order. name/organization are absent on older surveys; only add their columns when shown.
+  const addressElement = element as TSurveyAddressElement;
+  const addressFields = ADDRESS_DISPLAY_FIELDS.filter(
+    (field) => (field !== "name" && field !== "organization") || addressElement[field]?.show
+  );
   const contactInfoFields = ["firstName", "lastName", "email", "phone", "company"];
 
   // Helper function to create consistent column headers
@@ -134,8 +143,9 @@ const getElementColumnsData = (
         };
       });
 
-    case "contactInfo":
-      return contactInfoFields.map((contactInfoField) => {
+    case "contactInfo": {
+      // Built-in field columns
+      const builtInColumns = contactInfoFields.map((contactInfoField) => {
         return {
           accessorKey: "ELEMENT_" + element.id + "_" + contactInfoField,
           header: () => {
@@ -148,7 +158,7 @@ const getElementColumnsData = (
               </div>
             );
           },
-          cell: ({ row }) => {
+          cell: ({ row }: { row: { original: TResponseTableData } }) => {
             const responseValue = row.original.responseData[contactInfoField];
             if (typeof responseValue === "string") {
               return <p className="text-slate-900">{responseValue}</p>;
@@ -156,6 +166,30 @@ const getElementColumnsData = (
           },
         };
       });
+
+      // Custom field columns
+      const customFieldColumns = ((element as any).customFields ?? [])
+        .filter((cf: any) => cf.show)
+        .map((cf: any) => ({
+          accessorKey: "ELEMENT_" + element.id + "_" + cf.id,
+          header: () => (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 overflow-hidden">
+                <span className="h-4 w-4">{ELEMENTS_ICON_MAP["contactInfo"]}</span>
+                <span className="truncate">{cf.label}</span>
+              </div>
+            </div>
+          ),
+          cell: ({ row }: { row: { original: TResponseTableData } }) => {
+            const responseValue = row.original.responseData[cf.id];
+            if (typeof responseValue === "string") {
+              return <p className="text-slate-900">{responseValue}</p>;
+            }
+          },
+        }));
+
+      return [...builtInColumns, ...customFieldColumns];
+    }
 
     case "multipleChoiceMulti":
     case "multipleChoiceSingle":
@@ -284,11 +318,35 @@ export const generateResponseTableColumns = (
 
   const dateColumn: ColumnDef<TResponseTableData> = {
     accessorKey: "createdAt",
-    header: () => t("common.date"),
+    header: () => t("common.started"),
     size: 200,
     cell: ({ row }) => {
       const date = new Date(row.original.createdAt);
       return <p className="text-slate-900">{formatDateTimeForDisplay(date, locale)}</p>;
+    },
+  };
+
+  const completedColumn: ColumnDef<TResponseTableData> = {
+    accessorKey: "completedAt",
+    header: () => t("common.completed"),
+    size: 200,
+    cell: ({ row }) => {
+      const completedAt = row.original.completedAt;
+      return (
+        <p className="text-slate-900">
+          {completedAt ? formatDateTimeForDisplay(new Date(completedAt), locale) : "—"}
+        </p>
+      );
+    },
+  };
+
+  const durationColumn: ColumnDef<TResponseTableData> = {
+    accessorKey: "duration",
+    header: () => t("common.duration"),
+    size: 120,
+    cell: ({ row }) => {
+      const duration = row.original.duration;
+      return <p className="text-slate-900">{duration != null ? formatDurationClock(duration) : "—"}</p>;
     },
   };
 
@@ -450,6 +508,8 @@ export const generateResponseTableColumns = (
     singleUseIdColumn,
     responseIdColumn,
     dateColumn,
+    completedColumn,
+    durationColumn,
     ...(showQuotasColumn ? [quotasColumn] : []),
     statusColumn,
     ...(survey.isVerifyEmailEnabled ? [verifiedEmailColumn] : []),

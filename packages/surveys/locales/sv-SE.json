@@ -41,7 +41,10 @@
     "terms_of_service": "Användarvillkor",
     "the_servers_cannot_be_reached_at_the_moment": "Servrarna kan inte nås för tillfället.",
     "they_will_be_redirected_immediately": "De kommer att omdirigeras omedelbart",
+<<<<<<< HEAD:packages/surveys/locales/sv-SE.json
     "time_remaining_before_the_survey_closes": "Återstående tid innan enkäten stängs",
+=======
+>>>>>>> origin/main:packages/surveys/locales/sv.json
     "welcome_video": "Välkomstkortvideo",
     "your_feedback_is_stuck": "Din feedback fastnade :("
   },

@@ -108,8 +108,14 @@ describe("surveyLogic", () => {
     delay: 0,
     displayPercentage: null,
     isBackButtonHidden: false,
+<<<<<<< HEAD
     isAutoProgressingEnabled: false,
     workspaceOverwrites: null,
+=======
+    autoAdvance: false,
+    snowflakeSync: false,
+    projectOverwrites: null,
+>>>>>>> origin/main
     styling: null,
     showLanguageSwitch: null,
     languages: [],

@@ -46,6 +46,8 @@ vi.mock("@/lib/utils/date-display", () => ({
 
     return null;
   }),
+  isMonthYearString: vi.fn((value: string) => /^\d{4}-\d{2}$/.test(value)),
+  formatMonthYear: vi.fn(() => "January 2023"),
 }));
 
 /**

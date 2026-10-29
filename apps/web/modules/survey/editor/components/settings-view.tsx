@@ -7,14 +7,24 @@ import { TSurvey } from "@formbricks/types/surveys/types";
 import { TUserLocale } from "@formbricks/types/user";
 import { TargetingCard } from "@/modules/ee/contacts/segments/components/targeting-card";
 import { QuotasCard } from "@/modules/ee/quotas/components/quotas-card";
+<<<<<<< HEAD
 import { TTeamPermission } from "@/modules/ee/teams/workspace-teams/types/team";
+=======
+import { TTeamPermission } from "@/modules/ee/teams/project-teams/types/team";
+import { ExternalDataConfig } from "@/modules/survey/editor/components/external-data-config";
+>>>>>>> origin/main
 import { HowToSendCard } from "@/modules/survey/editor/components/how-to-send-card";
 import { RecontactOptionsCard } from "@/modules/survey/editor/components/recontact-options-card";
 import { ResponseOptionsCard } from "@/modules/survey/editor/components/response-options-card";
 import { SurveyPlacementCard } from "@/modules/survey/editor/components/survey-placement-card";
 import { TargetingLockedCard } from "@/modules/survey/editor/components/targeting-locked-card";
 import { WhenToSendCard } from "@/modules/survey/editor/components/when-to-send-card";
+<<<<<<< HEAD
 import { type TSurveySchedulingConfig } from "@/modules/survey/scheduling/lib/config";
+=======
+import { RecipientsCard } from "@/modules/survey/invitations/components/recipients-card";
+import { SharingPanel } from "@/modules/survey/sharing/components/sharing-panel";
+>>>>>>> origin/main
 
 interface SettingsViewProps {
   localSurvey: TSurvey;
@@ -64,11 +74,16 @@ export const SettingsView = ({
 
   return (
     <div className="mt-12 space-y-3 p-5">
+<<<<<<< HEAD
       <HowToSendCard
         localSurvey={localSurvey}
         setLocalSurvey={setLocalSurvey}
         appSetupCompleted={appSetupCompleted}
       />
+=======
+      <SharingPanel surveyId={localSurvey.id} />
+      <HowToSendCard localSurvey={localSurvey} setLocalSurvey={setLocalSurvey} environment={environment} />
+>>>>>>> origin/main
 
       {localSurvey.type === "app" ? (
         <div>
@@ -120,6 +135,17 @@ export const SettingsView = ({
         surveySchedulingConfig={surveySchedulingConfig}
         locale={locale}
       />
+
+      <ExternalDataConfig
+        externalDataSources={localSurvey.externalDataSources ?? []}
+        variables={localSurvey.variables}
+        onUpdate={(externalDataSources) => setLocalSurvey({ ...localSurvey, externalDataSources })}
+        environmentId={environment.id}
+      />
+
+      {localSurvey.type === "link" && (
+        <RecipientsCard localSurvey={localSurvey} setLocalSurvey={setLocalSurvey} segments={segments} />
+      )}
 
       <RecontactOptionsCard localSurvey={localSurvey} setLocalSurvey={setLocalSurvey} />
 

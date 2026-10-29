@@ -11,7 +11,10 @@ import {
   TIntegrationInput,
   ZIntegrationType,
 } from "@formbricks/types/integration";
+<<<<<<< HEAD
 import { assertNewlyAttachedSurveysWorkspaceVisible } from "@/lib/survey/visibility/outbound";
+=======
+>>>>>>> origin/main
 import { ITEMS_PER_PAGE } from "../constants";
 import { validateInputs } from "../utils/validate";
 
@@ -123,10 +126,17 @@ export const getIntegration = reactCache(async (integrationId: string): Promise<
 
 export const getIntegrationByType = reactCache(
   async <T extends TIntegrationInput["type"]>(
+<<<<<<< HEAD
     workspaceId: string,
     type: T
   ): Promise<TIntegrationByType<T> | null> => {
     validateInputs([workspaceId, ZId], [type, ZIntegrationType]);
+=======
+    environmentId: string,
+    type: T
+  ): Promise<TIntegrationByType<T> | null> => {
+    validateInputs([environmentId, ZId], [type, ZIntegrationType]);
+>>>>>>> origin/main
 
     try {
       const integration = await prisma.integration.findFirst({

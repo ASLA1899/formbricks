@@ -15,7 +15,11 @@ import {
 import { ElementError, getElementErrorAria } from "@/components/general/element-error";
 import { ElementHeader } from "@/components/general/element-header";
 import { Input } from "@/components/general/input";
+<<<<<<< HEAD
 import { FB_PART } from "@/lib/parts";
+=======
+import { renderInlineMarkdown } from "@/lib/inline-markdown";
+>>>>>>> origin/main
 import { cn } from "@/lib/utils";
 
 /**
@@ -80,6 +84,8 @@ interface MultiSelectProps {
   imageAltText?: string;
   /** Video URL to display above the headline */
   videoUrl?: string;
+  /** Number of columns for list display: "1" (default) or "2" (responsive: single column on mobile, two columns on desktop) */
+  columns?: "1" | "2";
   /** Placeholder text for the search input in dropdown mode */
   searchPlaceholder?: string;
   /** Message shown when search yields no results */
@@ -317,11 +323,15 @@ function DropdownVariant({
                     e.preventDefault();
                   }}
                   disabled={disabled}>
+<<<<<<< HEAD
                   <span
                     data-fb-part={FB_PART.optionLabel}
                     className="font-input font-input-weight text-input-text">
                     {option.label}
                   </span>
+=======
+                  <span className={optionLabelClassName}>{renderInlineMarkdown(option.label)}</span>
+>>>>>>> origin/main
                 </DropdownMenuCheckboxItem>
               );
             })}
@@ -388,9 +398,14 @@ function DropdownVariant({
           onChange={handleOtherInputChange}
           placeholder={otherOptionPlaceholder}
           disabled={disabled}
+<<<<<<< HEAD
           aria-required
           aria-invalid={errorAria.ariaInvalid}
           aria-describedby={errorAria.ariaDescribedBy}
+=======
+          aria-required={required}
+          aria-invalid={Boolean(errorMessage)}
+>>>>>>> origin/main
           dir={dir}
           className="mt-2 w-full"
         />
@@ -417,6 +432,11 @@ interface ListVariantProps {
   otherOptionPlaceholder: string;
   dir: TextDirection;
   otherInputRef: React.RefObject<HTMLInputElement | null>;
+<<<<<<< HEAD
+=======
+  required: boolean;
+  columns?: "1" | "2";
+>>>>>>> origin/main
 }
 
 function ListVariant({
@@ -437,6 +457,11 @@ function ListVariant({
   otherOptionPlaceholder,
   dir,
   otherInputRef,
+<<<<<<< HEAD
+=======
+  required,
+  columns = "1",
+>>>>>>> origin/main
 }: Readonly<ListVariantProps>): React.JSX.Element {
   const isNoneSelected = value.includes("none");
   const otherTextId = otherOptionId ? `${inputId}-${otherOptionId}-input` : undefined;
@@ -461,6 +486,7 @@ function ListVariant({
 
   return (
     <>
+<<<<<<< HEAD
       <ElementError errorMessage={errorMessage} dir={dir} id={errorAria.errorId} />
       <div className="space-y-2">
         {options.filter((option) => option.id !== "none").map(renderOption)}
@@ -497,6 +523,90 @@ function ListVariant({
               <span data-fb-part={FB_PART.optionLabel} className={cn("mx-3 grow", optionLabelClassName)}>
                 {otherOptionLabel}
               </span>
+=======
+      <ElementError errorMessage={errorMessage} dir={dir} />
+      <fieldset
+        className={columns === "2" ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "space-y-2"}
+        aria-label={headline}>
+        {options
+          .filter((option) => option.id !== "none")
+          .map((option) => {
+            const isChecked = selectedValues.includes(option.id);
+            const optionId = `${inputId}-${option.id}`;
+            const isDisabled = disabled || (isNoneSelected && option.id !== "none");
+            return (
+              <label
+                key={option.id}
+                htmlFor={optionId}
+                className={cn(getOptionContainerClassName(isChecked, isDisabled), isChecked && "z-10")}>
+                <span className="flex items-center">
+                  <Checkbox
+                    id={optionId}
+                    name={inputId}
+                    checked={isChecked}
+                    onCheckedChange={(checked) => {
+                      if (checked === true) {
+                        handleOptionAdd(option.id);
+                      } else {
+                        handleOptionRemove(option.id);
+                      }
+                    }}
+                    disabled={isDisabled}
+                    aria-invalid={Boolean(errorMessage)}
+                  />
+                  <span
+                    className={cn("mr-3 ml-3", optionLabelClassName)}
+                    style={{ fontSize: "var(--fb-option-font-size)" }}>
+                    {renderInlineMarkdown(option.label)}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+        {hasOtherOption && otherOptionId ? (
+          <div className="space-y-2">
+            <label
+              htmlFor={`${inputId}-${otherOptionId}`}
+              className={cn(
+                getOptionContainerClassName(isOtherSelected, disabled || isNoneSelected),
+                isOtherSelected && "z-10"
+              )}>
+              <span className="flex items-center">
+                <Checkbox
+                  id={`${inputId}-${otherOptionId}`}
+                  name={inputId}
+                  checked={isOtherSelected}
+                  onCheckedChange={(checked) => {
+                    if (checked === true) {
+                      handleOptionAdd(otherOptionId);
+                    } else {
+                      handleOptionRemove(otherOptionId);
+                    }
+                  }}
+                  disabled={disabled || isNoneSelected}
+                  aria-invalid={Boolean(errorMessage)}
+                />
+                <span
+                  className={cn("mr-3 ml-3 grow", optionLabelClassName)}
+                  style={{ fontSize: "var(--fb-option-font-size)" }}>
+                  {renderInlineMarkdown(otherOptionLabel)}
+                </span>
+              </span>
+              {isOtherSelected ? (
+                <Input
+                  type="text"
+                  value={otherValue}
+                  onChange={handleOtherInputChange}
+                  placeholder={otherOptionPlaceholder}
+                  disabled={disabled}
+                  aria-required={required}
+                  aria-invalid={Boolean(errorMessage)}
+                  dir={dir}
+                  className="mt-2 w-full"
+                  ref={otherInputRef}
+                />
+              ) : null}
+>>>>>>> origin/main
             </label>
             {/* The enclosing <fieldset> carries aria-describedby, but an ancestor's description is
                 not part of a descendant's accessible description (accname): focusing this input
@@ -521,8 +631,48 @@ function ListVariant({
             ) : null}
           </div>
         ) : null}
+<<<<<<< HEAD
         {options.filter((option) => option.id === "none").map(renderOption)}
       </div>
+=======
+        {options
+          .filter((option) => option.id === "none")
+          .map((option) => {
+            const isChecked = selectedValues.includes(option.id);
+            const optionId = `${inputId}-${option.id}`;
+            const isDisabled = disabled || (isNoneSelected && option.id !== "none");
+            return (
+              <label
+                key={option.id}
+                htmlFor={optionId}
+                className={cn(getOptionContainerClassName(isChecked, isDisabled), isChecked && "z-10")}>
+                <span className="flex items-center">
+                  <Checkbox
+                    id={optionId}
+                    name={inputId}
+                    checked={isChecked}
+                    onCheckedChange={(checked) => {
+                      if (checked === true) {
+                        handleOptionAdd(option.id);
+                      } else {
+                        handleOptionRemove(option.id);
+                      }
+                    }}
+                    disabled={isDisabled}
+                    required={false}
+                    aria-invalid={Boolean(errorMessage)}
+                  />
+                  <span
+                    className={cn("mr-3 ml-3", optionLabelClassName)}
+                    style={{ fontSize: "var(--fb-option-font-size)" }}>
+                    {renderInlineMarkdown(option.label)}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+      </fieldset>
+>>>>>>> origin/main
     </>
   );
 }
@@ -551,6 +701,7 @@ function MultiSelect({
   imageUrl,
   imageAltText,
   videoUrl,
+  columns = "1",
   searchPlaceholder = "Search...",
   searchNoResultsText = "No results found",
 }: Readonly<MultiSelectProps>): React.JSX.Element {
@@ -667,10 +818,14 @@ function MultiSelect({
             headline={headline}
             description={description}
             required={required}
+<<<<<<< HEAD
             requiredLabel={requiredLabel}
             imageUrl={imageUrl}
             imageAltText={imageAltText}
             videoUrl={videoUrl}
+=======
+            columns={columns}
+>>>>>>> origin/main
           />
           <div className="relative" data-element-input>
             <DropdownVariant

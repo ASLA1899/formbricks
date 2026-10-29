@@ -10,9 +10,13 @@ import { getLinkSurveyCardMaxWidth } from "@formbricks/types/styling";
 import { TSurvey, TSurveyType } from "@formbricks/types/surveys/types";
 import { TWorkspace } from "@formbricks/types/workspace";
 import { cn } from "@/lib/cn";
+<<<<<<< HEAD
 import { type TStylingAppearance } from "@/lib/styling/dark-mode";
 import { toJsWorkspaceStateSurvey } from "@/lib/survey/client-utils";
 import { CardlessPreviewLogo } from "@/modules/ui/components/cardless-preview-logo";
+=======
+import { toJsEnvironmentStateSurvey } from "@/lib/survey/client-utils";
+>>>>>>> origin/main
 import { ClientLogo } from "@/modules/ui/components/client-logo";
 import { MediaBackground } from "@/modules/ui/components/media-background";
 import { Modal } from "@/modules/ui/components/preview-survey/components/modal";
@@ -288,6 +292,7 @@ export const ThemeStylingPreviewSurvey = ({
               </div>
             </div>
           </div>
+<<<<<<< HEAD
           {/* The trusted box the survey is contained in, below the chrome and its controls. */}
           <div
             {...previewBoundaryProps}
@@ -338,6 +343,60 @@ export const ThemeStylingPreviewSurvey = ({
 
           {onAppearanceChange && (
             <PreviewAppearanceSwitch appearance={appearance} onChange={onAppearanceChange} />
+=======
+        </div>
+        <div className="flex w-full flex-1 flex-col rounded-b-lg">
+          {isAppSurvey ? (
+            <Modal
+              isOpen
+              placement={placement}
+              clickOutsideClose={clickOutsideClose}
+              overlay={overlay}
+              previewMode="desktop"
+              background={project.styling.cardBackgroundColor?.light}
+              borderRadius={project.styling.roundness ?? 8}>
+              <Fragment key={surveyKey}>
+                <SurveyInline
+                  appUrl={publicDomain}
+                  isPreviewMode={true}
+                  survey={toJsEnvironmentStateSurvey({ ...survey, type: "app" })}
+                  isBrandingEnabled={project.inAppSurveyBranding}
+                  isRedirectDisabled={true}
+                  onFileUpload={async (file) => file.name}
+                  styling={styling}
+                  isCardBorderVisible={!highlightBorderColor}
+                  languageCode="default"
+                />
+              </Fragment>
+            </Modal>
+          ) : (
+            <MediaBackground
+              surveyType={survey.type}
+              styling={styling}
+              ContentRef={ContentRef as React.MutableRefObject<HTMLDivElement> | null}
+              isEditorView>
+              {!project.styling?.isLogoHidden && (
+                <button className="absolute left-5 top-5" onClick={scrollToEditLogoSection}>
+                  <ClientLogo projectLogo={project.logo} previewSurvey />
+                </button>
+              )}
+              <div
+                key={surveyKey}
+                className={`${!project.styling.isLogoHidden && !isFullScreenPreview ? "mt-12" : ""} z-0 w-full max-w-md overflow-hidden rounded-lg p-4`}>
+                <SurveyInline
+                  appUrl={publicDomain}
+                  isPreviewMode={true}
+                  survey={toJsEnvironmentStateSurvey({ ...survey, type: "link" })}
+                  isBrandingEnabled={project.linkSurveyBranding}
+                  isRedirectDisabled={true}
+                  onFileUpload={async (file) => file.name}
+                  responseCount={42}
+                  styling={styling}
+                  languageCode="default"
+                />
+              </div>
+            </MediaBackground>
+>>>>>>> origin/main
           )}
         </div>
       </div>

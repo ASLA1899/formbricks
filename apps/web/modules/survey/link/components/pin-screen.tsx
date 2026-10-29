@@ -41,7 +41,12 @@ interface PinScreenProps {
   recaptchaSiteKey?: string;
   isSpamProtectionEnabled?: boolean;
   responseCount?: number;
+<<<<<<< HEAD
   styling: TWorkspaceStyling | TSurveyStyling;
+=======
+  styling: TProjectStyling | TSurveyStyling;
+  initialValues?: Record<string, string>;
+>>>>>>> origin/main
 }
 
 export const PinScreen = (props: Readonly<PinScreenProps>) => {
@@ -68,6 +73,7 @@ export const PinScreen = (props: Readonly<PinScreenProps>) => {
     isSpamProtectionEnabled = false,
     responseCount,
     styling,
+    initialValues,
   } = props;
 
   const [localPinEntry, setLocalPinEntry] = useState<string>("");
@@ -185,8 +191,12 @@ export const PinScreen = (props: Readonly<PinScreenProps>) => {
       PRIVACY_URL={PRIVACY_URL}
       TERMS_URL={TERMS_URL}
       IS_FORMBRICKS_CLOUD={IS_FORMBRICKS_CLOUD}
+<<<<<<< HEAD
       pinAuthToken={pinAuthToken}
       customCss={customCss}
+=======
+      initialValues={initialValues}
+>>>>>>> origin/main
     />
   );
 };

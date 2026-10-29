@@ -87,7 +87,11 @@ export const fetchAirtableAuthToken = async (formData: Record<string, any>) => {
 
 export const getAirtableToken = async (workspaceId: string) => {
   try {
+<<<<<<< HEAD
     const airtableIntegration = await getIntegrationByType(workspaceId, "airtable");
+=======
+    const airtableIntegration = await getIntegrationByType(environmentId, "airtable");
+>>>>>>> origin/main
 
     const { access_token, expiry_date, refresh_token } = ZIntegrationAirtableCredential.parse(
       airtableIntegration?.config.key

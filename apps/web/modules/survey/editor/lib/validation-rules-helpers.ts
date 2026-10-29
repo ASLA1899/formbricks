@@ -68,12 +68,23 @@ export const applyRuleDeletion = (
 
 // Field options for address elements
 export const getAddressFields = (t: (key: string) => string): { value: TAddressField; label: string }[] => [
+<<<<<<< HEAD
   { value: "addressLine1", label: t("workspace.surveys.edit.address_line_1") },
   { value: "addressLine2", label: t("workspace.surveys.edit.address_line_2") },
   { value: "city", label: t("workspace.surveys.edit.city") },
   { value: "state", label: t("workspace.surveys.edit.state") },
   { value: "zip", label: t("workspace.surveys.edit.zip") },
   { value: "country", label: t("workspace.surveys.edit.country") },
+=======
+  { value: "name", label: t("common.name") },
+  { value: "organization", label: t("common.organization") },
+  { value: "addressLine1", label: t("environments.surveys.edit.address_line_1") },
+  { value: "addressLine2", label: t("environments.surveys.edit.address_line_2") },
+  { value: "city", label: t("environments.surveys.edit.city") },
+  { value: "state", label: t("environments.surveys.edit.state") },
+  { value: "zip", label: t("environments.surveys.edit.zip") },
+  { value: "country", label: t("environments.surveys.edit.country") },
+>>>>>>> origin/main
 ];
 
 // Field options for contact info elements

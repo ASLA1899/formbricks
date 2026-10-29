@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers";
 import { z } from "zod";
 import { logger } from "@formbricks/logger";
 import {
+<<<<<<< HEAD
   INVITE_TOKEN_INVALID_ERROR_CODE,
   InvalidInputError,
   PASSWORD_COMPROMISED_ERROR_CODE,
@@ -13,6 +14,14 @@ import {
 } from "@formbricks/types/errors";
 import { ZUser, ZUserLocale } from "@formbricks/types/user";
 import { IS_FORMBRICKS_CLOUD, IS_TURNSTILE_CONFIGURED, TURNSTILE_SECRET_KEY } from "@/lib/constants";
+=======
+  EMAIL_VERIFICATION_DISABLED,
+  IS_FORMBRICKS_CLOUD,
+  IS_TURNSTILE_CONFIGURED,
+  TURNSTILE_SECRET_KEY,
+  WEBAPP_URL,
+} from "@/lib/constants";
+>>>>>>> origin/main
 import { verifyInviteToken } from "@/lib/jwt";
 import { createMembership } from "@/lib/membership/service";
 import { createOrganization, getOrganization } from "@/lib/organization/service";
@@ -70,6 +79,27 @@ const ZCreatedUser = ZUser.pick({
 
 type TCreatedUser = z.infer<typeof ZCreatedUser>;
 
+<<<<<<< HEAD
+=======
+const ZCreateUserAction = z.object({
+  name: ZUserName,
+  email: ZUserEmail,
+  password: ZUserPassword,
+  inviteToken: z.string().optional(),
+  userLocale: ZUserLocale.optional(),
+  turnstileToken: z
+    .string()
+    .optional()
+    .refine(
+      (token) => !IS_TURNSTILE_CONFIGURED || (IS_TURNSTILE_CONFIGURED && token),
+      "CAPTCHA verification required"
+    ),
+  isFormbricksCloud: z.boolean(),
+  subscribeToSecurityUpdates: z.boolean().optional(),
+  subscribeToProductUpdates: z.boolean().optional(),
+});
+
+>>>>>>> origin/main
 async function verifyTurnstileIfConfigured(turnstileToken: string | undefined): Promise<void> {
   if (!IS_TURNSTILE_CONFIGURED) return;
 
@@ -266,6 +296,7 @@ async function handleOrganizationCreation(ctx: ActionClientCtx, user: TCreatedUs
     });
   }
 
+<<<<<<< HEAD
   // The organization was created just above and owns no workspaces, so there is no cap to enforce.
   const workspace = await createWorkspace(
     organization.id,
@@ -299,6 +330,12 @@ async function handleOrganizationCreation(ctx: ActionClientCtx, user: TCreatedUs
     },
     { organizationId: organization.id, workspaceId: workspace.id }
   );
+=======
+  capturePostHogEvent(user.id, "organization_created", {
+    organization_id: organization.id,
+    is_first_org: true,
+  });
+>>>>>>> origin/main
 
   await updateUser(user.id, {
     notificationSettings: {
@@ -318,7 +355,11 @@ async function handleOrganizationCreation(ctx: ActionClientCtx, user: TCreatedUs
  */
 async function handlePostUserCreation(
   ctx: ActionClientCtx,
+<<<<<<< HEAD
   { user }: Extract<TSignUpOutcome, { status: "created" }>,
+=======
+  user: TCreatedUser,
+>>>>>>> origin/main
   inviteToken: string | undefined
 ): Promise<void> {
   if (inviteToken) {
@@ -331,6 +372,7 @@ async function handlePostUserCreation(
   // requireEmailVerification config and the callbackURL chosen in signUpUserSafely.
 }
 
+<<<<<<< HEAD
 /**
  * The two sign-up gates that used to live only in `signup/page.tsx`, enforced here so a direct POST to
  * this action cannot walk around them. Extracted from `createUserAction` to keep that function within
@@ -349,6 +391,23 @@ async function assertSignupPolicyAllows(
   if (inviteToken && inviteMatch !== "valid") {
     logger.warn({ inviteMatch }, "Rejected sign-up with an unusable invite token");
     throw new InvalidInputError(INVITE_TOKEN_INVALID_ERROR_CODE);
+=======
+  if (!EMAIL_VERIFICATION_DISABLED) {
+    let inviteCallbackUrl: string | undefined;
+
+    if (inviteToken) {
+      const inviteUrl = new URL("/invite", WEBAPP_URL);
+      inviteUrl.searchParams.set("token", inviteToken);
+      inviteCallbackUrl = inviteUrl.toString();
+    }
+
+    await sendVerificationEmail({
+      id: user.id,
+      email: user.email,
+      locale: user.locale,
+      callbackUrl: inviteCallbackUrl,
+    });
+>>>>>>> origin/main
   }
 
   // A valid invite is an independent grant — it admits the holder whatever the instance policy says.
@@ -382,6 +441,7 @@ export const createUserAction = actionClient.inputSchema(ZCreateUserAction).acti
     const inviteToken = parsedInput.inviteToken?.trim() || undefined;
     const inviteMatch = await resolveInviteMatch(inviteToken, parsedInput.email);
 
+<<<<<<< HEAD
     const { isBootstrapAdmin } = await assertSignupPolicyAllows(inviteToken, inviteMatch);
 
     // Formbricks Cloud only: reject personal/free/disposable email domains before any user is created.
@@ -440,6 +500,10 @@ export const createUserAction = actionClient.inputSchema(ZCreateUserAction).acti
       }
 
       await handlePostUserCreation(ctx, outcome, inviteToken);
+=======
+    if (!userAlreadyExisted && user) {
+      await handlePostUserCreation(ctx, user, parsedInput.inviteToken);
+>>>>>>> origin/main
 
       await subscribeUserToMailingList({
         email: user.email,

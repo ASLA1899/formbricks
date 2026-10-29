@@ -39,7 +39,11 @@ const getSurveyState: () => SurveyState = () => ({
   contactId: "contact1",
   surveyId: "survey1",
   singleUseId: "single1",
+<<<<<<< HEAD
   pinAuthToken: null,
+=======
+  initialValues: {},
+>>>>>>> origin/main
   shouldCreateResponseFromState: false,
   responseAcc: { finished: false, data: {}, ttc: {}, variables: {} },
   updateResponseId: vi.fn(),
@@ -50,6 +54,7 @@ const getSurveyState: () => SurveyState = () => ({
   disableBootstrapResponseCreate: vi.fn(),
   accumulateResponse: vi.fn(),
   isResponseFinished: vi.fn(),
+  getInitialValue: vi.fn(),
   clear: vi.fn(),
   copy: vi.fn(),
   setSurveyId: vi.fn(),
@@ -118,20 +123,30 @@ describe("ResponseQueue", () => {
   });
 
   test("processQueue does nothing if request in progress or queue empty", async () => {
-    queue["isRequestInProgress"] = true;
-    await queue.processQueue();
-    queue["isRequestInProgress"] = false;
-    queue.queue.length = 0;
-    await queue.processQueue();
+    const reqQueue = new ResponseQueue(getConfig({ surveyId: "s1" }), getSurveyState());
+    _syncLocks.setRequestInProgress("s1", true);
+    await reqQueue.processQueue();
+    _syncLocks.setRequestInProgress("s1", false);
+    reqQueue.queue.length = 0;
+    await reqQueue.processQueue();
     expect(true).toBe(true); // just to ensure no errors
   });
 
   test("processQueue sends response and removes from queue on success", async () => {
+<<<<<<< HEAD
     queue.queue.push(responseUpdate);
     vi.spyOn(queue, "sendResponse").mockResolvedValue(ok(true));
     await queue.processQueue();
     expect(queue.queue).toHaveLength(0);
     expect(queue["isRequestInProgress"]).toBe(false);
+=======
+    const reqQueue = new ResponseQueue(getConfig({ surveyId: "s1" }), getSurveyState());
+    reqQueue.queue.push(responseUpdate);
+    vi.spyOn(reqQueue, "sendResponse").mockResolvedValue(ok(true));
+    await reqQueue.processQueue();
+    expect(reqQueue.queue.length).toBe(0);
+    expect(_syncLocks.getRequestInProgress("s1")).toBe(false);
+>>>>>>> origin/main
   });
 
   // These specs keep the real sendResponse()/sendResponseWithRetry() classification+retry path and
@@ -139,6 +154,7 @@ describe("ResponseQueue", () => {
   // the error passthrough are actually exercised. responseId is set so the real update path runs
   // (the ENG-1319 scenario is a PUT update rejected server-side).
   test("processQueue retries and calls onResponseSendingFailed on recaptcha error", async () => {
+<<<<<<< HEAD
     surveyState.responseId = "resp1";
     queue.queue.push(responseUpdate);
 
@@ -154,13 +170,32 @@ describe("ResponseQueue", () => {
 
     await queue.processQueue();
     expect(config.onResponseSendingFailed).toHaveBeenCalledWith(
+=======
+    const recaptchaConfig = getConfig({ surveyId: "s1" });
+    const recaptchaQueue = new ResponseQueue(recaptchaConfig, getSurveyState());
+    recaptchaQueue.queue.push(responseUpdate);
+
+    vi.spyOn(recaptchaQueue, "sendResponse").mockResolvedValue(
+      err({
+        code: "internal_server_error",
+        message: "An error occurred while sending the response.",
+        status: 500,
+        details: {
+          code: "recaptcha_verification_failed",
+        },
+      })
+    );
+    await recaptchaQueue.processQueue();
+    expect(recaptchaConfig.onResponseSendingFailed).toHaveBeenCalledWith(
+>>>>>>> origin/main
       responseUpdate,
       TResponseErrorCodesEnum.RecaptchaError
     );
-    expect(queue["isRequestInProgress"]).toBe(false);
+    expect(_syncLocks.getRequestInProgress("s1")).toBe(false);
   });
 
   test("processQueue retries and calls onResponseSendingFailed after max attempts", async () => {
+<<<<<<< HEAD
     surveyState.responseId = "resp1";
     queue.queue.push(responseUpdate);
     apiMock.updateResponse.mockResolvedValue({
@@ -202,6 +237,24 @@ describe("ResponseQueue", () => {
       TResponseErrorCodesEnum.ResponseAlreadyCompleted
     );
     expect(queue["isRequestInProgress"]).toBe(false);
+=======
+    const reqConfig = getConfig({ surveyId: "s1" });
+    const reqQueue = new ResponseQueue(reqConfig, getSurveyState());
+    reqQueue.queue.push(responseUpdate);
+    vi.spyOn(reqQueue, "sendResponse").mockResolvedValue(
+      err({
+        code: "internal_server_error",
+        message: "An error occurred while sending the response.",
+        status: 500,
+      })
+    );
+    await reqQueue.processQueue();
+    expect(reqConfig.onResponseSendingFailed).toHaveBeenCalledWith(
+      responseUpdate,
+      TResponseErrorCodesEnum.ResponseSendingError
+    );
+    expect(_syncLocks.getRequestInProgress("s1")).toBe(false);
+>>>>>>> origin/main
   });
 
   test("processQueue detects already-completed via the stable details.code marker, ignoring message wording", async () => {
@@ -384,8 +437,9 @@ describe("ResponseQueue", () => {
   });
 
   test("processQueueAsync returns success false if request in progress", async () => {
-    queue["isRequestInProgress"] = true;
-    const result = await queue.processQueue();
+    const reqQueue = new ResponseQueue(getConfig({ surveyId: "s1" }), getSurveyState());
+    _syncLocks.setRequestInProgress("s1", true);
+    const result = await reqQueue.processQueue();
     expect(result.success).toBe(false);
   });
 
@@ -849,6 +903,7 @@ describe("ResponseQueue", () => {
 
     const result = await offlineQueue.syncPersistedResponses();
     expect(result).toEqual({ success: true, syncedCount: 1 });
+<<<<<<< HEAD
     expect(removePendingResponseStrict).toHaveBeenCalledWith(10);
     expect(offlineQueue.queue).toHaveLength(0);
     expect(_syncLocks.get("s1")).toBe(false);
@@ -934,6 +989,11 @@ describe("ResponseQueue", () => {
       "Formbricks: Failed to remove synced response from IndexedDB",
       expect.objectContaining({ error, surveyId: "s1" })
     );
+=======
+    expect(removePendingResponse).toHaveBeenCalledWith(10);
+    expect(offlineQueue.queue.length).toBe(0);
+    expect(_syncLocks.get("s1")).toBe(false);
+>>>>>>> origin/main
   });
 
   test("syncPersistedResponses stops on server error", async () => {

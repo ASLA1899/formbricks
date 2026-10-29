@@ -74,7 +74,14 @@ describe("convertToCsv", () => {
   test("should preserve distinct columns whose labels collide after sanitization", async () => {
     // "=field" and "'=field" both render as "'=field" once defanged, but the
     // underlying row keys must stay distinct so neither cell is dropped.
+<<<<<<< HEAD
     const csv = await convertToCsv(["=field", "'=field"], [{ "=field": "a", "'=field": "b" }]);
+=======
+    const csv = await convertToCsv(
+      ["=field", "'=field"],
+      [{ "=field": "a", "'=field": "b" }]
+    );
+>>>>>>> origin/main
     const lines = csv.trim().split("\n");
     expect(lines[0]).toBe('"\'=field","\'=field"');
     expect(lines[1]).toBe('"a","b"');
@@ -140,7 +147,14 @@ describe("convertToXlsxBuffer", () => {
   test("should preserve distinct xlsx columns whose labels collide after sanitization", () => {
     // Original keys "=field" and "'=field" both render as "'=field"; ensure
     // both cells survive instead of one overwriting the other.
+<<<<<<< HEAD
     const buffer = convertToXlsxBuffer(["=field", "'=field"], [{ "=field": "a", "'=field": "b" }]);
+=======
+    const buffer = convertToXlsxBuffer(
+      ["=field", "'=field"],
+      [{ "=field": "a", "'=field": "b" }]
+    );
+>>>>>>> origin/main
     const wb = xlsx.read(buffer, { type: "buffer" });
     const sheet = wb.Sheets["Sheet1"];
     expect(sheet["A1"].v).toBe("'=field");

@@ -98,6 +98,20 @@ const ZSurveyBase = z.object({
   displayLimit: z.number().nullable().describe("Display limit for the survey"),
   autoClose: z.number().nullable().describe("Auto close time in seconds"),
   autoComplete: z.number().nullable().describe("Auto complete time in seconds"),
+  runOnDate: z.coerce
+    .date()
+    .nullable()
+    .describe("UTC instant when the survey should auto-open. Null = no scheduled open."),
+  closeOnDate: z.coerce
+    .date()
+    .nullable()
+    .describe("UTC instant when the survey should auto-close. Null = no scheduled close."),
+  scheduleTimezone: z
+    .string()
+    .nullable()
+    .describe(
+      "IANA timezone (e.g. 'America/New_York') used to render the wall-clock back to the editor. Null when both timestamps are null."
+    ),
   delay: z.number().describe("Delay before showing survey"),
   publishOn: z.coerce.date().nullable().describe("Date when the survey should be published"),
   closeOn: z.coerce.date().nullable().describe("Date when the survey should be closed"),
@@ -147,6 +161,15 @@ const ZSurveyBase = z.object({
     })
     .describe("Single use configuration"),
   isVerifyEmailEnabled: z.boolean().describe("Whether email verification is enabled"),
+<<<<<<< HEAD
+=======
+  isSingleResponsePerEmailEnabled: z.boolean().describe("Whether single response per email is enabled"),
+  invitationConfig: z
+    .record(z.string(), z.any())
+    .nullable()
+    .optional()
+    .describe("Invitation + reminder configuration (audience, schedule, email templates)"),
+>>>>>>> origin/main
   inlineTriggers: z.array(z.any()).nullable().describe("Inline triggers configuration"),
   isBackButtonHidden: z.boolean().describe("Whether the back button is hidden"),
   isAutoProgressingEnabled: z.boolean().describe("Whether auto-progress is enabled for eligible questions"),

@@ -1,6 +1,18 @@
+<<<<<<< HEAD
 import type { TRendererCustomCss } from "./custom-css";
 import type { TJsFileUploadParams, TJsWorkspaceStateSurvey } from "./js";
 import type { TResponseData, TResponseHiddenFieldValue, TResponseUpdate } from "./responses";
+=======
+import type { TJsEnvironmentStateSurvey, TJsFileUploadParams } from "./js";
+import type { TProjectStyling } from "./project";
+import type {
+  TResponseData,
+  TResponseHiddenFieldValue,
+  TResponseTtc,
+  TResponseUpdate,
+  TResponseVariables,
+} from "./responses";
+>>>>>>> origin/main
 import type { TUploadFileConfig } from "./storage";
 import type { TSurveyStyling } from "./surveys/types";
 import type { TWorkspaceStyling } from "./workspace";
@@ -33,6 +45,13 @@ export interface TSurveyCardRect {
   y: number;
   width: number;
   height: number;
+}
+
+export interface TResumedResponse {
+  id: string;
+  data: TResponseData;
+  ttc: TResponseTtc;
+  variables: TResponseVariables;
 }
 
 export interface SurveyBaseProps {
@@ -75,7 +94,12 @@ export interface SurveyBaseProps {
   hiddenFieldsRecord?: TResponseHiddenFieldValue;
   shouldResetQuestionId?: boolean;
   fullSizeCards?: boolean;
+<<<<<<< HEAD
   showCardlessPreviewLogoSlot?: boolean;
+=======
+  cardSize?: "normal" | "tall";
+  autoAdvance?: boolean;
+>>>>>>> origin/main
 }
 
 export interface SurveyInlineProps extends SurveyBaseProps {
@@ -134,6 +158,8 @@ export interface SurveyContainerProps extends Omit<SurveyBaseProps, "onFileUploa
   isSpamProtectionEnabled?: boolean;
   recaptchaSiteKey?: string;
   getRecaptchaToken?: () => Promise<string | null>;
+  resumedResponse?: TResumedResponse;
+  onResponseIdReceived?: (responseId: string) => void;
   offlineSupport?: boolean;
   onOfflineStatusChange?: (status: {
     isOnline: boolean;

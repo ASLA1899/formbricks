@@ -41,7 +41,10 @@
     "terms_of_service": "Xizmat ko'rsatish shartlari",
     "the_servers_cannot_be_reached_at_the_moment": "Hozirda serverlarga ulanish imkoni yo'q.",
     "they_will_be_redirected_immediately": "Ular darhol yo'naltiriladi",
+<<<<<<< HEAD:packages/surveys/locales/uz-UZ.json
     "time_remaining_before_the_survey_closes": "So'rovnoma yopilishiga qolgan vaqt",
+=======
+>>>>>>> origin/main:packages/surveys/locales/uz.json
     "welcome_video": "Xush kelibsiz kartasi videosi",
     "your_feedback_is_stuck": "Sizning fikr-mulohazangiz qotib qoldi :("
   },

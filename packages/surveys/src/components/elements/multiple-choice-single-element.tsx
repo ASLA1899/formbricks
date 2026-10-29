@@ -196,6 +196,7 @@ export function MultipleChoiceSingleElement({
         imageUrl={element.imageUrl}
         imageAltText={getLocalizedValue(element.imageAltText, languageCode)}
         videoUrl={element.videoUrl}
+        columns={element.columns}
         searchPlaceholder={t("common.search")}
         searchNoResultsText={t("common.no_results_found")}
       />

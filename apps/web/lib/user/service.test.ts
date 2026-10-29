@@ -9,7 +9,10 @@ import { TUserLocale, TUserUpdateInput } from "@formbricks/types/user";
 import { deleteUserOrganizationRelationships } from "@/lib/authzed/organization-membership";
 import { deleteUserTeamRelationships } from "@/lib/authzed/team-workspace";
 import { deleteOrganization, getOrganizationsWhereUserIsSingleOwner } from "@/lib/organization/service";
+<<<<<<< HEAD
 import { deleteBrevoCustomerByEmail } from "@/modules/auth/lib/brevo";
+=======
+>>>>>>> origin/main
 import { publicUserSelect } from "./public-user";
 import { deleteUser, getUser, getUserByEmail, getUsersWithOrganization, updateUser } from "./service";
 
@@ -65,7 +68,11 @@ describe("User Service", () => {
     locale: "en-US" as TUserLocale,
     lastLoginAt: new Date(),
     isActive: true,
+<<<<<<< HEAD
   } as Prisma.UserGetPayload<object>;
+=======
+  };
+>>>>>>> origin/main
 
   const mockOrganizations: TOrganization[] = [
     {
@@ -150,6 +157,7 @@ describe("User Service", () => {
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
         where: { email: "test@example.com" },
         select: publicUserSelect,
+<<<<<<< HEAD
       });
     });
 
@@ -163,6 +171,8 @@ describe("User Service", () => {
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
         where: { email: "test@example.com" },
         select: publicUserSelect,
+=======
+>>>>>>> origin/main
       });
     });
 

@@ -165,7 +165,45 @@ export const SignupForm = ({
         throw new Error(t("auth.signup.please_verify_captcha"));
       }
 
+<<<<<<< HEAD
       const resetTurnstileIfConfigured = () => {
+=======
+      const createUserResponse = await createUserAction({
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        userLocale,
+        inviteToken: inviteToken ?? "",
+        turnstileToken,
+        isFormbricksCloud,
+        subscribeToSecurityUpdates,
+        subscribeToProductUpdates,
+      });
+
+      const emailTokenActionResponse = await createEmailTokenAction({ email: data.email });
+      const token = emailTokenActionResponse?.data;
+
+      const url = emailVerificationDisabled
+        ? `/auth/signup-without-verification-success?token=${token}`
+        : buildVerificationRequestedPath({
+            token: token ?? "",
+            callbackUrl: inviteToken ? returnToUrl : undefined,
+          });
+
+      if (createUserResponse?.data) {
+        router.push(url);
+
+        if (!emailTokenActionResponse?.data) {
+          if (isTurnstileConfigured) {
+            setTurnstileToken(undefined);
+            turnstile.reset();
+          }
+
+          const errorMessage = getFormattedErrorMessage(emailTokenActionResponse);
+          toast.error(errorMessage);
+        }
+      } else {
+>>>>>>> origin/main
         if (isTurnstileConfigured) {
           setTurnstileToken(undefined);
           turnstile.reset();

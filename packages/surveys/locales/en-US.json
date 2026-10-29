@@ -41,7 +41,10 @@
     "terms_of_service": "Terms of Service",
     "the_servers_cannot_be_reached_at_the_moment": "The servers cannot be reached at the moment.",
     "they_will_be_redirected_immediately": "They will be redirected immediately",
+<<<<<<< HEAD:packages/surveys/locales/en-US.json
     "time_remaining_before_the_survey_closes": "Time remaining before the survey closes",
+=======
+>>>>>>> origin/main:packages/surveys/locales/en.json
     "welcome_video": "Welcome Card video",
     "your_feedback_is_stuck": "Your feedback is stuck :("
   },

@@ -157,8 +157,13 @@ export const mockSurvey: TSurvey = {
   delay: 0,
   displayPercentage: null,
   autoComplete: null,
+  runOnDate: null,
+  closeOnDate: null,
+  scheduleTimezone: null,
   isVerifyEmailEnabled: false,
   isBackButtonHidden: false,
+  autoAdvance: false,
+  snowflakeSync: false,
   recaptcha: null,
   workspaceOverwrites: null,
   styling: null,
@@ -231,6 +236,7 @@ export const mockContactQuestion: TSurveyContactInfoQuestion = {
   backButtonLabel: {
     default: "Back‌‌‍‍‌‌‌‍‌‌‌‍‍‌‌‌‍‌‌‌‍‍‍‌‌‍‌‌‌‌‌‍‌‍‌‌",
   },
+  customFields: [],
 };
 
 export const mockContactEmailFollowUp: TSurvey["followUps"][number] = {

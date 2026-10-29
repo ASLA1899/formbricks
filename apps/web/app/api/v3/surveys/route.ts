@@ -18,6 +18,7 @@ export const GET = withV3ApiWrapper({
   },
 });
 
+<<<<<<< HEAD
 export const POST = withV3ApiWrapper({
   auth: "both",
   schemas: {
@@ -35,5 +36,62 @@ export const POST = withV3ApiWrapper({
       auditLog,
       createdFrom: parsedInput.query?.createdFrom,
     });
+=======
+    try {
+      const searchParams = new URL(req.url).searchParams;
+      const parsed = parseV3SurveysListQuery(searchParams);
+      if (!parsed.ok) {
+        log.warn({ statusCode: 400, invalidParams: parsed.invalid_params }, "Validation failed");
+        return problemBadRequest(requestId, "Invalid query parameters", {
+          invalid_params: parsed.invalid_params,
+          instance,
+        });
+      }
+
+      const authResult = await requireV3WorkspaceAccess(
+        authentication,
+        parsed.workspaceId,
+        "read",
+        requestId,
+        instance
+      );
+      if (authResult instanceof Response) {
+        return authResult;
+      }
+
+      const { environmentId } = authResult;
+
+      const [{ surveys, nextCursor }, totalCount] = await Promise.all([
+        getSurveyListPage(environmentId, {
+          limit: parsed.limit,
+          cursor: parsed.cursor,
+          sortBy: parsed.sortBy,
+          filterCriteria: parsed.filterCriteria,
+        }),
+        getSurveyCount(environmentId, undefined, parsed.filterCriteria),
+      ]);
+
+      return successListResponse(
+        surveys.map(serializeV3SurveyListItem),
+        {
+          limit: parsed.limit,
+          nextCursor,
+          totalCount,
+        },
+        { requestId, cache: "private, no-store" }
+      );
+    } catch (err) {
+      if (err instanceof ResourceNotFoundError) {
+        log.warn({ statusCode: 403, errorCode: err.name }, "Resource not found");
+        return problemForbidden(requestId, "You are not authorized to access this resource", instance);
+      }
+      if (err instanceof DatabaseError) {
+        log.error({ error: err, statusCode: 500 }, "Database error");
+        return problemInternalError(requestId, "An unexpected error occurred.", instance);
+      }
+      log.error({ error: err, statusCode: 500 }, "V3 surveys list unexpected error");
+      return problemInternalError(requestId, "An unexpected error occurred.", instance);
+    }
+>>>>>>> origin/main
   },
 });

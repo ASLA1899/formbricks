@@ -41,7 +41,10 @@
     "terms_of_service": "सेवा की शर्तें",
     "the_servers_cannot_be_reached_at_the_moment": "इस समय सर्वर तक पहुंचा नहीं जा सकता है।",
     "they_will_be_redirected_immediately": "उन्हें तुरंत रीडायरेक्ट किया जाएगा",
+<<<<<<< HEAD:packages/surveys/locales/hi-IN.json
     "time_remaining_before_the_survey_closes": "सर्वे बंद होने से पहले बचा हुआ समय",
+=======
+>>>>>>> origin/main:packages/surveys/locales/hi.json
     "welcome_video": "स्वागत कार्ड वीडियो",
     "your_feedback_is_stuck": "आपकी प्रतिक्रिया अटक गई है :("
   },

@@ -6,8 +6,11 @@ import { THandlerParams, withV1ApiWrapper } from "@/app/lib/api/with-api-logging
 import { MAX_FILE_UPLOAD_SIZES } from "@/lib/constants";
 import { getOrganization } from "@/lib/organization/service";
 import { getSurvey } from "@/lib/survey/service";
+<<<<<<< HEAD:apps/web/app/api/v1/client/[workspaceId]/storage/route.ts
 import { getOrganizationIdFromWorkspaceId } from "@/lib/utils/helper";
 import { resolveClientApiIds } from "@/lib/utils/resolve-client-id";
+=======
+>>>>>>> origin/main:apps/web/app/api/v1/client/[environmentId]/storage/route.ts
 import { applyRateLimit } from "@/modules/core/rate-limit/helpers";
 import { rateLimitConfigs } from "@/modules/core/rate-limit/rate-limit-configs";
 import { getBiggerUploadFileSizePermission } from "@/modules/ee/license-check/lib/utils";
@@ -88,9 +91,22 @@ export const POST = withV1ApiWrapper({
 
     if (survey.workspaceId !== workspaceId) {
       return {
+<<<<<<< HEAD:apps/web/app/api/v1/client/[workspaceId]/storage/route.ts
         response: responses.badRequestResponse(
           "Survey does not belong to the workspace",
           { surveyId, workspaceId },
+=======
+        response: responses.badRequestResponse("Survey does not belong to this environment", undefined, true),
+      };
+    }
+
+    try {
+      await applyRateLimit(rateLimitConfigs.storage.uploadPerEnvironment, environmentId);
+    } catch (error) {
+      return {
+        response: responses.tooManyRequestsResponse(
+          error instanceof Error ? error.message : "Rate limit exceeded",
+>>>>>>> origin/main:apps/web/app/api/v1/client/[environmentId]/storage/route.ts
           true
         ),
       };

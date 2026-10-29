@@ -196,6 +196,33 @@ const nextConfig = {
       },
     ];
   },
+<<<<<<< HEAD
+=======
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /\.(mp4|webm|ogg|swf|ogv)$/,
+      use: [
+        {
+          loader: "file-loader",
+          options: {
+            publicPath: "/_next/static/videos/",
+            outputPath: "static/videos/",
+            name: "[name].[hash].[ext]",
+          },
+        },
+      ],
+    });
+    config.resolve.fallback = {
+      http: false, // Prevents Next.js from trying to bundle 'http'
+      https: false,
+      // TypeORM optional dependencies (needed for snowflake-sdk)
+      'react-native-sqlite-storage': false,
+      'mysql': false,
+      '@sap/hana-client/extension/Stream': false,
+    };
+    return config;
+  },
+>>>>>>> origin/main
   async headers() {
     const isProduction = process.env.NODE_ENV === "production";
     const scriptSrcUnsafeEval = isProduction ? "" : " 'unsafe-eval'";

@@ -91,15 +91,21 @@ const createMockSurvey = (blocks: TSurveyBlock[] = []): TSurvey => ({
   followUps: [],
   delay: 0,
   autoComplete: null,
+  runOnDate: null,
+  closeOnDate: null,
+  scheduleTimezone: null,
   showLanguageSwitch: null,
   recaptcha: null,
   isBackButtonHidden: false,
+  autoAdvance: false,
+  snowflakeSync: false,
   metadata: {},
   isCaptureIpEnabled: false,
   isAnonymizeResponsesEnabled: false,
   slug: null,
 });
 
+<<<<<<< HEAD
 describe("isAutoBlockName", () => {
   test("should treat the auto-generated pattern as unset", () => {
     expect(isAutoBlockName("Block 1")).toBe(true);
@@ -154,6 +160,14 @@ describe("renumberAutoNamedBlocks", () => {
       createMockBlock("b1", "Screening"),
       createMockBlock("b2", "Block 7"),
       createMockBlock("b3", "Feedback"),
+=======
+describe("renumberBlocks", () => {
+  test("should renumber blocks with auto-generated names sequentially", () => {
+    const blocks = [
+      createMockBlock("block-1", "Block 5"),
+      createMockBlock("block-2", "Block 7"),
+      createMockBlock("block-3", "Block 9"),
+>>>>>>> origin/main
     ];
 
     expect(renumberAutoNamedBlocks(blocks).map((block) => block.name)).toEqual([
@@ -163,10 +177,52 @@ describe("renumberAutoNamedBlocks", () => {
     ]);
   });
 
+<<<<<<< HEAD
   test("should leave a blank name blank", () => {
     const blocks = [createMockBlock("b1", "Screening"), createMockBlock("b2", "   ")];
 
     expect(renumberAutoNamedBlocks(blocks)[1].name).toBe("   ");
+=======
+  test("should preserve custom block names and only renumber auto-generated ones", () => {
+    const blocks = [
+      createMockBlock("block-1", "Block 1"),
+      createMockBlock("block-2", "Demographics"),
+      createMockBlock("block-3", "Block 3"),
+    ];
+
+    const result = renumberBlocks(blocks);
+
+    expect(result[0].name).toBe("Block 1");
+    expect(result[1].name).toBe("Demographics");
+    expect(result[2].name).toBe("Block 3");
+  });
+
+  test("should preserve block IDs and other properties", () => {
+    const blocks = [
+      createMockBlock("block-1", "Block 1", [createMockElement("q1")]),
+      createMockBlock("block-2", "Block 2", [createMockElement("q2")]),
+    ];
+
+    const result = renumberBlocks(blocks);
+
+    expect(result[0].id).toBe("block-1");
+    expect(result[1].id).toBe("block-2");
+    expect(result[0].elements).toHaveLength(1);
+    expect(result[1].elements).toHaveLength(1);
+  });
+
+  test("should handle empty array", () => {
+    const result = renumberBlocks([]);
+    expect(result).toHaveLength(0);
+  });
+
+  test("should handle single block", () => {
+    const blocks = [createMockBlock("block-1", "Block 7")];
+    const result = renumberBlocks(blocks);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("Block 1");
+>>>>>>> origin/main
   });
 });
 
@@ -269,8 +325,15 @@ describe("addBlock", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.blocks).toHaveLength(3);
+<<<<<<< HEAD
       // The inserted block keeps the name it was given; the auto-named ones it displaced resequence.
       expect(result.data.blocks.map((block) => block.name)).toEqual(["Block 1", "Block 1.5", "Block 3"]);
+=======
+      expect(result.data.blocks[0].name).toBe("Block 1");
+      // Custom name (does not match /^Block \d+$/) is preserved
+      expect(result.data.blocks[1].name).toBe("Block 1.5");
+      expect(result.data.blocks[2].name).toBe("Block 3");
+>>>>>>> origin/main
     }
   });
 

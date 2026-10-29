@@ -543,6 +543,7 @@ export const ZSegment = z.object({
 });
 
 // Minimal segment shape for the public client API — strips sensitive targeting logic
+<<<<<<< HEAD
 export const ZJsWorkspaceStateSegment = z.object({
   id: z.string(),
   hasFilters: z.boolean(),
@@ -643,6 +644,13 @@ export const buildSurveyInteractionRefreshMap = (
 
   return { refreshBySurveyId, hasAny };
 };
+=======
+export const ZJsEnvironmentStateSegment = z.object({
+  id: z.string(),
+  hasFilters: z.boolean(),
+});
+export type TJsEnvironmentStateSegment = z.infer<typeof ZJsEnvironmentStateSegment>;
+>>>>>>> origin/main
 
 export const ZSegmentCreateInput = z.object({
   workspaceId: z.string(),

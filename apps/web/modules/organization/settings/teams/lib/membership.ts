@@ -61,6 +61,7 @@ export const getMembershipByOrganizationId = reactCache(
           userId: true,
           accepted: true,
           role: true,
+          surveyAdmin: true,
         },
         take: page ? ITEMS_PER_PAGE : undefined,
         skip: page ? ITEMS_PER_PAGE * (page - 1) : undefined,
@@ -74,7 +75,11 @@ export const getMembershipByOrganizationId = reactCache(
           accepted: member.accepted,
           role: member.role,
           isActive: member.user?.isActive || false,
+<<<<<<< HEAD
           lastLoginAt: member.user?.lastLoginAt ?? null,
+=======
+          surveyAdmin: member.surveyAdmin,
+>>>>>>> origin/main
         };
       });
 

@@ -18,8 +18,13 @@ import {
 } from "@formbricks/types/errors";
 import { TSurveyBlock } from "@formbricks/types/surveys/blocks";
 import { TSurveyFilterCriteria } from "@formbricks/types/surveys/types";
+<<<<<<< HEAD
 import { reconcileEmbeddedData } from "@/lib/embedded-data/reconcile";
 import { getOrganizationByWorkspaceId } from "@/lib/organization/service";
+=======
+import { getOrganizationByEnvironmentId } from "@/lib/organization/service";
+import { type SurveyAccessMembership, getSurveyAccessWhere } from "@/lib/survey/access";
+>>>>>>> origin/main
 import { checkForInvalidMediaInBlocks } from "@/lib/survey/utils";
 import type { TSurveyActorContext } from "@/lib/survey/visibility/actor-context";
 import { resolveSurveyCreationFacts } from "@/lib/survey/visibility/creation";
@@ -30,10 +35,226 @@ import { getTranslate } from "@/lingodotdev/server";
 import { resolveCopiedSurveyCustomCss } from "@/modules/custom-css/lib/service";
 import { getIsQuotasEnabled } from "@/modules/ee/license-check/lib/utils";
 import { getQuotas } from "@/modules/ee/quotas/lib/quotas";
+<<<<<<< HEAD
 import { assertCanWriteCustomHeadScripts } from "@/modules/survey/lib/custom-head-scripts-permission";
 import { buildWhereClause } from "@/modules/survey/lib/utils";
 import { doesWorkspaceExist, getWorkspaceWithLanguages } from "@/modules/survey/list/lib/workspace";
 import type { TWorkspaceWithLanguages } from "@/modules/survey/list/types/surveys";
+=======
+import { buildOrderByClause, buildWhereClause } from "@/modules/survey/lib/utils";
+import { doesEnvironmentExist } from "@/modules/survey/list/lib/environment";
+import { getProjectWithLanguagesByEnvironmentId } from "@/modules/survey/list/lib/project";
+import { TProjectWithLanguages, TSurvey } from "@/modules/survey/list/types/surveys";
+import { mapSurveyRowToSurvey, mapSurveyRowsToSurveys, surveySelect } from "./survey-record";
+
+export type SurveyAccessContext = {
+  userId: string;
+  membership: SurveyAccessMembership;
+};
+
+export const getSurveys = reactCache(
+  async (
+    environmentId: string,
+    accessContext: SurveyAccessContext,
+    limit?: number,
+    offset?: number,
+    filterCriteria?: TSurveyFilterCriteria
+  ): Promise<TSurvey[]> => {
+    try {
+      if (filterCriteria?.sortBy === "relevance") {
+        // Call the sortByRelevance function
+        return await getSurveysSortedByRelevance(
+          environmentId,
+          accessContext,
+          limit,
+          offset ?? 0,
+          filterCriteria
+        );
+      }
+
+      // Fetch surveys normally with pagination and include response count
+      const surveysPrisma = await prisma.survey.findMany({
+        where: {
+          AND: [{ environmentId, ...buildWhereClause(filterCriteria) }, getSurveyAccessWhere(accessContext)],
+        },
+        select: surveySelect,
+        orderBy: buildOrderByClause(filterCriteria?.sortBy),
+        take: limit,
+        skip: offset,
+      });
+
+      return mapSurveyRowsToSurveys(surveysPrisma);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        logger.error(error, "Error getting surveys");
+        throw new DatabaseError(error.message);
+      }
+      throw error;
+    }
+  }
+);
+
+export const getSurveysSortedByRelevance = reactCache(
+  async (
+    environmentId: string,
+    accessContext: SurveyAccessContext,
+    limit?: number,
+    offset?: number,
+    filterCriteria?: TSurveyFilterCriteria
+  ): Promise<TSurvey[]> => {
+    try {
+      let surveys: TSurvey[] = [];
+      const accessWhere = getSurveyAccessWhere(accessContext);
+
+      const inProgressSurveyCount = await prisma.survey.count({
+        where: {
+          AND: [
+            {
+              environmentId,
+              status: "inProgress",
+              ...buildWhereClause(filterCriteria),
+            },
+            accessWhere,
+          ],
+        },
+      });
+
+      // Fetch surveys that are in progress first
+      const inProgressSurveys =
+        offset && offset > inProgressSurveyCount
+          ? []
+          : await prisma.survey.findMany({
+              where: {
+                AND: [
+                  {
+                    environmentId,
+                    status: "inProgress",
+                    ...buildWhereClause(filterCriteria),
+                  },
+                  accessWhere,
+                ],
+              },
+              select: surveySelect,
+              orderBy: buildOrderByClause("updatedAt"),
+              take: limit,
+              skip: offset,
+            });
+
+      surveys = mapSurveyRowsToSurveys(inProgressSurveys);
+
+      // Determine if additional surveys are needed
+      if (offset !== undefined && limit && inProgressSurveys.length < limit) {
+        const remainingLimit = limit - inProgressSurveys.length;
+        const newOffset = Math.max(0, offset - inProgressSurveyCount);
+        const additionalSurveys = await prisma.survey.findMany({
+          where: {
+            AND: [
+              {
+                environmentId,
+                status: { not: "inProgress" },
+                ...buildWhereClause(filterCriteria),
+              },
+              accessWhere,
+            ],
+          },
+          select: surveySelect,
+          orderBy: buildOrderByClause("updatedAt"),
+          take: remainingLimit,
+          skip: newOffset,
+        });
+
+        surveys = [...surveys, ...mapSurveyRowsToSurveys(additionalSurveys)];
+      }
+
+      return surveys;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        logger.error(error, "Error getting surveys sorted by relevance");
+        throw new DatabaseError(error.message);
+      }
+      throw error;
+    }
+  }
+);
+
+export const getSurvey = reactCache(async (surveyId: string): Promise<TSurvey | null> => {
+  let surveyPrisma;
+  try {
+    surveyPrisma = await prisma.survey.findUnique({
+      where: {
+        id: surveyId,
+      },
+      select: surveySelect,
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      logger.error(error, "Error getting survey");
+      throw new DatabaseError(error.message);
+    }
+    throw error;
+  }
+
+  if (!surveyPrisma) {
+    return null;
+  }
+
+  return mapSurveyRowToSurvey(surveyPrisma);
+});
+
+export const deleteSurvey = async (surveyId: string): Promise<boolean> => {
+  try {
+    const deletedSurvey = await prisma.survey.delete({
+      where: {
+        id: surveyId,
+      },
+      select: {
+        id: true,
+        environmentId: true,
+        segment: {
+          select: {
+            id: true,
+            isPrivate: true,
+          },
+        },
+        type: true,
+        triggers: {
+          select: {
+            actionClass: {
+              select: {
+                id: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (deletedSurvey.type === "app" && deletedSurvey.segment?.isPrivate) {
+      await prisma.segment.delete({
+        where: {
+          id: deletedSurvey.segment.id,
+        },
+      });
+    }
+
+    return true;
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      logger.error(error, "Error deleting survey");
+      throw new DatabaseError(error.message);
+    }
+
+    throw error;
+  }
+};
+>>>>>>> origin/main
+
+const withoutFollowUpAttachment = (action: unknown): Prisma.InputJsonValue => {
+  const value = action as { properties?: { attachment?: unknown } } | null;
+  if (!value?.properties || !("attachment" in value.properties)) return value as Prisma.InputJsonValue;
+  const { attachment: _attachment, ...properties } = value.properties;
+  return { ...value, properties } as Prisma.InputJsonValue;
+};
 
 const getExistingSurvey = async (surveyId: string) => {
   return await prisma.survey.findUnique({
@@ -483,7 +704,8 @@ export const copySurveyToOtherWorkspace = async (
           data: existingSurvey.followUps.map((followUp) => ({
             name: followUp.name,
             trigger: followUp.trigger,
-            action: followUp.action,
+            // Follow-up files live in the source environment's private storage, so they are not carried over.
+            action: isSameEnvironment ? followUp.action : withoutFollowUpAttachment(followUp.action),
           })),
         },
       },
@@ -625,6 +847,7 @@ export const copySurveyToOtherWorkspace = async (
   }
 };
 
+<<<<<<< HEAD
 /** Count surveys in a workspace, optionally with the same filter as getSurveys (so total matches list). */
 export const getSurveyCount = reactCache(
   async (
@@ -634,15 +857,36 @@ export const getSurveyCount = reactCache(
     visibilityFilter?: TSurveyVisibilityFilter
   ): Promise<number> => {
     validateInputs([workspaceId, z.cuid2()]);
+=======
+/**
+ * Count surveys in an environment. ACL-filtered by access when an access context is provided
+ * (the UI survey list); unfiltered for workspace-scoped API callers (e.g. the v3 surveys API,
+ * whose list query — getSurveyListPage — is likewise not per-user ACL'd). Applies the same
+ * filterCriteria as getSurveys so the total matches the list.
+ */
+export const getSurveyCount = reactCache(
+  async (
+    environmentId: string,
+    accessContext?: SurveyAccessContext,
+    filterCriteria?: TSurveyFilterCriteria
+  ): Promise<number> => {
+    validateInputs([environmentId, z.cuid2()]);
+>>>>>>> origin/main
     try {
       const { AND: filterClauses } = buildWhereClause(filterCriteria);
       const surveyCount = await prisma.survey.count({
         where: {
+<<<<<<< HEAD
           workspaceId,
           // ENG-3282: the same visibility clauses as the list, so the total counts exactly the set it pages.
           AND: [
             ...(Array.isArray(filterClauses) ? filterClauses : []),
             ...buildSurveyAccessWhere(actorContext, visibilityFilter),
+=======
+          AND: [
+            { environmentId, ...buildWhereClause(filterCriteria) },
+            accessContext ? getSurveyAccessWhere(accessContext) : {},
+>>>>>>> origin/main
           ],
         },
       });

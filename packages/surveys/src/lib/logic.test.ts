@@ -28,7 +28,10 @@ describe("Survey Logic", () => {
 
   const mockSurvey: TJsWorkspaceStateSurvey = {
     id: "survey1",
+<<<<<<< HEAD
     name: "Survey 1",
+=======
+>>>>>>> origin/main
     questions: [], // Deprecated - using blocks instead
     blocks: [
       {
@@ -84,6 +87,7 @@ describe("Survey Logic", () => {
             subheader: { default: "Select a date" },
             required: true,
             format: "d-M-y",
+            dateKind: "full",
           },
           {
             id: "q6",
@@ -144,7 +148,12 @@ describe("Survey Logic", () => {
     displayPercentage: 0,
     recaptcha: { enabled: false, threshold: 0.5 },
     isBackButtonHidden: false,
+<<<<<<< HEAD
     isAutoProgressingEnabled: false,
+=======
+    autoAdvance: false,
+    snowflakeSync: false,
+>>>>>>> origin/main
     segment: null,
     welcomeCard: {
       enabled: true,
@@ -1317,6 +1326,7 @@ describe("Survey Logic", () => {
                 headline: { default: "Date Question 1" },
                 required: true,
                 format: "d-M-y",
+                dateKind: "full",
               },
               {
                 id: "dateQ2",
@@ -1324,6 +1334,7 @@ describe("Survey Logic", () => {
                 headline: { default: "Date Question 2" },
                 required: true,
                 format: "d-M-y",
+                dateKind: "full",
               },
             ],
           },

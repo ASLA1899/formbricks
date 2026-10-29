@@ -10,7 +10,6 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { getLanguageLabel } from "@formbricks/i18n-utils/utils";
 import {
-  TMultipleChoiceOptionDisplayType,
   TSurveyElement,
   TSurveyElementChoice,
   TSurveyElementTypeEnum,
@@ -31,7 +30,13 @@ import {
 import { findOptionUsedInLogic } from "@/modules/survey/editor/lib/utils";
 import { Button } from "@/modules/ui/components/button";
 import { Label } from "@/modules/ui/components/label";
-import { OptionsSwitch } from "@/modules/ui/components/options-switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/modules/ui/components/select";
 import { ShuffleOptionSelect } from "@/modules/ui/components/shuffle-option-select";
 
 interface MultipleChoiceElementFormProps {
@@ -94,11 +99,14 @@ export const MultipleChoiceElementForm = ({
     },
   };
 
+<<<<<<< HEAD
   const multipleChoiceOptionDisplayTypeOptions = [
     { value: "list", label: t("workspace.surveys.edit.list") },
     { value: "dropdown", label: t("workspace.surveys.edit.dropdown") },
   ];
 
+=======
+>>>>>>> origin/main
   const updateChoice = (choiceIdx: number, updatedAttributes: Partial<TSurveyElementChoice>) => {
     let newChoices: any[] = [];
     if (element.choices) {
@@ -387,6 +395,36 @@ export const MultipleChoiceElementForm = ({
             </Button>
 
             <div className="flex flex-1 items-center justify-end gap-2">
+              <Select
+                value={element.displayType || "list"}
+                onValueChange={(value: "list" | "dropdown") => {
+                  updateElement(elementIdx, { displayType: value });
+                }}>
+                <SelectTrigger className="w-fit space-x-2 overflow-hidden border-0 font-medium text-slate-600">
+                  <SelectValue placeholder={t("environments.surveys.edit.display_type")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="list">{t("environments.surveys.edit.display_as_list")}</SelectItem>
+                  <SelectItem value="dropdown">
+                    {t("environments.surveys.edit.display_as_dropdown")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {(element.displayType || "list") === "list" && (
+                <Select
+                  value={element.columns || "1"}
+                  onValueChange={(value: "1" | "2") => {
+                    updateElement(elementIdx, { columns: value });
+                  }}>
+                  <SelectTrigger className="w-fit space-x-2 overflow-hidden border-0 font-medium text-slate-600">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 column</SelectItem>
+                    <SelectItem value="2">2 columns</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
               <ShuffleOptionSelect
                 elementIdx={elementIdx}
                 shuffleOption={element.shuffleOption}
@@ -398,6 +436,7 @@ export const MultipleChoiceElementForm = ({
         </div>
       </div>
 
+<<<<<<< HEAD
       <div className="mt-3">
         <Label>{t("workspace.surveys.edit.display_type")}</Label>
         <div className="mt-2">
@@ -411,6 +450,8 @@ export const MultipleChoiceElementForm = ({
         </div>
       </div>
 
+=======
+>>>>>>> origin/main
       <BulkEditOptionsModal
         isOpen={isBulkEditOpen}
         onClose={() => setIsBulkEditOpen(false)}
@@ -426,6 +467,7 @@ export const MultipleChoiceElementForm = ({
         localSurvey={localSurvey}
         surveyLanguageCodes={surveyLanguageCodes}
         locale={locale}
+        environmentId={localSurvey.environmentId}
       />
 
       {element.type === TSurveyElementTypeEnum.MultipleChoiceMulti && (

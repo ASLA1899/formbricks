@@ -47,13 +47,21 @@ export const getSurveyWithMetadata = reactCache(async (surveyId: string): Promis
         delay: true,
         displayPercentage: true,
         autoComplete: true,
+        runOnDate: true,
+        closeOnDate: true,
+        scheduleTimezone: true,
 
         // Authentication & access
         isVerifyEmailEnabled: true,
         redirectUrl: true,
         pin: true,
         isBackButtonHidden: true,
+<<<<<<< HEAD
         isAutoProgressingEnabled: true,
+=======
+        autoAdvance: true,
+        snowflakeSync: true,
+>>>>>>> origin/main
         isCaptureIpEnabled: true,
         isAnonymizeResponsesEnabled: true,
 

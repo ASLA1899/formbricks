@@ -22,11 +22,15 @@ export const ZMember = z.object({
   accepted: z.boolean(),
   role: ZOrganizationRole,
   isActive: z.boolean(),
+<<<<<<< HEAD
   /**
    * Only sent to Owners and Managers. `null` means no sign-in since the column shipped — it was never
    * backfilled — so it reads as "No sign-in recorded", not "never".
    */
   lastLoginAt: z.date().nullable().optional(),
+=======
+  surveyAdmin: z.boolean().default(false),
+>>>>>>> origin/main
 });
 
 export type TMember = z.infer<typeof ZMember>;

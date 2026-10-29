@@ -85,6 +85,9 @@ const mockSurvey: TSurvey = {
   delay: 0,
   displayPercentage: null,
   autoComplete: null,
+  runOnDate: null,
+  closeOnDate: null,
+  scheduleTimezone: null,
   singleUse: null,
   triggers: [],
   languages: [],
@@ -101,6 +104,12 @@ const mockSurvey: TSurvey = {
   endings: [],
   followUps: [],
   isBackButtonHidden: false,
+<<<<<<< HEAD:apps/web/app/api/v2/client/[workspaceId]/responses/lib/utils.test.ts
+=======
+  autoAdvance: false,
+  snowflakeSync: false,
+  isSingleResponsePerEmailEnabled: false,
+>>>>>>> origin/main:apps/web/app/api/v2/client/[environmentId]/responses/lib/utils.test.ts
   isVerifyEmailEnabled: false,
   workspaceOverwrites: null,
   showLanguageSwitch: false,
@@ -145,10 +154,15 @@ describe("checkSurveyValidity", () => {
     expect(result).toBeInstanceOf(Response);
     expect(result?.status).toBe(400);
     expect(responses.badRequestResponse).toHaveBeenCalledWith(
+<<<<<<< HEAD:apps/web/app/api/v2/client/[workspaceId]/responses/lib/utils.test.ts
       "Survey is part of another workspace",
       {
         workspaceId: "ws-1",
       },
+=======
+      "Survey does not belong to this environment",
+      undefined,
+>>>>>>> origin/main:apps/web/app/api/v2/client/[environmentId]/responses/lib/utils.test.ts
       true
     );
   });

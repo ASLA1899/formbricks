@@ -309,6 +309,7 @@ const BlockCardComponent = ({
           className={cn(isBlockCollapsed ? "h-full" : "")}>
           <Collapsible.CollapsibleTrigger asChild>
             <div className="block h-full w-full cursor-pointer hover:bg-slate-100">
+<<<<<<< HEAD
               <div
                 className="flex h-full items-center justify-between px-4 py-2"
                 data-testid="block-card-header">
@@ -345,6 +346,43 @@ const BlockCardComponent = ({
                         "focus:hover:border-brand-dark",
                         "focus:ring-0 focus:ring-offset-0 focus:outline-none"
                       )}
+=======
+              <div className="flex h-full items-center justify-between px-4 py-2">
+                <div className="flex items-center gap-2">
+                  <div>
+                    <input
+                      type="text"
+                      value={block.name}
+                      onChange={(e) => {
+                        const nextName = e.target.value;
+                        setLocalSurvey({
+                          ...localSurvey,
+                          blocks: localSurvey.blocks.map((b, i) =>
+                            i === blockIdx ? { ...b, name: nextName } : b
+                          ),
+                        });
+                      }}
+                      onBlur={(e) => {
+                        if (e.target.value.trim() === "") {
+                          const fallback = `Block ${blockIdx + 1}`;
+                          setLocalSurvey({
+                            ...localSurvey,
+                            blocks: localSurvey.blocks.map((b, i) =>
+                              i === blockIdx ? { ...b, name: fallback } : b
+                            ),
+                          });
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === "Enter") {
+                          (e.target as HTMLInputElement).blur();
+                        }
+                      }}
+                      aria-label="Block name"
+                      className="w-full min-w-0 rounded border-none bg-transparent p-0 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:bg-white focus:ring-1 focus:ring-slate-300 focus:outline-none"
+>>>>>>> origin/main
                     />
                     <p className="text-xs text-slate-500">
                       {t("common.count_questions", { count: block.elements.length })}

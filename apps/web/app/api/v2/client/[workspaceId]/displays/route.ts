@@ -6,9 +6,12 @@ import {
 import { reportApiError } from "@/app/lib/api/api-error-reporter";
 import { parseAndValidateJsonBody } from "@/app/lib/api/parse-and-validate-json-body";
 import { responses } from "@/app/lib/api/response";
+<<<<<<< HEAD:apps/web/app/api/v2/client/[workspaceId]/displays/route.ts
 import { getOrganizationIdFromWorkspaceId } from "@/lib/utils/helper";
 import { resolveClientApiIds } from "@/lib/utils/resolve-client-id";
 import { getIsContactsEnabled } from "@/modules/ee/license-check/lib/utils";
+=======
+>>>>>>> origin/main:apps/web/app/api/v2/client/[environmentId]/displays/route.ts
 import { createDisplay } from "./lib/display";
 
 interface Context {
@@ -67,7 +70,13 @@ export const POST = async (request: Request, context: Context): Promise<Response
 
   const { displayInputData } = validatedInput;
 
+  // ASLA fork: allow contactId WITHOUT an EE Contacts license. Our /c/<jwt> invitation flow
+  // creates a display with contactId so responses link to a valid displayId. Upstream gates
+  // this behind EE Contacts (identical to the responses gate removed in 6f87f50c9); the 403 is
+  // swallowed by the surveys SDK, silently dropping every invitation display. The gate is
+  // intentionally omitted — contactId passes straight through to createDisplay.
   try {
+<<<<<<< HEAD:apps/web/app/api/v2/client/[workspaceId]/displays/route.ts
     if (displayInputData.contactId) {
       const organizationId = await getOrganizationIdFromWorkspaceId(workspaceId);
       const isContactsEnabled = await getIsContactsEnabled(organizationId);
@@ -79,6 +88,8 @@ export const POST = async (request: Request, context: Context): Promise<Response
       }
     }
 
+=======
+>>>>>>> origin/main:apps/web/app/api/v2/client/[environmentId]/displays/route.ts
     const response = await createDisplay(displayInputData);
 
     return responses.successResponse(response, true);

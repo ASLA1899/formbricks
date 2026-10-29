@@ -3,8 +3,14 @@ import { z } from "zod";
 import { prisma } from "@formbricks/database";
 import { Prisma, Response } from "@formbricks/database/prisma";
 import { PrismaErrorType } from "@formbricks/database/types/error";
+import { logger } from "@formbricks/logger";
 import { Result, err, ok } from "@formbricks/types/error-handlers";
+<<<<<<< HEAD
 import { ValidationError } from "@formbricks/types/errors";
+=======
+import { deleteSurveyResponseByResponseId } from "@/app/api/member-lookup/snowflake-service";
+import { getSurvey } from "@/lib/survey/service";
+>>>>>>> origin/main
 import { TResponse } from "@formbricks/types/responses";
 import { getDisplayForResponseValidation } from "@/lib/display/service";
 import { normalizeResponseLanguage } from "@/lib/response/utils";
@@ -121,6 +127,15 @@ export const deleteResponse = async (responseId: string): Promise<Result<Respons
       deletedResponse.surveyId,
       surveyQuestionsResult.data.workspaceId
     );
+
+    // Fire-and-forget: clean up Snowflake rows for this response
+    getSurvey(deletedResponse.surveyId).then((survey) => {
+      if (survey?.snowflakeSync) {
+        deleteSurveyResponseByResponseId(deletedResponse.id).catch((error) => {
+          logger.error({ error, responseId }, "Snowflake cleanup failed for deleted response");
+        });
+      }
+    });
 
     return ok(deletedResponse);
   } catch (error) {

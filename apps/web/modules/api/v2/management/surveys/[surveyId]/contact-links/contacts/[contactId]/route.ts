@@ -1,7 +1,10 @@
+<<<<<<< HEAD
 import { can } from "@/lib/authorization";
 import { getWorkspaceAuthorizationActionForMethod } from "@/lib/authorization/permission-action";
 import { canApiKeyReachSurveyResource } from "@/lib/survey/visibility/api-key";
 import { getOrganizationIdFromSurveyId } from "@/lib/utils/helper";
+=======
+>>>>>>> origin/main
 import { authenticatedApiClient } from "@/modules/api/v2/auth/authenticated-api-client";
 import { responses } from "@/modules/api/v2/lib/response";
 import { handleApiError } from "@/modules/api/v2/lib/utils";
@@ -16,8 +19,13 @@ import {
 } from "@/modules/api/v2/management/surveys/[surveyId]/contact-links/contacts/[contactId]/types/survey";
 import { calculateExpirationDate } from "@/modules/api/v2/management/surveys/[surveyId]/contact-links/lib/utils";
 import { ApiErrorResponseV2 } from "@/modules/api/v2/types/api-error";
+<<<<<<< HEAD
 import { getContactSurveyLink } from "@/modules/ee/contacts/lib/contact-survey-link";
 import { getIsContactsEnabled } from "@/modules/ee/license-check/lib/utils";
+=======
+import { hasPermission } from "@/modules/organization/settings/api-keys/lib/utils";
+import { getContactSurveyLink } from "@/modules/survey/link/lib/contact-survey-link";
+>>>>>>> origin/main
 
 export const GET = async (request: Request, props: { params: Promise<TContactLinkParams> }) =>
   authenticatedApiClient({
@@ -59,17 +67,6 @@ export const GET = async (request: Request, props: { params: Promise<TContactLin
       ) {
         return handleApiError(request, {
           type: "unauthorized",
-        });
-      }
-
-      const organizationId = await getOrganizationIdFromSurveyId(params.surveyId);
-      const isContactsEnabled = await getIsContactsEnabled(organizationId);
-      if (!isContactsEnabled) {
-        return handleApiError(request, {
-          type: "forbidden",
-          details: [
-            { field: "contacts", issue: "Contacts are only enabled for Enterprise Edition, please upgrade." },
-          ],
         });
       }
 

@@ -41,7 +41,10 @@
     "terms_of_service": "Servicevoorwaarden",
     "the_servers_cannot_be_reached_at_the_moment": "De servers zijn momenteel niet bereikbaar.",
     "they_will_be_redirected_immediately": "Ze worden onmiddellijk doorgestuurd",
+<<<<<<< HEAD:packages/surveys/locales/nl-NL.json
     "time_remaining_before_the_survey_closes": "Resterende tijd voordat de enquête sluit",
+=======
+>>>>>>> origin/main:packages/surveys/locales/nl.json
     "welcome_video": "Welkomstkaart video",
     "your_feedback_is_stuck": "Je feedback blijft hangen :("
   },

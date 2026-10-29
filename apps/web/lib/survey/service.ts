@@ -4,7 +4,19 @@ import { prisma } from "@formbricks/database";
 import { Prisma } from "@formbricks/database/prisma";
 import { logger } from "@formbricks/logger";
 import { ZId, ZOptionalNumber } from "@formbricks/types/common";
+<<<<<<< HEAD
 import type { TCustomCssStored } from "@formbricks/types/custom-css";
+=======
+import { DatabaseError, InvalidInputError, ResourceNotFoundError } from "@formbricks/types/errors";
+import { TSegment, ZSegmentFilters } from "@formbricks/types/segment";
+import {
+  TSurvey,
+  TSurveyCreateInput,
+  ZScheduleWindow,
+  ZSurvey,
+  ZSurveyCreateInput,
+} from "@formbricks/types/surveys/types";
+>>>>>>> origin/main
 import {
   linkedToDesiredEmbeddedFields,
   toLegacyEmbeddedFields,
@@ -153,12 +165,23 @@ export const selectSurvey = {
   delay: true,
   displayPercentage: true,
   autoComplete: true,
+<<<<<<< HEAD
   publishOn: true,
   closeOn: true,
   archivedAt: true,
+=======
+  runOnDate: true,
+  closeOnDate: true,
+  scheduleTimezone: true,
+>>>>>>> origin/main
   isVerifyEmailEnabled: true,
   isBackButtonHidden: true,
+<<<<<<< HEAD
   isAutoProgressingEnabled: true,
+=======
+  autoAdvance: true,
+  snowflakeSync: true,
+>>>>>>> origin/main
   isCaptureIpEnabled: true,
   isAnonymizeResponsesEnabled: true,
   redirectUrl: true,
@@ -217,9 +240,13 @@ export const selectSurvey = {
   },
   followUps: true,
   slug: true,
+<<<<<<< HEAD
   // ENG-1837: the definitions every reader resolves through, joined and inlined by
   // `transformPrismaSurvey`. Read-only — the rows are written by `reconcileEmbeddedData`.
   embeddedDataLinks: selectSurveyEmbeddedDataLinks,
+=======
+  invitationConfig: true,
+>>>>>>> origin/main
 } satisfies Prisma.SurveySelect;
 
 /**
@@ -569,6 +596,23 @@ export const updateSurveyInternal = async (
     // the authorization failure first, and before prisma.survey.update so nothing is persisted.
     if (skipValidation && (currentSurvey.status !== "draft" || updatedSurvey.status !== "draft")) {
       throw new OperationNotAllowedError("Only draft surveys can be updated without validation");
+    }
+
+    // Auto-clear scheduleTimezone when no dates are set
+    if (surveyData.runOnDate === null && surveyData.closeOnDate === null) {
+      surveyData.scheduleTimezone = null;
+    }
+
+    // Validate schedule window cross-field rules
+    if (!skipValidation) {
+      const scheduleResult = ZScheduleWindow.safeParse({
+        runOnDate: surveyData.runOnDate,
+        closeOnDate: surveyData.closeOnDate,
+        scheduleTimezone: surveyData.scheduleTimezone,
+      });
+      if (!scheduleResult.success) {
+        throw new InvalidInputError(scheduleResult.error.issues[0]?.message ?? "Invalid schedule window");
+      }
     }
 
     if (!skipValidation) {

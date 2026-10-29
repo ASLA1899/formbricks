@@ -1,6 +1,9 @@
 import "server-only";
 import dns from "node:dns";
+<<<<<<< HEAD
 import net from "node:net";
+=======
+>>>>>>> origin/main
 import { Agent } from "undici";
 import { InvalidInputError } from "@formbricks/types/errors";
 import { DANGEROUSLY_ALLOW_WEBHOOK_INTERNAL_URLS } from "../constants";
@@ -89,6 +92,7 @@ const buildBlockList = (): net.BlockList => {
 
 const blockedAddresses = buildBlockList();
 
+<<<<<<< HEAD
 /**
  * Returns true when `ip` must not be used as a webhook target.
  *
@@ -102,10 +106,15 @@ const isPrivateIP = (ip: string): boolean => {
   if (version === 0) return true;
 
   return blockedAddresses.check(ip, version === 4 ? "ipv4" : "ipv6");
+=======
+const isPrivateIP = (ip: string, family: 4 | 6): boolean => {
+  return family === 4 ? isPrivateIPv4(ip) : isPrivateIPv6(ip);
+>>>>>>> origin/main
 };
 
 const DNS_TIMEOUT_MS = 3000;
 
+<<<<<<< HEAD
 /**
  * The hostname could not be resolved at all (NXDOMAIN, SERVFAIL, resolver timeout) — distinct from a URL
  * the SSRF policy rejects. It stays an `InvalidInputError` so every create/update/test caller keeps
@@ -119,6 +128,8 @@ export class WebhookDnsResolutionError extends InvalidInputError {
   }
 }
 
+=======
+>>>>>>> origin/main
 export type ResolvedAddress = { ip: string; family: 4 | 6 };
 
 const resolveHostnameToAddresses = (hostname: string): Promise<ResolvedAddress[]> => {
@@ -160,6 +171,11 @@ const stripIPv6Brackets = (hostname: string): string => {
   return hostname;
 };
 
+<<<<<<< HEAD
+=======
+const IPV4_LITERAL = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+
+>>>>>>> origin/main
 const parseWebhookUrl = (url: string): URL => {
   let parsed: URL;
   try {
@@ -173,6 +189,7 @@ const parseWebhookUrl = (url: string): URL => {
   return parsed;
 };
 
+<<<<<<< HEAD
 /**
  * Classifies an IP-literal host, or returns null when the host is a name to resolve via DNS.
  *
@@ -188,6 +205,16 @@ const validateIpLiteral = (hostname: string): ResolvedAddress | null => {
 
   const family: 4 | 6 = version === 4 ? 4 : 6;
   if (!DANGEROUSLY_ALLOW_WEBHOOK_INTERNAL_URLS && isPrivateIP(ip)) {
+=======
+const validateIpLiteral = (hostname: string): ResolvedAddress | null => {
+  const isIPv4Literal = IPV4_LITERAL.test(hostname);
+  const isIPv6Literal = hostname.startsWith("[");
+  if (!isIPv4Literal && !isIPv6Literal) return null;
+
+  const ip = isIPv6Literal ? stripIPv6Brackets(hostname) : hostname;
+  const family: 4 | 6 = isIPv4Literal ? 4 : 6;
+  if (!DANGEROUSLY_ALLOW_WEBHOOK_INTERNAL_URLS && isPrivateIP(ip, family)) {
+>>>>>>> origin/main
     throw new InvalidInputError("Webhook URL must not point to private or internal IP addresses");
   }
   return { ip, family };
@@ -239,7 +266,11 @@ export const validateAndResolveWebhookUrl = async (url: string): Promise<Resolve
 
   if (!DANGEROUSLY_ALLOW_WEBHOOK_INTERNAL_URLS) {
     for (const addr of resolved) {
+<<<<<<< HEAD
       if (isPrivateIP(addr.ip)) {
+=======
+      if (isPrivateIP(addr.ip, addr.family)) {
+>>>>>>> origin/main
         throw new InvalidInputError("Webhook URL must not point to private or internal IP addresses");
       }
     }

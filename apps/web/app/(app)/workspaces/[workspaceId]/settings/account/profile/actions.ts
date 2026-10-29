@@ -7,8 +7,13 @@ import {
   TUserUpdateInput,
   ZUserPersonalInfoUpdateInput,
 } from "@formbricks/types/user";
+<<<<<<< HEAD:apps/web/app/(app)/workspaces/[workspaceId]/settings/account/profile/actions.ts
 import { getIsEmailUnique } from "@/app/(app)/workspaces/[workspaceId]/settings/account/profile/lib/user";
 import { EMAIL_VERIFICATION_DISABLED, PASSWORD_RESET_DISABLED, WEBAPP_URL } from "@/lib/constants";
+=======
+import { getIsEmailUnique } from "@/app/(app)/environments/[environmentId]/settings/(account)/profile/lib/user";
+import { EMAIL_VERIFICATION_DISABLED, PASSWORD_RESET_DISABLED } from "@/lib/constants";
+>>>>>>> origin/main:apps/web/app/(app)/environments/[environmentId]/settings/(account)/profile/actions.ts
 import { verifyUserPassword } from "@/lib/user/password";
 import { getUser, updateUser } from "@/lib/user/service";
 import { authenticatedActionClient } from "@/lib/utils/action-client";

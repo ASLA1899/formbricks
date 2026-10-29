@@ -89,6 +89,7 @@ const validateSurvey = async (responseInput: TResponseInput, workspaceId: string
   }
   if (survey.workspaceId !== workspaceId) {
     return {
+<<<<<<< HEAD
       error: responses.badRequestResponse(
         "Survey is part of another workspace",
         {
@@ -96,6 +97,9 @@ const validateSurvey = async (responseInput: TResponseInput, workspaceId: string
         },
         true
       ),
+=======
+      error: responses.badRequestResponse("Survey does not belong to this environment", undefined, true),
+>>>>>>> origin/main
     };
   }
   return { survey };

@@ -1,0 +1,795 @@
+"use client";
+
+import * as Collapsible from "@radix-ui/react-collapsible";
+import { MailsIcon, SendIcon, UploadIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import toast from "react-hot-toast";
+import type { TSegment } from "@formbricks/types/segment";
+import {
+  type TReminderSchedule,
+  type TSurvey,
+  type TSurveyInvitationConfig,
+  ZSurveyInvitationConfig,
+} from "@formbricks/types/surveys/types";
+import { cn } from "@/lib/cn";
+import { getFormattedErrorMessage } from "@/lib/utils/helper";
+import { Button } from "@/modules/ui/components/button";
+import { Input } from "@/modules/ui/components/input";
+import { Label } from "@/modules/ui/components/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/modules/ui/components/select";
+import {
+  getInvitationSummaryAction,
+  listSurveyInvitationsAction,
+  sendInvitationsAction,
+  sendRemindersAction,
+} from "../actions";
+import {
+  DEFAULT_INVITATION_BODY,
+  DEFAULT_INVITATION_SUBJECT,
+  DEFAULT_REMINDER_BODY,
+  DEFAULT_REMINDER_SUBJECT,
+  MERGE_FIELDS,
+  type TInvitationRow,
+  type TInvitationSummary,
+} from "../types/invitation";
+import { RecipientListTable } from "./recipient-list-table";
+
+// Loose draft type for the editor state. The canonical `TSurveyInvitationConfig`
+// requires a valid cuid2 segmentId and other non-empty fields, which the form
+// only has once the user fills it in. We validate on send rather than forcing
+// the editor to hold only canonical values (which would require `null`
+// placeholders that complicate every render).
+type TManualRecipient = { email: string; firstName?: string; lastName?: string };
+
+type TInvitationAudienceDraft =
+  | { source: "segment"; segmentId: string }
+  | { source: "snowflake"; queryId: string; emailColumn: string; nameColumn?: string }
+  | { source: "manualList"; recipients: TManualRecipient[] };
+
+interface TInvitationConfigDraft {
+  audience: TInvitationAudienceDraft;
+  reminderSchedule: TReminderSchedule;
+  emailTemplates: TSurveyInvitationConfig["emailTemplates"];
+  fromName?: string;
+}
+
+interface RecipientsCardProps {
+  localSurvey: TSurvey;
+  setLocalSurvey: (survey: TSurvey) => void;
+  segments: TSegment[];
+}
+
+// Minimal RFC-4180-ish CSV parser. Handles quoted fields (with embedded commas
+// and "" escapes), and both \n and \r\n line endings. We avoid a library dep
+// because the input is small (invitation lists, not data warehouses).
+const parseCsv = (text: string): string[][] => {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(field);
+      field = "";
+      if (row.some((c) => c.trim() !== "")) rows.push(row);
+      row = [];
+    } else {
+      field += ch;
+    }
+  }
+  if (field !== "" || row.length > 0) {
+    row.push(field);
+    if (row.some((c) => c.trim() !== "")) rows.push(row);
+  }
+  return rows;
+};
+
+const HEADER_ALIASES: Record<"email" | "firstName" | "lastName", string[]> = {
+  email: ["email", "e-mail", "emailaddress", "email_address"],
+  firstName: ["firstname", "first_name", "first", "givenname", "given_name", "fname"],
+  lastName: ["lastname", "last_name", "last", "surname", "familyname", "family_name", "lname"],
+};
+
+// Parses CSV text into recipients. Auto-detects a header row when any cell in
+// the first row matches a known alias; otherwise treats columns positionally
+// as [email, firstName, lastName].
+const csvToRecipients = (csv: string): TManualRecipient[] => {
+  const rows = parseCsv(csv);
+  if (rows.length === 0) return [];
+
+  const norm = (s: string) =>
+    s
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]/g, "");
+  const firstRow = rows[0].map(norm);
+  const looksLikeHeader = firstRow.some((cell) =>
+    Object.values(HEADER_ALIASES).some((aliases) => aliases.map(norm).includes(cell))
+  );
+
+  let emailIdx = 0;
+  let firstIdx = 1;
+  let lastIdx = 2;
+  let dataStart = 0;
+
+  if (looksLikeHeader) {
+    dataStart = 1;
+    const findIdx = (aliases: string[]) => firstRow.findIndex((cell) => aliases.map(norm).includes(cell));
+    emailIdx = findIdx(HEADER_ALIASES.email);
+    firstIdx = findIdx(HEADER_ALIASES.firstName);
+    lastIdx = findIdx(HEADER_ALIASES.lastName);
+    if (emailIdx === -1) emailIdx = 0;
+  }
+
+  return rows
+    .slice(dataStart)
+    .map((cols) => ({
+      email: (cols[emailIdx] ?? "").trim(),
+      firstName: firstIdx >= 0 ? (cols[firstIdx] ?? "").trim() || undefined : undefined,
+      lastName: lastIdx >= 0 ? (cols[lastIdx] ?? "").trim() || undefined : undefined,
+    }))
+    .filter((r) => /.+@.+\..+/.test(r.email));
+};
+
+const recipientsToTextarea = (recipients: TManualRecipient[]): string =>
+  recipients
+    .map((r) => [r.email, r.firstName ?? "", r.lastName ?? ""].join(", ").replace(/(,\s*)+$/, ""))
+    .join("\n");
+
+const emptyDraft: TInvitationConfigDraft = {
+  audience: { source: "segment", segmentId: "" },
+  reminderSchedule: { enabled: false, daysAfterInvite: [3, 7], maxReminders: 2 },
+  emailTemplates: {
+    invitation: { subject: DEFAULT_INVITATION_SUBJECT, body: DEFAULT_INVITATION_BODY },
+    reminder: { subject: DEFAULT_REMINDER_SUBJECT, body: DEFAULT_REMINDER_BODY },
+  },
+};
+
+export const RecipientsCard = ({ localSurvey, setLocalSurvey, segments }: RecipientsCardProps) => {
+  const [open, setOpen] = useState(false);
+  const [summary, setSummary] = useState<TInvitationSummary | null>(null);
+  const [invitationRows, setInvitationRows] = useState<TInvitationRow[] | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const [isReminding, setIsReminding] = useState(false);
+
+  // Draft state lives separately from the survey object. We only mirror a
+  // *validated* config into `localSurvey.invitationConfig` (or null if the
+  // draft is incomplete), so an in-progress edit can't cause an otherwise-valid
+  // survey save to fail Zod on the whole survey.
+  const [draft, setDraft] = useState<TInvitationConfigDraft>(() => {
+    const existing = localSurvey.invitationConfig as TInvitationConfigDraft | null | undefined;
+    return existing ?? emptyDraft;
+  });
+
+  // Raw textarea content for manualList. Kept separately so partial lines
+  // (e.g. "it@") while the user is mid-typing aren't filtered out of view.
+  // We re-parse to `recipients` on every change, but the textarea renders
+  // from this raw string so every keystroke is preserved.
+  const [manualListRaw, setManualListRaw] = useState<string>(() => {
+    const existing = localSurvey.invitationConfig as TInvitationConfigDraft | null | undefined;
+    if (existing?.audience.source !== "manualList") return "";
+    return recipientsToTextarea(existing.audience.recipients);
+  });
+
+  const csvInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleCsvFile = async (file: File) => {
+    if (file.size > 512 * 1024) {
+      toast.error("CSV must be under 512 KB");
+      return;
+    }
+    try {
+      // Strip UTF-8 BOM (Excel "Save As CSV UTF-8" prepends U+FEFF, which
+      // would otherwise corrupt the first email and silently drop the row).
+      const text = (await file.text()).replace(/^﻿/, "");
+      const parsed = csvToRecipients(text);
+      if (parsed.length === 0) {
+        toast.error("No valid emails found in CSV");
+        return;
+      }
+      // Merge with whatever is already in the textarea, dedupe by email
+      // (case-insensitive), new entries win on name fields.
+      const existing = audience.source === "manualList" ? audience.recipients : [];
+      const existingEmails = new Set(existing.map((r) => r.email.toLowerCase()));
+      const byEmail = new Map<string, TManualRecipient>();
+      for (const r of existing) byEmail.set(r.email.toLowerCase(), r);
+      for (const r of parsed) byEmail.set(r.email.toLowerCase(), r);
+      const merged = Array.from(byEmail.values());
+      const added = parsed.filter((r) => !existingEmails.has(r.email.toLowerCase())).length;
+      const updated = parsed.length - added;
+
+      setManualListRaw(recipientsToTextarea(merged));
+      updateAudience({ source: "manualList", recipients: merged });
+      toast.success(
+        updated > 0
+          ? `Imported ${parsed.length} from CSV (${added} new, ${updated} updated)`
+          : `Imported ${added} recipient${added === 1 ? "" : "s"} from CSV`
+      );
+    } catch {
+      toast.error("Could not read CSV file");
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    getInvitationSummaryAction({ surveyId: localSurvey.id })
+      .then((res) => {
+        if (res?.data) setSummary(res.data);
+      })
+      .catch(() => {
+        /* first-run before save: no invitations yet — ignore */
+      });
+    listSurveyInvitationsAction({ surveyId: localSurvey.id })
+      .then((res) => {
+        if (res?.data) setInvitationRows(res.data);
+      })
+      .catch(() => {
+        /* first-run: ignore — table just stays empty */
+      });
+  }, [open, localSurvey.id]);
+
+  // Refresh both summary and invitee list. Used after manual sends/reminders so
+  // the user sees the new state without a page reload.
+  const refreshInvitations = async () => {
+    const [nextSummary, nextRows] = await Promise.all([
+      getInvitationSummaryAction({ surveyId: localSurvey.id }).catch(() => null),
+      listSurveyInvitationsAction({ surveyId: localSurvey.id }).catch(() => null),
+    ]);
+    if (nextSummary?.data) setSummary(nextSummary.data);
+    if (nextRows?.data) setInvitationRows(nextRows.data);
+  };
+
+  const mirrorToSurvey = (nextDraft: TInvitationConfigDraft) => {
+    const parsed = ZSurveyInvitationConfig.safeParse(nextDraft);
+    setLocalSurvey({
+      ...localSurvey,
+      invitationConfig: parsed.success ? parsed.data : null,
+    });
+  };
+
+  const updateConfig = (patch: Partial<TInvitationConfigDraft>) => {
+    const next: TInvitationConfigDraft = { ...draft, ...patch };
+    setDraft(next);
+    mirrorToSurvey(next);
+  };
+
+  const updateAudience = (audience: TInvitationAudienceDraft) => updateConfig({ audience });
+  const updateTemplates = (templates: TSurveyInvitationConfig["emailTemplates"]) =>
+    updateConfig({ emailTemplates: templates });
+
+  const config = draft;
+  const audience = draft.audience;
+
+  const audienceIsValid =
+    (audience.source === "segment" && Boolean(audience.segmentId)) ||
+    (audience.source === "snowflake" && Boolean(audience.queryId && audience.emailColumn)) ||
+    (audience.source === "manualList" && audience.recipients.length > 0);
+
+  // Build a canonical, validated config for server dispatch. Returns null (and
+  // shows a toast) if the draft fails schema validation — this is a belt-and-
+  // braces check on top of `audienceIsValid`.
+  const toValidatedConfig = (): TSurveyInvitationConfig | null => {
+    const parsed = ZSurveyInvitationConfig.safeParse(draft);
+    if (parsed.success) return parsed.data;
+    toast.error(`Invitation config is incomplete: ${parsed.error.issues[0]?.message ?? "invalid"}`);
+    return null;
+  };
+
+  const sendNow = async () => {
+    if (!audienceIsValid) {
+      toast.error("Pick a segment or configure a Snowflake query first");
+      return;
+    }
+    const validated = toValidatedConfig();
+    if (!validated) return;
+
+    setIsSending(true);
+    const res = await sendInvitationsAction({ surveyId: localSurvey.id, config: validated });
+    setIsSending(false);
+    if (res?.data) {
+      const { enqueued, alreadySent } = res.data;
+      if (enqueued > 0) {
+        toast.success(
+          `Queued ${enqueued} invitation${enqueued === 1 ? "" : "s"}` +
+            (alreadySent ? ` (${alreadySent} already sent)` : "") +
+            ` — sending in background`
+        );
+      } else if (alreadySent > 0) {
+        toast.success(`No new recipients — ${alreadySent} already sent`);
+      } else {
+        toast.success("No recipients found in audience");
+      }
+      await refreshInvitations();
+    } else {
+      toast.error(getFormattedErrorMessage(res) || "Failed to send invitations");
+    }
+  };
+
+  const remindNow = async () => {
+    const validated = toValidatedConfig();
+    if (!validated) return;
+    setIsReminding(true);
+    const res = await sendRemindersAction({ surveyId: localSurvey.id, config: validated });
+    setIsReminding(false);
+    if (res?.data) {
+      toast.success(`Reminded ${res.data.sent} (${res.data.failed} failed)`);
+      await refreshInvitations();
+    } else {
+      toast.error(getFormattedErrorMessage(res) || "Failed to send reminders");
+    }
+  };
+
+  return (
+    <Collapsible.Root
+      open={open}
+      onOpenChange={setOpen}
+      className={cn(
+        open ? "" : "hover:bg-slate-50",
+        "w-full space-y-2 rounded-lg border border-slate-300 bg-white"
+      )}>
+      <Collapsible.CollapsibleTrigger asChild className="h-full w-full cursor-pointer">
+        <div className="inline-flex px-4 py-4">
+          <div className="flex items-center pr-5 pl-2">
+            <MailsIcon className="h-7 w-7 rounded-full border border-slate-300 bg-slate-100 p-1.5 text-slate-600" />
+          </div>
+          <div>
+            <p className="font-semibold text-slate-800">Recipients & reminders</p>
+            <p className="mt-1 text-sm text-slate-500">Invite a list of people and chase non-responders.</p>
+          </div>
+        </div>
+      </Collapsible.CollapsibleTrigger>
+      <Collapsible.CollapsibleContent className="flex flex-col">
+        <hr className="py-1 text-slate-600" />
+        <div className="space-y-6 p-4">
+          {summary && (
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <Stat label="Invited" value={summary.total} />
+              <Stat label="Sent" value={summary.sent} />
+              <Stat label="Responded" value={summary.responded} />
+              <Stat label="Pending" value={summary.pending} />
+            </div>
+          )}
+
+          {invitationRows && invitationRows.length > 0 && (
+            <section className="space-y-2">
+              <Label>Invitees</Label>
+              <RecipientListTable rows={invitationRows} />
+            </section>
+          )}
+
+          <section className="space-y-2">
+            <Label>Audience source</Label>
+            <Select
+              value={audience.source}
+              onValueChange={(value: "segment" | "snowflake" | "manualList") => {
+                if (value === "segment") {
+                  updateAudience({ source: "segment", segmentId: "" });
+                } else if (value === "snowflake") {
+                  updateAudience({ source: "snowflake", queryId: "", emailColumn: "email" });
+                } else {
+                  updateAudience({ source: "manualList", recipients: [] });
+                  setManualListRaw("");
+                }
+              }}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manualList">Manual email list</SelectItem>
+                <SelectItem value="segment">Formbricks segment</SelectItem>
+                <SelectItem value="snowflake">Snowflake query</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {audience.source === "segment" && (
+              <Select
+                value={audience.segmentId || ""}
+                onValueChange={(segmentId) => updateAudience({ source: "segment", segmentId })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a segment…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {segments.length === 0 ? (
+                    <div className="p-2 text-sm text-slate-500">
+                      No segments yet — create one under Contacts.
+                    </div>
+                  ) : (
+                    segments.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.title || s.id}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            )}
+
+            {audience.source === "manualList" && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="manualEmails">Recipients (email, first name, last name)</Label>
+                  <div>
+                    <input
+                      ref={csvInputRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleCsvFile(file);
+                        // Reset so selecting the same file again re-triggers change.
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => csvInputRef.current?.click()}>
+                      <UploadIcon className="mr-1 h-3 w-3" />
+                      Upload CSV
+                    </Button>
+                  </div>
+                </div>
+                <textarea
+                  id="manualEmails"
+                  className="min-h-28 w-full rounded-md border border-slate-300 bg-white p-2 font-mono text-sm"
+                  value={manualListRaw}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setManualListRaw(raw);
+                    // Parse only the lines that look like valid emails.
+                    // Partial/in-progress lines stay in the textarea via the
+                    // raw-string state above, but they don't get stored as
+                    // recipients until they parse cleanly.
+                    const recipients: TManualRecipient[] = raw
+                      .split(/\n/)
+                      .map((line) => {
+                        const parts = line.split(",").map((s) => s.trim());
+                        const email = parts[0] ?? "";
+                        const firstName = parts[1] || undefined;
+                        const lastName = parts[2] || undefined;
+                        return { email, firstName, lastName };
+                      })
+                      .filter((r) => /.+@.+\..+/.test(r.email));
+                    updateAudience({ source: "manualList", recipients });
+                  }}
+                  placeholder={"alice@example.com\nbob@example.com, Bob\ncarol@example.com, Carol, Smith"}
+                />
+                <p className="text-xs text-slate-500">
+                  Type one recipient per line (<code>email, firstName, lastName</code>) or upload a CSV with
+                  columns like <code>email, firstName, lastName</code> (header row optional; column order
+                  auto-detected). {audience.recipients.length} valid recipient
+                  {audience.recipients.length === 1 ? "" : "s"}.
+                </p>
+              </div>
+            )}
+
+            {audience.source === "snowflake" && (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500">
+                  The query must accept <strong>no parameters</strong> — it should return all recipients in a
+                  single call. Parameterized queries are not yet supported.
+                </p>
+                <div>
+                  <Label htmlFor="queryId">Query ID</Label>
+                  <Input
+                    id="queryId"
+                    value={audience.queryId}
+                    onChange={(e) => updateAudience({ ...audience, queryId: e.target.value.trim() })}
+                    placeholder="e.g. active-members"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="emailColumn">Email column</Label>
+                  <Input
+                    id="emailColumn"
+                    value={audience.emailColumn}
+                    onChange={(e) => updateAudience({ ...audience, emailColumn: e.target.value.trim() })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="nameColumn">Name column (optional)</Label>
+                  <Input
+                    id="nameColumn"
+                    value={audience.nameColumn ?? ""}
+                    onChange={(e) =>
+                      updateAudience({
+                        ...audience,
+                        nameColumn: e.target.value.trim() || undefined,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-2">
+            <Label htmlFor="fromName">From name</Label>
+            <Input
+              id="fromName"
+              value={config.fromName ?? ""}
+              onChange={(e) => updateConfig({ fromName: e.target.value })}
+              placeholder="Leave blank to use the system default"
+            />
+            <p className="text-xs text-slate-500">
+              Friendly name shown alongside the sender email address. The email address itself is not changed.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <Label>Invitation email</Label>
+            <Input
+              value={config.emailTemplates.invitation.subject}
+              onChange={(e) =>
+                updateTemplates({
+                  ...config.emailTemplates,
+                  invitation: { ...config.emailTemplates.invitation, subject: e.target.value },
+                })
+              }
+              placeholder="Subject"
+            />
+            <textarea
+              className="min-h-32 w-full rounded-md border border-slate-300 bg-white p-2 text-sm"
+              value={config.emailTemplates.invitation.body}
+              onChange={(e) =>
+                updateTemplates({
+                  ...config.emailTemplates,
+                  invitation: { ...config.emailTemplates.invitation, body: e.target.value },
+                })
+              }
+            />
+            <Input
+              value={config.emailTemplates.invitation.buttonLabel ?? ""}
+              onChange={(e) =>
+                updateTemplates({
+                  ...config.emailTemplates,
+                  invitation: {
+                    ...config.emailTemplates.invitation,
+                    buttonLabel: e.target.value,
+                  },
+                })
+              }
+              placeholder="Button text (default: Take the survey)"
+            />
+            <HeadingControl
+              value={config.emailTemplates.invitation.headingText}
+              onChange={(headingText) =>
+                updateTemplates({
+                  ...config.emailTemplates,
+                  invitation: { ...config.emailTemplates.invitation, headingText },
+                })
+              }
+            />
+            <MergeFieldHints />
+          </section>
+
+          <section className="space-y-2">
+            <Label>Scheduled reminders</Label>
+            <div className="flex items-center gap-2">
+              <input
+                id="reminderScheduleEnabled"
+                type="checkbox"
+                checked={config.reminderSchedule.enabled}
+                onChange={(e) =>
+                  updateConfig({
+                    reminderSchedule: { ...config.reminderSchedule, enabled: e.target.checked },
+                  })
+                }
+              />
+              <label htmlFor="reminderScheduleEnabled" className="text-sm">
+                Auto-send reminders on a schedule (requires cron)
+              </label>
+            </div>
+            {config.reminderSchedule.enabled && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label htmlFor="daysAfter">Days after invite (comma-separated)</Label>
+                  <Input
+                    id="daysAfter"
+                    value={config.reminderSchedule.daysAfterInvite.join(", ")}
+                    onChange={(e) => {
+                      const parsed = e.target.value
+                        .split(",")
+                        .map((s) => parseInt(s.trim(), 10))
+                        .filter((n) => Number.isInteger(n) && n >= 0 && n <= 365);
+                      updateConfig({
+                        reminderSchedule: {
+                          ...config.reminderSchedule,
+                          daysAfterInvite: parsed,
+                        },
+                      });
+                    }}
+                    placeholder="3, 7, 14"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="maxReminders">Max reminders per person</Label>
+                  <Input
+                    id="maxReminders"
+                    type="number"
+                    min={0}
+                    max={20}
+                    value={config.reminderSchedule.maxReminders}
+                    onChange={(e) =>
+                      updateConfig({
+                        reminderSchedule: {
+                          ...config.reminderSchedule,
+                          maxReminders: Math.max(0, Math.min(20, parseInt(e.target.value, 10) || 0)),
+                        },
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-2">
+            <Label>Reminder email (used by manual & scheduled reminders)</Label>
+            <Input
+              value={config.emailTemplates.reminder.subject}
+              onChange={(e) =>
+                updateTemplates({
+                  ...config.emailTemplates,
+                  reminder: { ...config.emailTemplates.reminder, subject: e.target.value },
+                })
+              }
+              placeholder="Subject"
+            />
+            <textarea
+              className="min-h-32 w-full rounded-md border border-slate-300 bg-white p-2 text-sm"
+              value={config.emailTemplates.reminder.body}
+              onChange={(e) =>
+                updateTemplates({
+                  ...config.emailTemplates,
+                  reminder: { ...config.emailTemplates.reminder, body: e.target.value },
+                })
+              }
+            />
+            <Input
+              value={config.emailTemplates.reminder.buttonLabel ?? ""}
+              onChange={(e) =>
+                updateTemplates({
+                  ...config.emailTemplates,
+                  reminder: {
+                    ...config.emailTemplates.reminder,
+                    buttonLabel: e.target.value,
+                  },
+                })
+              }
+              placeholder="Button text (default: Take the survey)"
+            />
+            <HeadingControl
+              value={config.emailTemplates.reminder.headingText}
+              onChange={(headingText) =>
+                updateTemplates({
+                  ...config.emailTemplates,
+                  reminder: { ...config.emailTemplates.reminder, headingText },
+                })
+              }
+            />
+          </section>
+
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={!audienceIsValid || isSending} onClick={sendNow}>
+              <SendIcon className="mr-2 h-4 w-4" />
+              {isSending ? "Sending…" : "Send invitations"}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={isReminding || !summary || summary.pending === 0}
+              onClick={remindNow}>
+              {isReminding ? "Reminding…" : "Send reminders to non-responders"}
+            </Button>
+            <p className="self-center text-xs text-slate-500">
+              Sending also saves the current invitation/reminder text and reminder schedule on the survey.
+            </p>
+          </div>
+        </div>
+      </Collapsible.CollapsibleContent>
+    </Collapsible.Root>
+  );
+};
+
+const Stat = ({ label, value }: { label: string; value: number }) => (
+  <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+    <div className="text-xl font-semibold text-slate-800">{value}</div>
+    <div className="text-xs text-slate-500">{label}</div>
+  </div>
+);
+
+const MergeFieldHints = () => (
+  <p className="text-xs text-slate-500">
+    Available merge fields:{" "}
+    {MERGE_FIELDS.map((f, i) => (
+      <span key={f}>
+        {i > 0 ? ", " : ""}
+        <code className="rounded bg-slate-100 px-1 py-0.5">{`{{${f}}}`}</code>
+      </span>
+    ))}
+  </p>
+);
+
+// Tri-state control for the email heading. Maps three UI modes to the
+// canonical `headingText` shape on the survey:
+//   "default" → undefined (omits the field; renders the i18n default)
+//   "custom"  → "<text>"  (renders the override)
+//   "none"    → ""        (suppresses the heading entirely)
+//
+// `mode` is local state so the user can switch to "custom" before typing
+// without the saved empty string flipping the derived mode back to "none".
+type HeadingMode = "default" | "custom" | "none";
+
+const deriveHeadingMode = (value: string | undefined): HeadingMode => {
+  if (value === undefined) return "default";
+  if (value === "") return "none";
+  return "custom";
+};
+
+const HeadingControl = ({
+  value,
+  onChange,
+}: {
+  value: string | undefined;
+  onChange: (next: string | undefined) => void;
+}) => {
+  const [mode, setMode] = useState<HeadingMode>(() => deriveHeadingMode(value));
+
+  const setModeAndPersist = (next: HeadingMode) => {
+    setMode(next);
+    if (next === "default") onChange(undefined);
+    else if (next === "none") onChange("");
+    else onChange(value && value.length > 0 ? value : "");
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label>Heading</Label>
+      <Select value={mode} onValueChange={(v) => setModeAndPersist(v as HeadingMode)}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="default">Default (“We’d value your input.”)</SelectItem>
+          <SelectItem value="custom">Custom text</SelectItem>
+          <SelectItem value="none">No heading</SelectItem>
+        </SelectContent>
+      </Select>
+      {mode === "custom" && (
+        <Input
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Custom heading text"
+        />
+      )}
+    </div>
+  );
+};

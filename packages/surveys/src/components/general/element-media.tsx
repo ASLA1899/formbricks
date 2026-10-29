@@ -40,7 +40,11 @@ interface ElementMediaProps {
   className?: string;
 }
 
+<<<<<<< HEAD
 export function ElementMedia({ imgUrl, videoUrl, altText, className }: Readonly<ElementMediaProps>) {
+=======
+export function ElementMedia({ imgUrl, videoUrl, altText = "Image", className }: ElementMediaProps) {
+>>>>>>> origin/main
   const { t } = useTranslation();
   // Every sink is validated, not just the href. `ZStorageUrl` now rejects unsafe schemes on write, but
   // this component renders survey JSON straight from the API, and rows written before that validation
@@ -52,10 +56,14 @@ export function ElementMedia({ imgUrl, videoUrl, altText, className }: Readonly<
   const [isLoading, setIsLoading] = useState(true);
 
   return (
+<<<<<<< HEAD
     // The minimum height only reserves room for the loading skeleton: an unloaded <img> has no size, so the
     // absolutely positioned placeholder would collapse to nothing. Once loaded, the media sets the height —
     // keeping the floor left empty space under any image shorter than 160px (a wide banner, a logo).
     <div className={cn("group/image relative mb-6 block rounded-md", isLoading && "min-h-40", className)}>
+=======
+    <div className={cn("group/image relative mb-6 block min-h-40 rounded-md", className)}>
+>>>>>>> origin/main
       {isLoading ? (
         <div className="absolute inset-auto flex h-full w-full animate-pulse items-center justify-center rounded-md bg-slate-200" />
       ) : null}

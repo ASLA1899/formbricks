@@ -32,7 +32,11 @@ export const AirtableWrapper = ({
   webAppUrl,
   locale,
   showReconnectButton = false,
+<<<<<<< HEAD:apps/web/app/(app)/workspaces/[workspaceId]/settings/workspace/integrations/airtable/components/AirtableWrapper.tsx
 }: Readonly<AirtableWrapperProps>) => {
+=======
+}: AirtableWrapperProps) => {
+>>>>>>> origin/main:apps/web/app/(app)/environments/[environmentId]/workspace/integrations/airtable/components/AirtableWrapper.tsx
   const [isConnected, setIsConnected] = useState(
     airtableIntegration ? airtableIntegration.config?.key : false
   );

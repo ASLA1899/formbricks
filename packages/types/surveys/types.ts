@@ -26,6 +26,7 @@ import { findBlocksWithCyclicLogic } from "./blocks-validation";
 import {
   type TSurveyElement,
   TSurveyElementTypeEnum,
+  ZCustomField,
   ZSurveyAddressElement,
   ZSurveyCTAElement,
   ZSurveyCalElement,
@@ -212,6 +213,51 @@ export const ZSurveyHiddenFields = z.object({
 
 export type TSurveyHiddenFields = z.infer<typeof ZSurveyHiddenFields>;
 
+export const ZSurveyAttributeMapping = z.record(
+  z.string(), // questionId or elementId
+  z.string() // contact attribute key name
+);
+
+export type TSurveyAttributeMapping = z.infer<typeof ZSurveyAttributeMapping>;
+
+// External data source configuration
+export const ZExternalDataSourceAuth = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("none"),
+  }),
+  z.object({
+    type: z.literal("bearer"),
+    token: z.string().min(1, "Bearer token cannot be empty"),
+  }),
+  z.object({
+    type: z.literal("apiKey"),
+    key: z.string().min(1, "API key name cannot be empty"),
+    value: z.string().min(1, "API key value cannot be empty"),
+    in: z.enum(["header", "query"]),
+  }),
+]);
+
+export type TExternalDataSourceAuth = z.infer<typeof ZExternalDataSourceAuth>;
+
+export const ZExternalDataSourceFieldMapping = z.object({
+  responseField: z.string().min(1, "Response field path cannot be empty"),
+  variableId: z.cuid2(),
+});
+
+export type TExternalDataSourceFieldMapping = z.infer<typeof ZExternalDataSourceFieldMapping>;
+
+export const ZExternalDataSource = z.object({
+  id: z.cuid2(),
+  url: z.url("Must be a valid URL"),
+  method: z.enum(["GET", "POST"]),
+  auth: ZExternalDataSourceAuth,
+  headers: z.record(z.string(), z.string()).optional(),
+  fieldMappings: z.array(ZExternalDataSourceFieldMapping),
+  queryId: z.string().optional(),
+});
+
+export type TExternalDataSource = z.infer<typeof ZExternalDataSource>;
+
 export const ZSurveyVariable = z
   .discriminatedUnion("type", [
     z.object({
@@ -333,6 +379,70 @@ export const ZSurveyMetadata = z
   .catchall(z.unknown());
 
 export type TSurveyMetadata = z.infer<typeof ZSurveyMetadata>;
+
+// ----- Survey invitation & reminder configuration (ASLA fork) -----
+
+export const ZInvitationAudience = z.discriminatedUnion("source", [
+  z.object({
+    source: z.literal("segment"),
+    segmentId: z.cuid2(),
+  }),
+  z.object({
+    source: z.literal("snowflake"),
+    queryId: z.string(),
+    emailColumn: z.string(),
+    nameColumn: z.string().optional(),
+  }),
+  // Ad-hoc list of recipients typed/pasted into the editor. Unlike segments,
+  // this doesn't require the Formbricks EE Contacts license. Unlike Snowflake,
+  // it works without any data-warehouse integration. First/last name are
+  // optional per recipient — available as merge fields in email templates.
+  z.object({
+    source: z.literal("manualList"),
+    recipients: z
+      .array(
+        z.object({
+          email: z.email(),
+          firstName: z.string().optional(),
+          lastName: z.string().optional(),
+        })
+      )
+      .min(1),
+  }),
+]);
+
+export type TInvitationAudience = z.infer<typeof ZInvitationAudience>;
+
+export const ZReminderSchedule = z.object({
+  enabled: z.boolean(),
+  daysAfterInvite: z.array(z.number().int().min(0).max(365)),
+  maxReminders: z.number().int().min(0).max(20),
+});
+
+export type TReminderSchedule = z.infer<typeof ZReminderSchedule>;
+
+export const ZInvitationEmailTemplate = z.object({
+  subject: z.string().min(1).max(500),
+  body: z.string(),
+  buttonLabel: z.string().max(100).optional(),
+  headingText: z.string().max(200).optional(),
+});
+
+export const ZInvitationEmailTemplates = z.object({
+  invitation: ZInvitationEmailTemplate,
+  reminder: ZInvitationEmailTemplate,
+});
+
+export type TInvitationEmailTemplates = z.infer<typeof ZInvitationEmailTemplates>;
+
+export const ZSurveyInvitationConfig = z.object({
+  audience: ZInvitationAudience,
+  reminderSchedule: ZReminderSchedule,
+  emailTemplates: ZInvitationEmailTemplates,
+  fromName: z.string().max(100).optional(),
+});
+
+export type TSurveyInvitationConfig = z.infer<typeof ZSurveyInvitationConfig>;
 
 export const ZSurveyQuestionChoice = z.object({
   id: z.string(),
@@ -619,6 +729,7 @@ export const ZSurveyDateQuestion = ZSurveyQuestionBase.extend({
   type: z.literal(TSurveyQuestionTypeEnum.Date),
   html: ZI18nString.optional(),
   format: z.enum(["M-d-y", "d-M-y", "y-M-d"]),
+  dateKind: z.enum(["full", "monthYear"]).optional().prefault("full"),
 });
 
 /**
@@ -713,6 +824,8 @@ export type TInputFieldConfig = z.infer<typeof ZToggleInputConfig>;
  */
 export const ZSurveyAddressQuestion = ZSurveyQuestionBase.extend({
   type: z.literal(TSurveyQuestionTypeEnum.Address),
+  name: ZToggleInputConfig.optional(),
+  organization: ZToggleInputConfig.optional(),
   addressLine1: ZToggleInputConfig,
   addressLine2: ZToggleInputConfig,
   city: ZToggleInputConfig,
@@ -731,6 +844,8 @@ export const ZSurveyContactInfoQuestion = ZSurveyQuestionBase.extend({
   email: ZToggleInputConfig,
   phone: ZToggleInputConfig,
   company: ZToggleInputConfig,
+  customFields: z.array(ZCustomField).max(10).prefault([]),
+  fieldOrder: z.array(z.string()).optional(),
 });
 
 /**
@@ -976,6 +1091,7 @@ export const ZSurveyBase = z.object({
     }
   }),
   hiddenFields: ZSurveyHiddenFields,
+<<<<<<< HEAD
   /**
    * The survey's Embedded Data definitions, joined from `EmbeddedData` / `SurveyEmbeddedData` and
    * inlined when the survey is loaded (ENG-1837). This is the **read** source of truth for every
@@ -996,6 +1112,33 @@ export const ZSurveyBase = z.object({
    */
   embeddedFields: z.array(ZLinkedEmbeddedField).optional(),
   variables: ZStoredSurveyVariables,
+=======
+  attributeMapping: ZSurveyAttributeMapping.optional(),
+  externalDataSources: z.array(ZExternalDataSource).optional(),
+  variables: ZSurveyVariables.superRefine((variables, ctx) => {
+    // variable ids must be unique
+    const variableIds = variables.map((v) => v.id);
+    const uniqueVariableIds = new Set(variableIds);
+    if (uniqueVariableIds.size !== variableIds.length) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Variable IDs must be unique",
+        path: ["variables"],
+      });
+    }
+
+    // variable names must be unique
+    const variableNames = variables.map((v) => v.name);
+    const uniqueVariableNames = new Set(variableNames);
+    if (uniqueVariableNames.size !== variableNames.length) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Variable names must be unique",
+        path: ["variables"],
+      });
+    }
+  }),
+>>>>>>> origin/main
   followUps: z.array(
     ZSurveyFollowUp.extend({
       deleted: z.boolean().optional(),
@@ -1020,7 +1163,14 @@ export const ZSurveyBase = z.object({
       error: "Response limit must be greater than 0",
     })
     .nullable(),
+<<<<<<< HEAD
   workspaceOverwrites: ZSurveyWorkspaceOverwrites.nullable(),
+=======
+  runOnDate: z.coerce.date().nullable(),
+  closeOnDate: z.coerce.date().nullable(),
+  scheduleTimezone: z.string().nullable(),
+  projectOverwrites: ZSurveyProjectOverwrites.nullable(),
+>>>>>>> origin/main
   styling: ZSurveyStyling.nullable(),
   showLanguageSwitch: z.boolean().nullable(),
   // Optional so survey literals and API payloads that predate the setting keep validating; null and
@@ -1029,6 +1179,9 @@ export const ZSurveyBase = z.object({
   surveyClosedMessage: ZSurveyClosedMessage.nullable(),
   segment: ZSegment.nullable(),
   singleUse: ZSurveySingleUse.nullable(),
+  autoAdvance: z.boolean().optional().prefault(false),
+  snowflakeSync: z.boolean().optional().prefault(false),
+  invitationConfig: ZSurveyInvitationConfig.nullable().optional(),
   isVerifyEmailEnabled: z.boolean(),
   recaptcha: ZSurveyRecaptcha.nullable(),
   isBackButtonHidden: z.boolean(),
@@ -1415,7 +1568,7 @@ export const surveyRefinement = (rawSurvey: z.infer<typeof ZSurveyBase>, ctx: z.
 
       if (question.type === TSurveyQuestionTypeEnum.ContactInfo) {
         const { company, email, firstName, lastName, phone } = question;
-        const fields = [
+        const builtInFields = [
           { ...company, label: "Company" },
           { ...email, label: "Email" },
           { ...firstName, label: "First Name" },
@@ -1423,14 +1576,16 @@ export const surveyRefinement = (rawSurvey: z.infer<typeof ZSurveyBase>, ctx: z.
           { ...phone, label: "Phone" },
         ];
 
-        if (fields.every((field) => !field.show)) {
+        const customFieldsVisible = (question.customFields ?? []).some((cf) => cf.show);
+
+        if (builtInFields.every((field) => !field.show) && !customFieldsVisible) {
           ctx.addIssue({
             code: "custom",
             message: "At least one field must be shown in the Contact Info question",
             path: ["questions", questionIndex],
           });
         }
-        fields.forEach((field) => {
+        builtInFields.forEach((field) => {
           const multiLangIssueInPlaceholder =
             field.show &&
             validateQuestionLabels(
@@ -1444,11 +1599,28 @@ export const surveyRefinement = (rawSurvey: z.infer<typeof ZSurveyBase>, ctx: z.
             ctx.addIssue(multiLangIssueInPlaceholder);
           }
         });
+
+        // Validate custom field placeholders (placeholder is optional — skip if empty)
+        (question.customFields ?? []).forEach((cf) => {
+          if (cf.show && cf.placeholder?.["default"]?.trim()) {
+            const multiLangIssue = validateQuestionLabels(
+              `Label for custom field ${cf.label}`,
+              cf.placeholder,
+              languages,
+              questionIndex
+            );
+            if (multiLangIssue) {
+              ctx.addIssue(multiLangIssue);
+            }
+          }
+        });
       }
 
       if (question.type === TSurveyQuestionTypeEnum.Address) {
-        const { addressLine1, addressLine2, city, state, zip, country } = question;
+        const { name, organization, addressLine1, addressLine2, city, state, zip, country } = question;
         const fields = [
+          ...(name ? [{ ...name, label: "Name" }] : []),
+          ...(organization ? [{ ...organization, label: "Organization" }] : []),
           { ...addressLine1, label: "Address Line 1" },
           { ...addressLine2, label: "Address Line 2" },
           { ...city, label: "City" },
@@ -1828,7 +2000,7 @@ export const surveyRefinement = (rawSurvey: z.infer<typeof ZSurveyBase>, ctx: z.
 
         if (element.type === TSurveyElementTypeEnum.ContactInfo) {
           const { company, email, firstName, lastName, phone } = element;
-          const fields = [
+          const builtInFields = [
             { ...company, label: "Company" },
             { ...email, label: "Email" },
             { ...firstName, label: "First Name" },
@@ -1836,14 +2008,16 @@ export const surveyRefinement = (rawSurvey: z.infer<typeof ZSurveyBase>, ctx: z.
             { ...phone, label: "Phone" },
           ];
 
-          if (fields.every((field) => !field.show)) {
+          const customFieldsVisible = (element.customFields ?? []).some((cf) => cf.show);
+
+          if (builtInFields.every((field) => !field.show) && !customFieldsVisible) {
             ctx.addIssue({
               code: "custom",
               message: `At least one field must be shown in the Contact Info question ${String(elementIndex + 1)} in block ${String(blockIndex + 1)}`,
               path: ["blocks", blockIndex, "elements", elementIndex],
             });
           }
-          fields.forEach((field) => {
+          builtInFields.forEach((field) => {
             const multiLangIssueInPlaceholder =
               field.show &&
               validateElementLabels(
@@ -1867,11 +2041,29 @@ export const surveyRefinement = (rawSurvey: z.infer<typeof ZSurveyBase>, ctx: z.
               });
             }
           });
+
+          // Validate custom field placeholders (placeholder is optional — skip if empty)
+          (element.customFields ?? []).forEach((cf) => {
+            if (cf.show && cf.placeholder?.["default"]?.trim()) {
+              const multiLangIssueInPlaceholder = validateElementLabels(
+                `Label for custom field ${cf.label}`,
+                cf.placeholder,
+                languages,
+                blockIndex,
+                elementIndex
+              );
+              if (multiLangIssueInPlaceholder) {
+                ctx.addIssue(multiLangIssueInPlaceholder);
+              }
+            }
+          });
         }
 
         if (element.type === TSurveyElementTypeEnum.Address) {
-          const { addressLine1, addressLine2, city, state, zip, country } = element;
+          const { name, organization, addressLine1, addressLine2, city, state, zip, country } = element;
           const fields = [
+            ...(name ? [{ ...name, label: "Name" }] : []),
+            ...(organization ? [{ ...organization, label: "Organization" }] : []),
             { ...addressLine1, label: "Address Line 1" },
             { ...addressLine2, label: "Address Line 2" },
             { ...city, label: "City" },
@@ -3931,8 +4123,8 @@ const validateBlockActions = (
           path: ["blocks", blockIndex, "logic", logicIndex],
         };
       }
-    } else {
-      // action.objective === "jumpToBlock"
+    } else if (action.objective === "jumpToBlock") {
+      // jumpToBlock action
       const targetBlockId = action.target;
       const blockIds = survey.blocks.map((b) => b.id);
       const endingIds = survey.endings.map((ending) => ending.id);
@@ -3957,6 +4149,10 @@ const validateBlockActions = (
           path: ["blocks", blockIndex, "logic", logicIndex],
         };
       }
+    } else if (action.objective === "callExternalAPI") {
+      // callExternalAPI action - TODO: Add validation for external data source
+      // For now, just return undefined (no validation errors)
+      return undefined;
     }
 
     return undefined;
@@ -4045,6 +4241,43 @@ const validateBlockLogic = (
 
   return [...logicIssues.flat(), ...(logicFallbackIssue ?? [])];
 };
+
+// ---------------------------------------------------------------------------
+// Survey schedule window helpers
+// ---------------------------------------------------------------------------
+
+export const isIanaTimezone = (tz: string): boolean => {
+  try {
+    return (Intl as any).supportedValuesOf?.("timeZone")?.includes(tz) ?? false;
+  } catch {
+    /* fall through */
+  }
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const ZScheduleWindow = z
+  .object({
+    runOnDate: z.coerce.date().nullable(),
+    closeOnDate: z.coerce.date().nullable(),
+    scheduleTimezone: z.string().nullable(),
+  })
+  .refine((s) => !s.runOnDate || !s.closeOnDate || s.closeOnDate.getTime() > s.runOnDate.getTime(), {
+    message: "closeOnDate must be after runOnDate",
+    path: ["closeOnDate"],
+  })
+  .refine((s) => !s.scheduleTimezone || isIanaTimezone(s.scheduleTimezone), {
+    message: "scheduleTimezone must be a valid IANA zone",
+    path: ["scheduleTimezone"],
+  })
+  .refine((s) => (s.runOnDate || s.closeOnDate ? !!s.scheduleTimezone : true), {
+    message: "scheduleTimezone is required when runOnDate or closeOnDate is set",
+    path: ["scheduleTimezone"],
+  });
 
 // ZSurvey is refined, so update/create inputs start from ZSurveyBase and reapply the same refinement.
 export const ZSurveyUpdateInput = ZSurveyBase.omit({

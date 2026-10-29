@@ -7,7 +7,20 @@ interface EmailButtonProps {
 
 export function EmailButton({ label, href }: EmailButtonProps): React.JSX.Element {
   return (
-    <Button className="rounded-md bg-black px-6 py-3 text-sm text-white" href={href}>
+    <Button
+      href={href}
+      style={{
+        backgroundColor: "#003A49",
+        color: "#FFFFFF",
+        fontFamily: "'Retina', 'Calibri', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+        fontSize: "13px",
+        fontWeight: 600,
+        letterSpacing: "0.01em",
+        padding: "11px 22px",
+        borderRadius: "3px",
+        textDecoration: "none",
+        display: "inline-block",
+      }}>
       {label}
     </Button>
   );

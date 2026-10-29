@@ -20,6 +20,7 @@ import { getLocalizedValue } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { getFirstErrorMessage, validateBlockResponses } from "@/lib/validation/evaluator";
 
+<<<<<<< HEAD
 const AUTO_PROGRESS_SUBMIT_DELAY_MS = 350;
 
 /**
@@ -60,6 +61,16 @@ const focusFirstControl = (root: HTMLElement, preferInvalid = false): void => {
   const target = invalidTarget ?? root.querySelector<HTMLElement>(FOCUSABLE_CONTROL_SELECTOR);
   target?.focus({ preventScroll: true });
 };
+=======
+// Element types that trigger auto-advance when answered
+const AUTO_ADVANCE_ELIGIBLE_TYPES = new Set([
+  TSurveyElementTypeEnum.MultipleChoiceSingle,
+  TSurveyElementTypeEnum.NPS,
+  TSurveyElementTypeEnum.Rating,
+  TSurveyElementTypeEnum.PictureSelection,
+  TSurveyElementTypeEnum.Cal,
+]);
+>>>>>>> origin/main
 
 interface BlockConditionalProps {
   block: TSurveyBlock;
@@ -88,7 +99,12 @@ interface BlockConditionalProps {
   onOpenExternalURL?: (url: string) => void | Promise<void>;
   dir?: "ltr" | "rtl" | "auto";
   fullSizeCards: boolean;
+<<<<<<< HEAD
   isCardless?: boolean;
+=======
+  cardSize?: "normal" | "tall";
+  autoAdvance?: boolean;
+>>>>>>> origin/main
   surveyLanguages: TSurveyLanguage[];
 }
 
@@ -114,7 +130,12 @@ export function BlockConditional({
   onOpenExternalURL,
   dir,
   fullSizeCards,
+<<<<<<< HEAD
   isCardless = false,
+=======
+  cardSize,
+  autoAdvance,
+>>>>>>> origin/main
   surveyLanguages,
 }: Readonly<BlockConditionalProps>) {
   // Track the current element being filled (for TTC tracking)
@@ -157,6 +178,18 @@ export function BlockConditional({
     value
   );
 
+  // Ref to track pending auto-submit timeout so we can cancel if needed
+  const autoSubmitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up auto-submit timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSubmitTimeoutRef.current) {
+        clearTimeout(autoSubmitTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Handle change for an individual element
   const handleElementChange = (elementId: string, responseData: TResponseData) => {
     // If user moved to a different element, we should track it
@@ -171,6 +204,7 @@ export function BlockConditional({
         return updated;
       });
     }
+<<<<<<< HEAD
     const mergedValue = { ...value, ...responseData };
     const blockResponses = block.elements.reduce<TResponseData>((acc, element) => {
       const elementValue = mergedValue[element.id];
@@ -208,6 +242,65 @@ export function BlockConditional({
           autoProgressingInFlightRef.current = false;
         }
       }, AUTO_PROGRESS_SUBMIT_DELAY_MS);
+=======
+    // Merge with existing block data to preserve other element values
+    const mergedData = { ...value, ...responseData };
+    onChange(mergedData);
+
+    // Auto-advance logic
+    if (autoAdvance) {
+      const element = block.elements.find((el) => el.id === elementId);
+      if (element && AUTO_ADVANCE_ELIGIBLE_TYPES.has(element.type)) {
+        // For picture selection, only auto-advance if it's single-select mode
+        if (
+          element.type === TSurveyElementTypeEnum.PictureSelection &&
+          "allowMulti" in element &&
+          element.allowMulti
+        ) {
+          return;
+        }
+
+        // If multi-element block, scroll to next unanswered element
+        if (block.elements.length > 1) {
+          const elementIndex = block.elements.findIndex((el) => el.id === elementId);
+          const nextElement = block.elements[elementIndex + 1];
+
+          if (nextElement) {
+            setTimeout(() => {
+              const nextElementDom = document.getElementById(`element-${nextElement.id}`);
+              if (nextElementDom) {
+                nextElementDom.scrollIntoView({ behavior: "smooth", block: "center" });
+              }
+            }, 100);
+          }
+        }
+
+        // Check if all elements now have values → auto-submit
+        const allAnswered = block.elements.every((el) => {
+          const val = el.id === elementId ? responseData[el.id] : mergedData[el.id];
+          return val !== undefined && val !== null && val !== "" && !(Array.isArray(val) && val.length === 0);
+        });
+
+        if (allAnswered) {
+          // Clear any previous pending auto-submit
+          if (autoSubmitTimeoutRef.current) {
+            clearTimeout(autoSubmitTimeoutRef.current);
+          }
+          // Build block responses now from mergedData to avoid stale closure on `value`
+          const blockResponses: TResponseData = {};
+          block.elements.forEach((el) => {
+            const val = el.id === elementId ? responseData[el.id] : mergedData[el.id];
+            if (val !== undefined) {
+              blockResponses[el.id] = val;
+            }
+          });
+          autoSubmitTimeoutRef.current = setTimeout(() => {
+            const blockTtc = collectTtcValues();
+            onSubmit(blockResponses, blockTtc);
+          }, 600);
+        }
+      }
+>>>>>>> origin/main
     }
   };
 
@@ -295,6 +388,7 @@ export function BlockConditional({
   const validateElementForm = (element: TSurveyElement, form: HTMLFormElement): boolean => {
     const response = value[element.id];
 
+<<<<<<< HEAD
     if (element.type !== TSurveyElementTypeEnum.CTA && !form.checkValidity()) {
       form.requestSubmit();
       return false;
@@ -304,6 +398,31 @@ export function BlockConditional({
       element.type === TSurveyElementTypeEnum.Address ||
       element.type === TSurveyElementTypeEnum.ContactInfo
     ) {
+=======
+    if (element.type === TSurveyElementTypeEnum.Address) {
+      if (!form.checkValidity()) {
+        form.requestSubmit();
+        return false;
+      }
+>>>>>>> origin/main
+      return true;
+    }
+
+    if (element.type === TSurveyElementTypeEnum.ContactInfo) {
+      if (!form.checkValidity()) {
+        form.requestSubmit();
+        return false;
+      }
+      // Validate required dropdown custom fields (not native inputs, so checkValidity misses them)
+      const customFields = (element as any).customFields ?? [];
+      const responseObj = (typeof response === "object" && !Array.isArray(response) ? response : {}) as Record<string, string>;
+      for (const cf of customFields) {
+        if (cf.show && cf.required && cf.type === "dropdown") {
+          if (!responseObj[cf.id] || responseObj[cf.id].trim() === "") {
+            return false;
+          }
+        }
+      }
       return true;
     }
 
@@ -436,38 +555,43 @@ export function BlockConditional({
   return (
     <div ref={containerRef} className={cn("space-y-6", fullSizeCards ? "h-full" : "")}>
       {/* Scrollable container for the entire block */}
+<<<<<<< HEAD
       <ScrollableContainer fullSizeCards={fullSizeCards} disableInternalScroll={isCardless}>
+=======
+      <ScrollableContainer fullSizeCards={fullSizeCards} cardSize={cardSize}>
+>>>>>>> origin/main
         <div className="space-y-6">
           <div className="space-y-6">
             {block.elements.map((element, index) => {
               const isFirstElement = index === 0;
 
               return (
-                <ElementConditional
-                  key={element.id}
-                  surveyLanguages={surveyLanguages}
-                  element={element}
-                  value={value[element.id]}
-                  onChange={(responseData) => handleElementChange(element.id, responseData)}
-                  onFileUpload={onFileUpload}
-                  languageCode={languageCode}
-                  ttc={ttc}
-                  setTtc={setTtc}
-                  surveyId={surveyId}
-                  autoFocusEnabled={autoFocusEnabled && isFirstElement}
-                  currentElementId={currentElementId}
-                  onOpenExternalURL={onOpenExternalURL}
-                  dir={dir}
-                  formRef={(ref) => {
-                    if (ref) {
-                      elementFormRefs.current.set(element.id, ref);
-                    } else {
-                      elementFormRefs.current.delete(element.id);
-                    }
-                  }}
-                  onTtcCollect={handleTtcCollect}
-                  errorMessage={getFirstErrorMessage(elementErrors, element.id)}
-                />
+                <div key={element.id} id={`element-${element.id}`}>
+                  <ElementConditional
+                    surveyLanguages={surveyLanguages}
+                    element={element}
+                    value={value[element.id]}
+                    onChange={(responseData) => handleElementChange(element.id, responseData)}
+                    onFileUpload={onFileUpload}
+                    languageCode={languageCode}
+                    ttc={ttc}
+                    setTtc={setTtc}
+                    surveyId={surveyId}
+                    autoFocusEnabled={autoFocusEnabled && isFirstElement}
+                    currentElementId={currentElementId}
+                    onOpenExternalURL={onOpenExternalURL}
+                    dir={dir}
+                    formRef={(ref) => {
+                      if (ref) {
+                        elementFormRefs.current.set(element.id, ref);
+                      } else {
+                        elementFormRefs.current.delete(element.id);
+                      }
+                    }}
+                    onTtcCollect={handleTtcCollect}
+                    errorMessage={getFirstErrorMessage(elementErrors, element.id)}
+                  />
+                </div>
               );
             })}
           </div>

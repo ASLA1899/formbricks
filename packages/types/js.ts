@@ -1,15 +1,20 @@
 import { z } from "zod";
 import { ZActionClass } from "./action-classes";
 import { ZId } from "./common";
+<<<<<<< HEAD
 import { ZCustomCssCompiled } from "./custom-css";
 import { ZOverlayAppearance } from "./overlay";
+=======
+import { ZProject } from "./project";
+import { ZJsEnvironmentStateSegment } from "./segment";
+>>>>>>> origin/main
 import { ZUploadFileConfig } from "./storage";
 import { ZSurveyBase, surveyRefinement } from "./surveys/types";
 import { ZWorkspace } from "./workspace";
 
 export const ZJsWorkspaceStateSurvey = ZSurveyBase.pick({
   id: true,
-  name: true,
+  // name intentionally omitted — internal label, not needed by the SDK / public client API
   welcomeCard: true,
   questions: true,
   blocks: true,
@@ -22,7 +27,7 @@ export const ZJsWorkspaceStateSurvey = ZSurveyBase.pick({
   autoClose: true,
   styling: true,
   status: true,
-  segment: true,
+  // segment intentionally omitted from pick — replaced with minimal shape below (ASLA #7931: do not leak targeting filters to the browser)
   recontactDays: true,
   displayLimit: true,
   displayOption: true,
@@ -35,6 +40,7 @@ export const ZJsWorkspaceStateSurvey = ZSurveyBase.pick({
   delay: true,
   workspaceOverwrites: true,
   isBackButtonHidden: true,
+<<<<<<< HEAD
   isAutoProgressingEnabled: true,
   recaptcha: true,
 })
@@ -49,6 +55,22 @@ export const ZJsWorkspaceStateSurvey = ZSurveyBase.pick({
   .superRefine((survey, ctx) => {
     surveyRefinement(survey as z.infer<typeof ZSurveyBase>, ctx);
   });
+=======
+  autoAdvance: true,
+  snowflakeSync: true,
+  recaptcha: true,
+  externalDataSources: true,
+})
+  .extend({
+    // Only expose what the SDK needs: segment ID for membership check + whether any filters exist.
+    // Full filter logic (titles, descriptions, conditions) is evaluated server-side and must not
+    // be sent to the browser to avoid leaking sensitive targeting data.
+    segment: ZJsEnvironmentStateSegment.nullable(),
+  })
+  .superRefine((survey, ctx) => {
+  surveyRefinement(survey as z.infer<typeof ZSurveyBase>, ctx);
+});
+>>>>>>> origin/main
 
 export type TJsWorkspaceStateSurvey = z.infer<typeof ZJsWorkspaceStateSurvey>;
 

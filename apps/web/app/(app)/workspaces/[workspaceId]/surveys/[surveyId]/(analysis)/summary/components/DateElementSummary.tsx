@@ -9,6 +9,7 @@ import { useWorkspace } from "@/app/(app)/workspaces/[workspaceId]/context/works
 import { timeSince } from "@/lib/time";
 import { getContactIdentifier } from "@/lib/utils/contact";
 import { formatStoredDateForDisplay } from "@/lib/utils/date-display";
+import { formatMonthYear, isMonthYearString } from "@/lib/utils/datetime";
 import { PersonAvatar } from "@/modules/ui/components/avatars";
 import { Button } from "@/modules/ui/components/button";
 import { EmptyState } from "@/modules/ui/components/empty-state";
@@ -33,6 +34,10 @@ export const DateElementSummary = ({ elementSummary, survey, locale }: DateEleme
   };
 
   const renderResponseValue = (value: string) => {
+    if (isMonthYearString(value)) {
+      return formatMonthYear(value, locale);
+    }
+
     const formattedDate = formatStoredDateForDisplay(value, elementSummary.element.format, locale);
 
     return (

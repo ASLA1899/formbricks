@@ -41,7 +41,10 @@
     "terms_of_service": "Términos de servicio",
     "the_servers_cannot_be_reached_at_the_moment": "Los servidores no pueden ser alcanzados en este momento.",
     "they_will_be_redirected_immediately": "Serán redirigidos inmediatamente",
+<<<<<<< HEAD:packages/surveys/locales/es-ES.json
     "time_remaining_before_the_survey_closes": "Tiempo restante antes de que se cierre la encuesta",
+=======
+>>>>>>> origin/main:packages/surveys/locales/es.json
     "welcome_video": "Vídeo de la tarjeta de bienvenida",
     "your_feedback_is_stuck": "Tu feedback está atascado :("
   },

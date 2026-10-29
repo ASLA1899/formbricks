@@ -82,6 +82,7 @@ export const ZSurveyOpenTextElement = ZSurveyElementBase.extend({
   longAnswer: z.boolean().optional(),
   inputType: ZSurveyOpenTextElementInputType.optional().prefault("text"),
   insightsEnabled: z.boolean().prefault(false).optional(),
+  prefillFrom: z.string().optional(), // recall-style source ID (e.g., "questionId.firstName" or hidden field ID)
   charLimit: z
     .object({
       enabled: z.boolean().prefault(false).optional(),
@@ -178,6 +179,7 @@ export const ZSurveyMultipleChoiceSingleElement = ZSurveyElementBase.extend({
   shuffleOption: ZStoredShuffleOption,
   otherOptionPlaceholder: ZI18nString.optional(),
   displayType: ZMultipleChoiceOptionDisplayType.optional(),
+  columns: z.enum(["1", "2"]).optional(),
 });
 
 // Multiple Choice Multi Element
@@ -190,6 +192,7 @@ export const ZSurveyMultipleChoiceMultiElement = ZSurveyElementBase.extend({
   otherOptionPlaceholder: ZI18nString.optional(),
   validation: ZValidation.optional(),
   displayType: ZMultipleChoiceOptionDisplayType.optional(),
+  columns: z.enum(["1", "2"]).optional(),
 });
 
 // Union type for Multiple Choice Elements
@@ -286,6 +289,7 @@ export const ZSurveyDateElement = ZSurveyElementBase.extend({
   type: z.literal(TSurveyElementTypeEnum.Date),
   html: ZI18nString.optional(),
   format: z.enum(["M-d-y", "d-M-y", "y-M-d"]),
+  dateKind: z.enum(["full", "monthYear"]).optional().prefault("full"),
   validation: ZValidation.optional(),
 });
 
@@ -325,7 +329,12 @@ export const ZSurveyMatrixElement = ZSurveyElementBase.extend({
   type: z.literal(TSurveyElementTypeEnum.Matrix),
   rows: z.array(ZSurveyMatrixElementChoice),
   columns: z.array(ZSurveyMatrixElementChoice),
+<<<<<<< HEAD
   shuffleOption: ZStoredShuffleOptionWithDefault,
+=======
+  shuffleOption: ZShuffleOption.optional().prefault("none"),
+  otherOptionPlaceholder: ZI18nString.optional(),
+>>>>>>> origin/main
   validation: ZValidation.optional(),
 });
 
@@ -336,12 +345,44 @@ const ZToggleInputConfig = z.object({
   show: z.boolean(),
   required: z.boolean(),
   placeholder: ZI18nString,
+  prefillFrom: z.string().optional(), // recall-style source ID (e.g., "questionId.firstName" or hidden field ID)
 });
 
 export type TInputFieldConfig = z.infer<typeof ZToggleInputConfig>;
 
+// Custom field option (for dropdown type)
+export const ZCustomFieldOption = z.object({
+  id: z.string(),
+  label: ZI18nString,
+});
+
+export type TCustomFieldOption = z.infer<typeof ZCustomFieldOption>;
+
+// Custom field type enum
+export const ZCustomFieldType = z.enum(["text", "number", "date", "email", "phone", "url", "dropdown"]);
+
+export type TCustomFieldType = z.infer<typeof ZCustomFieldType>;
+
+// Custom field definition
+export const ZCustomField = z.object({
+  id: z.string(),
+  label: z.string().min(1),
+  type: ZCustomFieldType,
+  show: z.boolean(),
+  required: z.boolean(),
+  placeholder: ZI18nString,
+  prefillFrom: z.string().optional(),
+  options: z.array(ZCustomFieldOption).optional(),
+  presetId: z.string().optional(),
+});
+
+export type TCustomField = z.infer<typeof ZCustomField>;
+
 export const ZSurveyAddressElement = ZSurveyElementBase.extend({
   type: z.literal(TSurveyElementTypeEnum.Address),
+  // Optional for backward compatibility: surveys created before these lines existed omit them (treated as hidden).
+  name: ZToggleInputConfig.optional(),
+  organization: ZToggleInputConfig.optional(),
   addressLine1: ZToggleInputConfig,
   addressLine2: ZToggleInputConfig,
   city: ZToggleInputConfig,
@@ -379,6 +420,8 @@ export const ZSurveyContactInfoElement = ZSurveyElementBase.extend({
   email: ZToggleInputConfig,
   phone: ZToggleInputConfig,
   company: ZToggleInputConfig,
+  customFields: z.array(ZCustomField).max(10).prefault([]),
+  fieldOrder: z.array(z.string()).optional(),
   validation: ZValidation.optional(),
 });
 

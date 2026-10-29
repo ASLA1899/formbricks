@@ -14,6 +14,7 @@ import {
   TResponseTtc,
   ZResponseFilterCriteria,
 } from "@formbricks/types/responses";
+import { normalizeContactInfoResponse } from "@formbricks/types/surveys/compound-fields";
 import { TSurveyElement, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import {
   TSurvey,
@@ -53,9 +54,12 @@ interface TSurveySummaryResponse {
   finished: boolean;
 }
 
+<<<<<<< HEAD:apps/web/app/(app)/workspaces/[workspaceId]/surveys/[surveyId]/(analysis)/summary/lib/surveySummary.ts
 /** A summary response as fetched, with the `createdAt` the batch loop continues after. */
 type TSurveySummaryResponseRow = TSurveySummaryResponse & { createdAt: Date };
 
+=======
+>>>>>>> origin/main:apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/lib/surveySummary.ts
 const getElementIdToBlockIdMap = (survey: TSurvey): Record<string, string> => {
   return survey.blocks.reduce<Record<string, string>>((acc, block) => {
     block.elements.forEach((element) => {
@@ -795,9 +799,21 @@ export const getElementSummary = async (
         break;
       }
       case TSurveyElementTypeEnum.Matrix: {
-        const rows = element.rows.map((row) => getLocalizedValue(row.label, "default"));
+        // Filter out "other" row from regular rows
+        const regularMatrixRows = element.rows.filter((row) => row.id !== "other");
+        const hasOtherRow = element.rows.some((row) => row.id === "other");
+        const rows = regularMatrixRows.map((row) => getLocalizedValue(row.label, "default"));
         const columns = element.columns.map((column) => getLocalizedValue(column.label, "default"));
         let totalResponseCount = 0;
+
+        // Build set of known row labels across all languages for "other" detection
+        const knownRowLabels = new Set<string>();
+        regularMatrixRows.forEach((row) => {
+          if (!row.label || typeof row.label !== "object") return;
+          Object.values(row.label).forEach((label) => {
+            if (typeof label === "string" && label) knownRowLabels.add(label);
+          });
+        });
 
         // Initialize count object
         const countMap: Record<string, Record<string, number>> = rows.reduce(
@@ -814,12 +830,21 @@ export const getElementSummary = async (
           {} as Record<string, Record<string, number>>
         );
 
+        // Initialize "Other" row count map
+        const otherCountMap: Record<string, number> = columns.reduce(
+          (acc: Record<string, number>, col) => {
+            acc[col] = 0;
+            return acc;
+          },
+          {} as Record<string, number>
+        );
+
         responses.forEach((response) => {
           const selectedResponses = response.data[element.id] as Record<string, string>;
           const responseLanguageCode = getLanguageCode(survey.languages, response.language);
           if (selectedResponses) {
             totalResponseCount++;
-            element.rows.forEach((row) => {
+            regularMatrixRows.forEach((row) => {
               const localizedRow = getLocalizedValue(row.label, responseLanguageCode);
               const colValue = element.columns.find((column) => {
                 return (
@@ -831,6 +856,21 @@ export const getElementSummary = async (
                 countMap[getLocalizedValue(row.label, "default")][colValueInDefaultLanguage] += 1;
               }
             });
+
+            // Collect "other" responses: any key not matching a known row label
+            if (hasOtherRow) {
+              Object.entries(selectedResponses).forEach(([rowLabel, colLabel]) => {
+                if (!knownRowLabels.has(rowLabel) && colLabel) {
+                  const colValue = element.columns.find((column) => {
+                    return getLocalizedValue(column.label, responseLanguageCode) === colLabel;
+                  });
+                  const colDefault = getLocalizedValue(colValue?.label, "default");
+                  if (colDefault && columns.includes(colDefault)) {
+                    otherCountMap[colDefault] += 1;
+                  }
+                }
+              });
+            }
           }
         });
 
@@ -852,6 +892,32 @@ export const getElementSummary = async (
 
           return { rowLabel: row, columnPercentages, totalResponsesForRow };
         });
+
+        // Append "Other" row summary if present
+        if (hasOtherRow) {
+          let totalOtherResponses = 0;
+          columns.forEach((col) => {
+            totalOtherResponses += otherCountMap[col];
+          });
+
+          if (totalOtherResponses > 0) {
+            const otherColumnPercentages = columns.map((col) => {
+              const count = otherCountMap[col];
+              const percentage =
+                totalOtherResponses > 0 ? ((count / totalOtherResponses) * 100).toFixed(2) : "0.00";
+              return {
+                column: col,
+                percentage: Number(percentage),
+              };
+            });
+
+            matrixSummary.push({
+              rowLabel: getLocalizedValue(element.rows.find((r) => r.id === "other")?.label, "default"),
+              columnPercentages: otherColumnPercentages,
+              totalResponsesForRow: totalOtherResponses,
+            });
+          }
+        }
 
         summary.push({
           type: element.type,
@@ -890,11 +956,13 @@ export const getElementSummary = async (
         let values: TSurveyElementSummaryContactInfo["samples"] = [];
         responses.forEach((response) => {
           const answer = response.data[element.id];
-          if (Array.isArray(answer) && answer.length > 0) {
+          // Handle both array (legacy) and object (new) formats
+          const normalized = normalizeContactInfoResponse(answer);
+          if (normalized && Object.values(normalized).some((v) => v)) {
             values.push({
               id: response.id,
               updatedAt: response.updatedAt,
-              value: answer,
+              value: Object.values(normalized),
               contact: response.contact,
               contactAttributes: response.contactAttributes,
             });

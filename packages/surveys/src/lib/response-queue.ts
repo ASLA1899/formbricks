@@ -38,14 +38,20 @@ export const delay = (ms: number): Promise<void> => {
 // so that only one sync/send runs at a time per survey, even across instances.
 const syncingBySurvey = new Map<string, boolean>();
 const requestInProgressBySurvey = new Map<string, boolean>();
+<<<<<<< HEAD
 const processedDbIdsPendingRemovalBySurvey = new Map<string, Set<number>>();
+=======
+>>>>>>> origin/main
 
 /** @internal Exposed for tests only. */
 export const _syncLocks = {
   clear: () => {
     syncingBySurvey.clear();
     requestInProgressBySurvey.clear();
+<<<<<<< HEAD
     processedDbIdsPendingRemovalBySurvey.clear();
+=======
+>>>>>>> origin/main
   },
   set: (surveyId: string, value: boolean) => syncingBySurvey.set(surveyId, value),
   get: (surveyId: string) => syncingBySurvey.get(surveyId) ?? false,
@@ -309,6 +315,7 @@ export class ResponseQueue {
     // This prevents processQueue and syncPersistedResponses from racing to
     // create the same response concurrently (duplicate POSTs).
     if (this.config.persistOffline && this.config.surveyId) {
+<<<<<<< HEAD
       let pendingCount: number;
       try {
         await this.retryProcessedDbIdCleanup();
@@ -316,6 +323,23 @@ export class ResponseQueue {
       } catch {
         return { success: false };
       }
+=======
+      const pendingCount = await countPendingResponses(this.config.surveyId);
+
+      // Re-check after await — another processQueue/sync may have started during the yield
+      if (this.isSyncing || this.isRequestInProgress || this.queue.length === 0) {
+        return { success: false };
+      }
+
+      if (pendingCount > 1) {
+        void this.syncPersistedResponses();
+        return { success: false };
+      }
+    }
+
+    const responseUpdate = this.queue[0];
+    this.isRequestInProgress = true;
+>>>>>>> origin/main
 
       // Re-check after await — another processQueue/sync may have started during the yield
       if (this.isSyncing || this.isRequestInProgress || this.queue.length === 0) {

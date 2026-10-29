@@ -35,6 +35,7 @@ interface WelcomeCardProps {
   fullSizeCards: boolean;
   isCardless?: boolean;
   isPreviewMode?: boolean;
+  cardSize?: "normal" | "tall";
 }
 
 function TimerIcon() {
@@ -91,6 +92,7 @@ export function WelcomeCard({
   fullSizeCards,
   isCardless = false,
   isPreviewMode = false,
+  cardSize,
 }: WelcomeCardProps) {
   const { t } = useTranslation();
 
@@ -153,7 +155,11 @@ export function WelcomeCard({
   }, [isCurrent, isPreviewMode]);
 
   return (
+<<<<<<< HEAD
     <ScrollableContainer fullSizeCards={fullSizeCards} disableInternalScroll={isCardless}>
+=======
+    <ScrollableContainer fullSizeCards={fullSizeCards} cardSize={cardSize}>
+>>>>>>> origin/main
       <div>
         {fileUrl ? (
           <ElementMedia imgUrl={fileUrl} altText={t("common.company_logo")} className="mb-8 min-h-0 w-1/4" />

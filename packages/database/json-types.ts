@@ -27,7 +27,11 @@ import {
   type TSurveyClosedMessage,
   type TSurveyEnding,
   type TSurveyHiddenFields,
+<<<<<<< HEAD
   type TSurveyInlineTriggers,
+=======
+  type TSurveyInvitationConfig,
+>>>>>>> origin/main
   type TSurveyMetadata,
   type TSurveyQuestions,
   type TSurveyRecaptcha,
@@ -88,6 +92,7 @@ declare global {
     export type OrganizationAccess = TOrganizationAccess;
     export type SurveyMetadata = TSurveyMetadata;
     export type SurveyQuotaLogic = TSurveyQuotaLogic;
+<<<<<<< HEAD
     export type EmbeddedDataDefaultValue = TEmbeddedDataDefaultValue;
     export type ChartQuery = TChartQuery;
     export type ChartConfig = TChartConfig;
@@ -98,5 +103,8 @@ declare global {
     export type WorkflowRunData = TWorkflowRunData;
     export type WorkflowRunLogInput = TWorkflowRunLogInput;
     export type WorkflowRunLogOutput = TWorkflowRunLogOutput;
+=======
+    export type SurveyInvitationConfig = TSurveyInvitationConfig;
+>>>>>>> origin/main
   }
 }

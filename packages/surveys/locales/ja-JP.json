@@ -41,7 +41,10 @@
     "terms_of_service": "利用規約",
     "the_servers_cannot_be_reached_at_the_moment": "現在サーバーに接続できません。",
     "they_will_be_redirected_immediately": "すぐにリダイレクトされます",
+<<<<<<< HEAD:packages/surveys/locales/ja-JP.json
     "time_remaining_before_the_survey_closes": "アンケートが閉じるまでの残り時間",
+=======
+>>>>>>> origin/main:packages/surveys/locales/ja.json
     "welcome_video": "ウェルカムカード動画",
     "your_feedback_is_stuck": "フィードバックが送信できません :("
   },

@@ -41,7 +41,10 @@
     "terms_of_service": "Условия использования",
     "the_servers_cannot_be_reached_at_the_moment": "Сервера в данный момент недоступны.",
     "they_will_be_redirected_immediately": "Они будут немедленно перенаправлены",
+<<<<<<< HEAD:packages/surveys/locales/ru-RU.json
     "time_remaining_before_the_survey_closes": "Время до закрытия опроса",
+=======
+>>>>>>> origin/main:packages/surveys/locales/ru.json
     "welcome_video": "Видео приветственной карточки",
     "your_feedback_is_stuck": "Ваш отзыв застрял :("
   },

@@ -8,9 +8,15 @@ import {
   ArrowRightLeftIcon,
   CopyIcon,
   EyeIcon,
+  FileText,
+  Globe,
   LinkIcon,
   MoreVertical,
+<<<<<<< HEAD
   PencilIcon,
+=======
+  Printer,
+>>>>>>> origin/main
   SquarePenIcon,
   TrashIcon,
   UsersIcon,
@@ -27,6 +33,7 @@ import { cn } from "@/lib/cn";
 import { getFormattedErrorMessage } from "@/lib/utils/error-message";
 import { getV3ApiErrorMessage } from "@/modules/api/lib/v3-client";
 import { EditPublicSurveyAlertDialog } from "@/modules/survey/components/edit-public-survey-alert-dialog";
+<<<<<<< HEAD
 import { copySurveyToOtherWorkspaceAction } from "@/modules/survey/list/actions";
 import { CopySurveyModal } from "@/modules/survey/list/components/copy-survey-modal";
 import { RenameSurveyModal } from "@/modules/survey/list/components/rename-survey-modal";
@@ -36,6 +43,16 @@ import { TSurveyListItem } from "@/modules/survey/list/types/survey-overview";
 import { CollaborateModal } from "@/modules/survey/visibility/components/collaborate-modal";
 import { type TSurveyVisibilityUiGate, showVisibilityControls } from "@/modules/survey/visibility/lib/state";
 import { ConfirmationModal } from "@/modules/ui/components/confirmation-modal";
+=======
+import { copySurveyLink } from "@/modules/survey/lib/client-utils";
+import {
+  copySurveyToOtherEnvironmentAction,
+  deleteSurveyAction,
+  getFullSurveyAction,
+  getSurveyAction,
+} from "@/modules/survey/list/actions";
+import { TSurvey } from "@/modules/survey/list/types/surveys";
+>>>>>>> origin/main
 import { DeleteDialog } from "@/modules/ui/components/delete-dialog";
 import {
   DropdownMenu,
@@ -362,6 +379,7 @@ export const SurveyDropDownMenu = ({
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             )}
+<<<<<<< HEAD
             {!isArchived && canManageSurvey && workspace?.organizationId && (
               <DropdownMenuItem
                 data-testid="copy-to-workspace"
@@ -412,6 +430,107 @@ export const SurveyDropDownMenu = ({
               </DropdownMenuItem>
             )}
             {!isArchived && canManageSurvey && (
+=======
+            <DropdownMenuItem>
+              <button
+                type="button"
+                className="flex w-full items-center"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  setIsDropDownOpen(false);
+                  try {
+                    const fullSurveyResponse = await getFullSurveyAction({ surveyId: survey.id });
+                    if (!fullSurveyResponse?.data) {
+                      toast.error("Failed to load survey data");
+                      return;
+                    }
+                    const { surveyToExportable } = await import(
+                      "@/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/lib/survey-export/transform"
+                    );
+                    const { generateSurveyHtml } = await import(
+                      "@/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/lib/survey-export/generate-html"
+                    );
+                    const { openHtmlInNewTab } = await import(
+                      "@/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/lib/survey-export/download"
+                    );
+                    const data = surveyToExportable(fullSurveyResponse.data as unknown as Parameters<typeof surveyToExportable>[0]);
+                    const html = generateSurveyHtml(data);
+                    openHtmlInNewTab(html);
+                    toast.success("Survey exported as HTML");
+                  } catch {
+                    toast.error("Failed to export survey");
+                  }
+                }}>
+                <Globe className="mr-2 h-4 w-4" />
+                Export as HTML
+              </button>
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <button
+                type="button"
+                className="flex w-full items-center"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  setIsDropDownOpen(false);
+                  try {
+                    const fullSurveyResponse = await getFullSurveyAction({ surveyId: survey.id });
+                    if (!fullSurveyResponse?.data) {
+                      toast.error("Failed to load survey data");
+                      return;
+                    }
+                    const { surveyToExportable } = await import(
+                      "@/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/lib/survey-export/transform"
+                    );
+                    const { generateSurveyDocx } = await import(
+                      "@/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/lib/survey-export/generate-docx"
+                    );
+                    const { downloadBlob } = await import(
+                      "@/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/lib/survey-export/download"
+                    );
+                    const data = surveyToExportable(fullSurveyResponse.data as unknown as Parameters<typeof surveyToExportable>[0]);
+                    const blob = await generateSurveyDocx(data);
+                    downloadBlob(blob, `${survey.name.replace(/[^a-zA-Z0-9]/g, "_")}_survey.docx`);
+                    toast.success("Survey exported as DOCX");
+                  } catch {
+                    toast.error("Failed to export survey");
+                  }
+                }}>
+                <FileText className="mr-2 h-4 w-4" />
+                Export as DOCX
+              </button>
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <button
+                type="button"
+                className="flex w-full items-center"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  setIsDropDownOpen(false);
+                  try {
+                    const fullSurveyResponse = await getFullSurveyAction({ surveyId: survey.id });
+                    if (!fullSurveyResponse?.data) {
+                      toast.error("Failed to load survey data");
+                      return;
+                    }
+                    const { surveyToExportable } = await import(
+                      "@/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/lib/survey-export/transform"
+                    );
+                    const { generateSurveyPdf } = await import(
+                      "@/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/lib/survey-export/generate-pdf"
+                    );
+                    const data = surveyToExportable(fullSurveyResponse.data as unknown as Parameters<typeof surveyToExportable>[0]);
+                    await generateSurveyPdf(data);
+                    toast.success("Print dialog opened — select 'Save as PDF'");
+                  } catch {
+                    toast.error("Failed to export survey");
+                  }
+                }}>
+                <Printer className="mr-2 h-4 w-4" />
+                Print as PDF
+              </button>
+            </DropdownMenuItem>
+            {!isSurveyCreationDeletionDisabled && (
+>>>>>>> origin/main
               <DropdownMenuItem>
                 <button
                   type="button"

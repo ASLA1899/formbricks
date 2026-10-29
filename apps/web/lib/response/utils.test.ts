@@ -10,7 +10,11 @@ import { InvalidInputError } from "@formbricks/types/errors";
 import { TResponse, TResponseFilterCriteria, ZResponseFilterCriteria } from "@formbricks/types/responses";
 import { TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
+<<<<<<< HEAD
 import { convertToCsv, convertToXlsxBuffer } from "@/lib/utils/file-conversion";
+=======
+import { getFormattedDateTimeString } from "@/lib/utils/datetime";
+>>>>>>> origin/main
 import {
   calculateTtcTotal,
   extractChoiceIdsFromResponse,
@@ -1444,8 +1448,9 @@ describe("Response Utils", () => {
         meta: { userAgent: { browser: "Chrome" } },
         contactAttributes: { email: "test@example.com" },
         finished: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: new Date("2026-06-10T19:15:44Z"),
+        updatedAt: new Date("2026-06-10T20:00:04Z"),
+        ttc: { q1: 2650411, _total: 2650411 },
         tags: [],
       },
     ];
@@ -1463,6 +1468,7 @@ describe("Response Utils", () => {
       expect(result[0]["Response ID"]).toBe("response1");
       expect(result[0]["Browser"]).toBe("Chrome");
       expect(result[0]["1. Question 1"]).toBe("answer1");
+<<<<<<< HEAD
       expect(result[0]["person.email"]).toBe("test@example.com");
     });
 
@@ -1516,10 +1522,61 @@ describe("Response Utils", () => {
         mockSurvey as TSurvey,
         [richResponse] as TResponse[],
         [["1. Question 1"]],
+=======
+      expect(result[0]["email"]).toBe("test@example.com");
+      expect(result[0]["Started At"]).toBe(getFormattedDateTimeString(new Date("2026-06-10T19:15:44Z")));
+      expect(result[0]["Completed At"]).toBe(getFormattedDateTimeString(new Date("2026-06-10T20:00:04Z")));
+      expect(result[0]["Duration"]).toBe("0:44:10");
+      expect(result[0]["Timestamp"]).toBeUndefined();
+    });
+  });
+
+  describe("getResponsesJson address elements", () => {
+    const addressSurvey = {
+      id: "survey1",
+      name: "Address Survey",
+      blocks: [
+        {
+          id: "block1",
+          name: "Block 1",
+          elements: [
+            {
+              id: "addr1",
+              type: TSurveyElementTypeEnum.Address,
+              headline: { default: "Mailing address" },
+              required: false,
+            },
+          ],
+        },
+      ],
+      hiddenFields: { enabled: true, fieldIds: [] },
+    } as unknown as TSurvey;
+
+    const exportAddress = (addressValue: string[]) =>
+      getResponsesJson(
+        addressSurvey,
+        [
+          {
+            id: "response1",
+            data: { addr1: addressValue },
+            meta: {},
+            contactAttributes: {},
+            variables: {},
+            tags: [],
+            finished: true,
+            createdAt: new Date("2026-06-10T19:15:44Z"),
+            updatedAt: new Date("2026-06-10T20:00:04Z"),
+            ttc: {},
+          },
+        ] as unknown as TResponse[],
+        [["1. Mailing address"]],
+        [],
+>>>>>>> origin/main
         [],
         false
       );
 
+<<<<<<< HEAD
       // number cell, seconds not milliseconds — real numeric in XLSX, not text
       expect(result[0]["Duration Seconds"]).toBe(13);
       expect(result[0]["Finished At"]).toBe("2026-08-30T10:00:00.000Z");
@@ -1688,6 +1745,16 @@ describe("Response Utils", () => {
         "Asia/Manila"
       );
       expect(result[0]["Timestamp"]).toBe("2026-01-02 04:00:00 GMT+8");
+=======
+    test("exports name and organization first, then the address lines", () => {
+      const result = exportAddress(["1 Main St", "", "Austin", "TX", "78701", "USA", "Jane Doe", "ASLA"]);
+      expect(result[0]["1. Mailing address"]).toBe("Jane Doe; ASLA; 1 Main St; Austin; TX; 78701; USA");
+    });
+
+    test("exports legacy 6-element responses unchanged", () => {
+      const result = exportAddress(["1 Main St", "", "Austin", "TX", "78701", "USA"]);
+      expect(result[0]["1. Mailing address"]).toBe("1 Main St; Austin; TX; 78701; USA");
+>>>>>>> origin/main
     });
   });
 

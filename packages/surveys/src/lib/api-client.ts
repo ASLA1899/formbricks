@@ -68,7 +68,11 @@ export class ApiClient {
   ): Promise<Result<{ responseId: string | null }, ApiErrorResponse>> {
     return makeRequest(
       this.appUrl,
+<<<<<<< HEAD
       `/api/v1/client/${this.workspaceId}/displays/${displayId}/response`,
+=======
+      `/api/v1/client/${this.environmentId}/displays/${displayId}/response`,
+>>>>>>> origin/main
       "GET"
     );
   }

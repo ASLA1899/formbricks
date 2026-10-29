@@ -35,8 +35,14 @@ export const selectSurvey = {
   delay: true,
   displayPercentage: true,
   autoComplete: true,
+<<<<<<< HEAD
   publishOn: true,
   closeOn: true,
+=======
+  runOnDate: true,
+  closeOnDate: true,
+  scheduleTimezone: true,
+>>>>>>> origin/main
   isVerifyEmailEnabled: true,
   isCaptureIpEnabled: true,
   isAnonymizeResponsesEnabled: true,
@@ -50,7 +56,12 @@ export const selectSurvey = {
   autoSelectLanguage: true,
   recaptcha: true,
   isBackButtonHidden: true,
+<<<<<<< HEAD
   isAutoProgressingEnabled: true,
+=======
+  autoAdvance: true,
+  snowflakeSync: true,
+>>>>>>> origin/main
   metadata: true,
   slug: true,
   customHeadScripts: true,
@@ -108,9 +119,13 @@ export const selectSurvey = {
     },
   },
   followUps: true,
+<<<<<<< HEAD
   // ENG-1837: the definitions every reader resolves through, joined and inlined by
   // `transformPrismaSurvey`. Read-only — the rows are written by `reconcileEmbeddedData`.
   embeddedDataLinks: selectSurveyEmbeddedDataLinks,
+=======
+  invitationConfig: true,
+>>>>>>> origin/main
 } satisfies Prisma.SurveySelect;
 
 export const getOrganizationBilling = reactCache(

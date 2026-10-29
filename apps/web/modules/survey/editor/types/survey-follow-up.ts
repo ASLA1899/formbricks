@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ZSurveyFollowUpAttachment } from "@formbricks/database/types/survey-follow-up";
 
 export const ZCreateSurveyFollowUpFormSchema = z.object({
   followUpName: z.string().trim().min(1, "Name is required"),
@@ -11,6 +12,7 @@ export const ZCreateSurveyFollowUpFormSchema = z.object({
   attachResponseData: z.boolean(),
   includeVariables: z.boolean(),
   includeHiddenFields: z.boolean(),
+  attachment: ZSurveyFollowUpAttachment.optional(),
 });
 
 export type TCreateSurveyFollowUpForm = z.infer<typeof ZCreateSurveyFollowUpFormSchema>;

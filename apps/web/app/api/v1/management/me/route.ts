@@ -1,12 +1,14 @@
 import { headers } from "next/headers";
 import { prisma } from "@formbricks/database";
+import { authenticateApiKey } from "@/app/api/v1/auth";
+import { buildApiKeyMeResponse } from "@/app/api/v1/management/me/lib/api-key-response";
 import { getSessionUser } from "@/app/api/v1/management/me/lib/utils";
 import { responses } from "@/app/lib/api/response";
-import { CONTROL_HASH } from "@/lib/constants";
-import { hashSha256, parseApiKeyV2, verifySecret } from "@/lib/crypto";
+import { publicUserSelect } from "@/lib/user/public-user";
 import { applyRateLimit } from "@/modules/core/rate-limit/helpers";
 import { rateLimitConfigs } from "@/modules/core/rate-limit/rate-limit-configs";
 
+<<<<<<< HEAD
 const ALLOWED_PERMISSIONS = ["manage", "read", "write"] as const;
 
 const apiKeySelect = {
@@ -99,6 +101,8 @@ const validateLegacyApiKey = async (apiKey: string): Promise<ApiKeyData | null> 
   return result;
 };
 
+=======
+>>>>>>> origin/main
 const checkRateLimit = async (userId: string) => {
   try {
     await applyRateLimit(rateLimitConfigs.api.v1, userId);
@@ -110,6 +114,7 @@ const checkRateLimit = async (userId: string) => {
   return null;
 };
 
+<<<<<<< HEAD
 const updateApiKeyUsage = async (apiKeyId: string) => {
   await prisma.apiKey.update({
     where: { id: apiKeyId },
@@ -147,13 +152,16 @@ const isValidApiKeyEnvironment = (apiKeyData: ApiKeyData): boolean => {
   );
 };
 
+=======
+>>>>>>> origin/main
 const handleApiKeyAuthentication = async (apiKey: string) => {
-  const apiKeyData = await validateApiKey(apiKey);
+  const authentication = await authenticateApiKey(apiKey, { allowOrganizationOnlyApiKey: true });
 
-  if (!apiKeyData) {
+  if (!authentication) {
     return responses.notAuthenticatedResponse();
   }
 
+<<<<<<< HEAD
   if (!apiKeyData.lastUsedAt || apiKeyData.lastUsedAt <= new Date(Date.now() - 1000 * 30)) {
     // Fire-and-forget: update lastUsedAt in the background without blocking the response
     updateApiKeyUsage(apiKeyData.id).catch((error) => {
@@ -172,6 +180,18 @@ const handleApiKeyAuthentication = async (apiKey: string) => {
   }
 
   return buildWorkspaceResponse(apiKeyData);
+=======
+  const rateLimitError = await checkRateLimit(authentication.apiKeyId);
+  if (rateLimitError) return rateLimitError;
+
+  const apiKeyMeResponse = await buildApiKeyMeResponse(authentication);
+
+  if (!apiKeyMeResponse) {
+    return responses.badRequestResponse("You can't use this method with this API key");
+  }
+
+  return apiKeyMeResponse;
+>>>>>>> origin/main
 };
 
 const handleSessionAuthentication = async () => {
@@ -186,6 +206,7 @@ const handleSessionAuthentication = async () => {
 
   const user = await prisma.user.findUnique({
     where: { id: sessionUser.id },
+<<<<<<< HEAD
     select: {
       id: true,
       name: true,
@@ -200,6 +221,9 @@ const handleSessionAuthentication = async () => {
       lastLoginAt: true,
       isActive: true,
     },
+=======
+    select: publicUserSelect,
+>>>>>>> origin/main
   });
 
   return Response.json(user);

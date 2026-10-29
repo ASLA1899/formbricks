@@ -801,14 +801,24 @@ describe("withV1ApiWrapper", () => {
 
   test("does not allow organization-only API keys by default", async () => {
     const { authenticateRequest } = await import("@/app/api/v1/auth");
+<<<<<<< HEAD
     const { isClientSideApiRoute, isManagementApiRoute, isIntegrationRoute } =
       await import("@/app/middleware/endpoint-validator");
+=======
+    const { isClientSideApiRoute, isManagementApiRoute, isIntegrationRoute } = await import(
+      "@/app/middleware/endpoint-validator"
+    );
+>>>>>>> origin/main
 
     vi.mocked(authenticateRequest).mockResolvedValue(null);
     vi.mocked(isClientSideApiRoute).mockReturnValue({ isClientSideApi: false, isRateLimited: true });
     vi.mocked(isManagementApiRoute).mockReturnValue({
       isManagementApi: true,
+<<<<<<< HEAD
       authenticationMethod: AuthMethod.ApiKey,
+=======
+      authenticationMethod: AuthenticationMethod.ApiKey,
+>>>>>>> origin/main
     });
     vi.mocked(isIntegrationRoute).mockReturnValue(false);
 
@@ -825,21 +835,35 @@ describe("withV1ApiWrapper", () => {
 
   test("allows organization-only API keys when the route opts in", async () => {
     const { authenticateRequest } = await import("@/app/api/v1/auth");
+<<<<<<< HEAD
     const { isClientSideApiRoute, isManagementApiRoute, isIntegrationRoute } =
       await import("@/app/middleware/endpoint-validator");
+=======
+    const { isClientSideApiRoute, isManagementApiRoute, isIntegrationRoute } = await import(
+      "@/app/middleware/endpoint-validator"
+    );
+>>>>>>> origin/main
 
     vi.mocked(authenticateRequest).mockResolvedValue(mockApiAuthentication);
     vi.mocked(isClientSideApiRoute).mockReturnValue({ isClientSideApi: false, isRateLimited: true });
     vi.mocked(isManagementApiRoute).mockReturnValue({
       isManagementApi: true,
+<<<<<<< HEAD
       authenticationMethod: AuthMethod.ApiKey,
+=======
+      authenticationMethod: AuthenticationMethod.ApiKey,
+>>>>>>> origin/main
     });
     vi.mocked(isIntegrationRoute).mockReturnValue(false);
 
     const handler = vi.fn().mockResolvedValue({
       response: responses.successResponse({ data: "test" }),
     });
+<<<<<<< HEAD
     const req = createMockRequest({ url: V1_MANAGEMENT_SURVEYS_URL });
+=======
+    const req = createMockRequest({ url: "https://api.test/v1/management/surveys" });
+>>>>>>> origin/main
     const { withV1ApiWrapper } = await import("./with-api-logging");
     const wrapped = withV1ApiWrapper({ handler, allowOrganizationOnlyApiKey: true });
     const response = await wrapped(req, undefined);

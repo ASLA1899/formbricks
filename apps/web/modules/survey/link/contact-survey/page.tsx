@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { findMatchingLocale, getAcceptedLanguages } from "@/lib/utils/locale";
 import { getTranslate } from "@/lingodotdev/server";
-import { verifyContactSurveyToken } from "@/modules/ee/contacts/lib/contact-survey-link";
 import { getResponseCountBySurveyId } from "@/modules/survey/lib/response";
 import { SurveyInactive } from "@/modules/survey/link/components/survey-inactive";
 import { renderSurvey } from "@/modules/survey/link/components/survey-renderer";
+<<<<<<< HEAD
 import { getExistingContactResponse, getResponseBySingleUseId } from "@/modules/survey/link/lib/data";
 import { getServableLinkSurvey } from "@/modules/survey/link/lib/servable-survey";
 import { getLinkSurveySingleUseAccess } from "@/modules/survey/link/lib/single-use-link";
@@ -13,6 +13,20 @@ import type { TLinkSurveySearchParams } from "@/modules/survey/link/lib/types";
 import { getWorkspaceContextForLinkSurvey } from "@/modules/survey/link/lib/workspace";
 import { getWorkspaceById } from "@/modules/survey/link/lib/workspace";
 import { getGenericSurveyMetadata, getMetadataForContactSurvey } from "@/modules/survey/link/metadata";
+=======
+import { getContactAttributesByContactId } from "@/modules/survey/link/contact-survey/lib/contact-attributes";
+import { prePopulateFromContactAttributes } from "@/modules/survey/link/contact-survey/lib/pre-populate";
+import { verifyContactSurveyToken } from "@/modules/survey/link/lib/contact-survey-link";
+import { getExistingContactResponse } from "@/modules/survey/link/lib/data";
+import { getEnvironmentContextForLinkSurvey } from "@/modules/survey/link/lib/environment";
+import { checkAndValidateSingleUseId } from "@/modules/survey/link/lib/helper";
+import {
+  getBasicSurveyMetadata,
+  getMetadataBrandColor,
+  getSurveyOpenGraphMetadata,
+} from "@/modules/survey/link/lib/metadata-utils";
+import { getProjectByEnvironmentId } from "@/modules/survey/link/lib/project";
+>>>>>>> origin/main
 
 interface ContactSurveyPageProps {
   params: Promise<{
@@ -90,6 +104,7 @@ export const ContactSurveyPage = async (props: ContactSurveyPageProps) => {
   }
   const { singleUseId } = singleUse;
 
+<<<<<<< HEAD
   // Parallel fetch of workspace context, locale and the respondent's browser languages
   const [workspaceContext, locale, acceptedLanguages, singleUseLinkResponse] = await Promise.all([
     getWorkspaceContextForLinkSurvey(survey.workspaceId),
@@ -99,6 +114,16 @@ export const ContactSurveyPage = async (props: ContactSurveyPageProps) => {
     // here as on /s, which is also what the PIN and verify-email actions answer for it (ENG-4041): the
     // client routes accept one response per single-use id, so the link is spent whichever contact opens it.
     singleUseId ? getResponseBySingleUseId(survey.id, singleUseId)() : Promise.resolve(null),
+=======
+  // Parallel fetch of environment context, locale, and contact attributes
+  const [environmentContext, locale, singleUseResponse, contactAttributes] = await Promise.all([
+    getEnvironmentContextForLinkSurvey(survey.environmentId),
+    findMatchingLocale(),
+    // Fetch existing response for this contact
+    getExistingContactResponse(survey.id, contactId)(),
+    // Fetch contact attributes for pre-population
+    getContactAttributesByContactId(contactId),
+>>>>>>> origin/main
   ]);
   // Hand the renderer the row this page should resume, so the survey client updates it instead of creating a
   // second response: the single-use link's own response when the link carries one, otherwise the contact's
@@ -113,6 +138,9 @@ export const ContactSurveyPage = async (props: ContactSurveyPageProps) => {
     ? await getResponseCountBySurveyId(survey.id)
     : undefined;
 
+  // Pre-populate initial values from contact attributes
+  const initialValues = prePopulateFromContactAttributes(survey, contactAttributes);
+
   return renderSurvey({
     survey,
     searchParams,
@@ -124,5 +152,6 @@ export const ContactSurveyPage = async (props: ContactSurveyPageProps) => {
     locale,
     acceptedLanguages,
     responseCount,
+    initialValues,
   });
 };

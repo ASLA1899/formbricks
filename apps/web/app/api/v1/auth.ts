@@ -7,6 +7,7 @@ import {
   authenticateApiKeyFromHeaders,
 } from "@/modules/api/lib/api-key-auth";
 
+<<<<<<< HEAD
 export const authenticateRequest = async (
   request: NextRequest,
   options: AuthenticateApiKeyOptions = {}
@@ -17,6 +18,53 @@ export const authenticateRequest = async (
 export const handleErrorResponse = (error: unknown): ApiErrorResult => {
   const message = error instanceof Error ? error.message : undefined;
   switch (message) {
+=======
+type AuthenticateApiKeyOptions = {
+  allowOrganizationOnlyApiKey?: boolean;
+};
+
+export const authenticateApiKey = async (
+  apiKey: string,
+  options: AuthenticateApiKeyOptions = {}
+): Promise<TAuthenticationApiKey | null> => {
+  const apiKeyData = await getApiKeyWithPermissions(apiKey);
+  if (!apiKeyData) return null;
+
+  if (!options.allowOrganizationOnlyApiKey && apiKeyData.apiKeyEnvironments.length === 0) {
+    return null;
+  }
+
+  // In the route handlers, we'll do more specific permission checks
+  const authentication: TAuthenticationApiKey = {
+    type: "apiKey",
+    environmentPermissions: apiKeyData.apiKeyEnvironments.map((env) => ({
+      environmentId: env.environmentId,
+      environmentType: env.environment.type,
+      permission: env.permission,
+      projectId: env.environment.projectId,
+      projectName: env.environment.project.name,
+    })),
+    apiKeyId: apiKeyData.id,
+    organizationId: apiKeyData.organizationId,
+    organizationAccess: apiKeyData.organizationAccess,
+  };
+
+  return authentication;
+};
+
+export const authenticateRequest = async (
+  request: NextRequest,
+  options: AuthenticateApiKeyOptions = {}
+): Promise<TAuthenticationApiKey | null> => {
+  const apiKey = request.headers.get("x-api-key");
+  if (!apiKey) return null;
+
+  return authenticateApiKey(apiKey, options);
+};
+
+export const handleErrorResponse = (error: any): Response => {
+  switch (error.message) {
+>>>>>>> origin/main
     case "NotAuthenticated":
       return { response: responses.notAuthenticatedResponse() };
     case "Unauthorized":

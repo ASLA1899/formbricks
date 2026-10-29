@@ -4,8 +4,12 @@ import { Prisma, Response } from "@formbricks/database/prisma";
 import { logger } from "@formbricks/logger";
 import { TEmbeddedValueResponse } from "@formbricks/types/embedded-data-resolver";
 import { TSurveyQuota } from "@formbricks/types/quota";
+<<<<<<< HEAD
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { toJsWorkspaceStateSurvey } from "@/lib/survey/client-utils";
+=======
+import { toJsEnvironmentStateSurvey } from "@/lib/survey/client-utils";
+>>>>>>> origin/main
 import { getSurvey } from "@/lib/survey/service";
 import { buildServerEmbeddedValues } from "@/lib/surveyLogic/utils";
 import { getQuotas } from "./quotas";
@@ -200,6 +204,7 @@ export const evaluateResponseQuotas = async (input: QuotaEvaluationInput): Promi
   try {
     const result = screenWithContext(quotaContext, { data, variables, language, response });
 
+<<<<<<< HEAD
     const quotaFull = await handleQuotas(
       surveyId,
       responseId,
@@ -207,6 +212,26 @@ export const evaluateResponseQuotas = async (input: QuotaEvaluationInput): Promi
       responseFinished,
       prismaClient
     );
+=======
+    if (!quotas || quotas.length === 0) {
+      return { shouldEndSurvey: false };
+    }
+
+    const survey = await getSurvey(surveyId);
+    if (!survey) {
+      return { shouldEndSurvey: false };
+    }
+    const isDefaultLanguage = survey.languages.find((lang) => lang.default)?.language.code === language;
+    const result = evaluateQuotas(
+      toJsEnvironmentStateSurvey(survey),
+      data,
+      variables,
+      quotas,
+      isDefaultLanguage ? "default" : language
+    );
+
+    const quotaFull = await handleQuotas(surveyId, responseId, result, responseFinished, prismaClient);
+>>>>>>> origin/main
 
     if (quotaFull && quotaFull.action === "endSurvey") {
       const refreshedResponse = await prismaClient.response.findUnique({

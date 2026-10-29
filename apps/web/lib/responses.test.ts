@@ -245,6 +245,9 @@ describe("Response Processing", () => {
       displayLimit: null,
       autoClose: null,
       autoComplete: null,
+      runOnDate: null,
+      closeOnDate: null,
+      scheduleTimezone: null,
       recontactDays: null,
       welcomeCard: {
         enabled: false,
@@ -253,6 +256,8 @@ describe("Response Processing", () => {
       },
       showLanguageSwitch: false,
       isBackButtonHidden: false,
+      autoAdvance: false,
+      snowflakeSync: false,
       isVerifyEmailEnabled: false,
       displayPercentage: 100,
       styling: null,

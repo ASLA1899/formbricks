@@ -16,7 +16,13 @@ import {
 } from "@/lib/constants";
 import { SentryUser } from "@/lib/sentry/SentryUser";
 import { getUser } from "@/lib/user/service";
+<<<<<<< HEAD
 import { getSession } from "@/modules/auth/lib/session";
+=======
+import { NextAuthProvider } from "@/modules/auth/components/next-auth-provider";
+import { authOptions } from "@/modules/auth/lib/authOptions";
+import { AgplFooter } from "@/modules/ui/components/agpl-footer";
+>>>>>>> origin/main
 import { ClientLogout } from "@/modules/ui/components/client-logout";
 import { NoMobileOverlay } from "@/modules/ui/components/no-mobile-overlay";
 import { ToasterClient } from "@/modules/ui/components/toaster-client";
@@ -72,8 +78,16 @@ const AppLayout = async ({ children }: Readonly<{ children: React.ReactNode }>) 
         />
       )}
       <ToasterClient />
+<<<<<<< HEAD
       {children}
     </>
+=======
+      <div className="flex min-h-screen flex-col">
+        <div className="flex-1">{children}</div>
+        <AgplFooter />
+      </div>
+    </NextAuthProvider>
+>>>>>>> origin/main
   );
 };
 

@@ -49,10 +49,12 @@ export const performActions = (
   jumpTarget: string | undefined;
   requiredQuestionIds: string[];
   calculations: TResponseVariables;
+  apiCallsToMake: TSurveyBlockLogicAction[];
 } => {
   let jumpTarget: string | undefined;
   const requiredQuestionIds: string[] = [];
   const calculations: TResponseVariables = { ...calculationResults };
+  const apiCallsToMake: TSurveyBlockLogicAction[] = [];
 
   actions.forEach((action) => {
     switch (action.objective) {
@@ -68,10 +70,13 @@ export const performActions = (
           jumpTarget = action.target;
         }
         break;
+      case "callExternalAPI":
+        apiCallsToMake.push(action);
+        break;
     }
   });
 
-  return { jumpTarget, requiredQuestionIds, calculations };
+  return { jumpTarget, requiredQuestionIds, calculations, apiCallsToMake };
 };
 
 const getLeftOperandValue = (

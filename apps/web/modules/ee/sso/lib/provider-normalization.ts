@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import type { IdentityProvider } from "@formbricks/database/prisma";
 
 /**
@@ -7,6 +8,9 @@ import type { IdentityProvider } from "@formbricks/database/prisma";
  * the Prisma enum then fails typecheck until the policy names it, rather than falling into a default.
  */
 export type TSsoIdentityProvider = Exclude<IdentityProvider, "email">;
+=======
+import type { IdentityProvider } from "@prisma/client";
+>>>>>>> origin/main
 
 const SSO_PROVIDER_MAP = {
   google: "google",
@@ -15,12 +19,17 @@ const SSO_PROVIDER_MAP = {
   azuread: "azuread",
   openid: "openid",
   saml: "saml",
+<<<<<<< HEAD
 } as const satisfies Record<string, TSsoIdentityProvider>;
+=======
+} as const satisfies Record<string, IdentityProvider>;
+>>>>>>> origin/main
 
 const LEGACY_SSO_PROVIDER_ALIASES: Partial<Record<IdentityProvider, string[]>> = {
   azuread: ["azure-ad"],
 };
 
+<<<<<<< HEAD
 // `Object.hasOwn`, not `in`: `in` walks the prototype chain, so "constructor" / "toString" / "__proto__"
 // would pass this guard and resolve to a Function typed as a provider. Nothing downstream is reachable
 // with such a value today, but the policy table in ./email-verification-policy is documented as
@@ -29,6 +38,12 @@ const isSupportedSsoProvider = (provider: string): provider is keyof typeof SSO_
   Object.hasOwn(SSO_PROVIDER_MAP, provider);
 
 export const normalizeSsoProvider = (provider: string): TSsoIdentityProvider | null => {
+=======
+const isSupportedSsoProvider = (provider: string): provider is keyof typeof SSO_PROVIDER_MAP =>
+  provider in SSO_PROVIDER_MAP;
+
+export const normalizeSsoProvider = (provider: string): IdentityProvider | null => {
+>>>>>>> origin/main
   const normalizedProviderKey = provider.toLowerCase();
   if (!isSupportedSsoProvider(normalizedProviderKey)) {
     return null;
@@ -49,6 +64,7 @@ export const getSsoProviderLookupCandidates = (provider: string): string[] => {
 
   return [normalizedProvider, ...getLegacySsoProviderAliases(normalizedProvider)];
 };
+<<<<<<< HEAD
 
 /**
  * Resolves a NextAuth provider id (e.g. "azure-ad") to the canonical provider string persisted
@@ -57,3 +73,5 @@ export const getSsoProviderLookupCandidates = (provider: string): string[] => {
  */
 export const resolveAccountProvider = (provider: string): string =>
   normalizeSsoProvider(provider) ?? provider;
+=======
+>>>>>>> origin/main

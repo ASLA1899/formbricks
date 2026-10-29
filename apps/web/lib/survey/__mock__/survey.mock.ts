@@ -193,6 +193,7 @@ const mockBlocks = [
 const baseSurveyProperties = {
   id: mockId,
   name: "Mock Survey",
+  visibility: "private" as const,
   autoClose: 10,
   delay: 0,
   autoComplete: 7,
@@ -206,7 +207,12 @@ const baseSurveyProperties = {
   questions: [],
   blocks: mockBlocks as unknown as SurveyMock["blocks"],
   isBackButtonHidden: false,
+<<<<<<< HEAD
   isAutoProgressingEnabled: false,
+=======
+  autoAdvance: false,
+  snowflakeSync: false,
+>>>>>>> origin/main
   isCaptureIpEnabled: false,
   isAnonymizeResponsesEnabled: false,
   endings: [
@@ -222,6 +228,9 @@ const baseSurveyProperties = {
   },
   isVerifyEmailEnabled: false,
   attributeFilters: [],
+  runOnDate: null,
+  closeOnDate: null,
+  scheduleTimezone: null,
   ...commonMockProperties,
 };
 
@@ -275,6 +284,7 @@ export const mockSyncSurveyOutput: SurveyMock = {
   autoSelectLanguage: null,
   metadata: {},
   slug: null,
+  invitationConfig: null,
   customHeadScripts: null,
   customHeadScriptsMode: null,
   customCss: null,
@@ -312,6 +322,7 @@ export const mockSurveyOutput: SurveyMock = {
   autoSelectLanguage: null,
   ...baseSurveyProperties,
   slug: null,
+  invitationConfig: null,
   customHeadScripts: null,
   customHeadScriptsMode: null,
   customCss: null,

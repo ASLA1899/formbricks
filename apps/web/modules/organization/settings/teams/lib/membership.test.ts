@@ -65,7 +65,7 @@ describe("getMembershipByOrganizationId", () => {
     vi.clearAllMocks();
   });
   test("returns members", async () => {
-    vi.mocked(prisma.membership.findMany).mockResolvedValue([mockMember]);
+    vi.mocked(prisma.membership.findMany).mockResolvedValue([mockMember as any]);
     const result = await getMembershipByOrganizationId(organizationId, 1);
     expect(result[0].userId).toBe(userId);
     expect(result[0].name).toBe("Test");
@@ -220,7 +220,7 @@ describe("getMembershipsByUserId", () => {
     vi.clearAllMocks();
   });
   test("returns memberships", async () => {
-    vi.mocked(prisma.membership.findMany).mockResolvedValue([mockMembership]);
+    vi.mocked(prisma.membership.findMany).mockResolvedValue([mockMembership as any]);
     const result = await getMembershipsByUserId(userId, 1);
     expect(result[0].userId).toBe(userId);
     expect(result[0].organizationId).toBe(organizationId);

@@ -26,12 +26,18 @@ import {
   ZCreateSurveyFollowUpFormSchema,
 } from "@/modules/survey/editor/types/survey-follow-up";
 import FollowUpActionMultiEmailInput from "@/modules/survey/follow-ups/components/follow-up-action-multi-email-input";
+<<<<<<< HEAD
 import {
   type EmailSendToOption,
   buildEmailSendToOptions,
 } from "@/modules/survey/follow-ups/lib/email-send-to-options";
 import { buildFollowUpFormDefaultValues } from "@/modules/survey/follow-ups/lib/form-default-values";
 import { sanitizeFollowUpBody } from "@/modules/survey/follow-ups/lib/sanitize-follow-up-body";
+=======
+import { FollowUpAttachmentField } from "@/modules/survey/follow-ups/components/follow-up-attachment-field";
+import { FollowUpFileDownloads } from "@/modules/survey/follow-ups/components/follow-up-file-downloads";
+import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
+>>>>>>> origin/main
 import { getElementIconMap } from "@/modules/survey/lib/elements";
 import { AdvancedOptionToggle } from "@/modules/ui/components/advanced-option-toggle";
 import { Alert, AlertTitle } from "@/modules/ui/components/alert";
@@ -111,12 +117,28 @@ export const FollowUpModal = ({
   );
 
   const form = useForm<TCreateSurveyFollowUpForm>({
+<<<<<<< HEAD
     defaultValues: buildFollowUpFormDefaultValues({
       defaultValues,
       firstEmailSendToOptionId: emailSendToOptions[0]?.id,
       userEmail,
       t,
     }),
+=======
+    defaultValues: {
+      followUpName: defaultValues?.followUpName ?? "",
+      triggerType: defaultValues?.triggerType ?? "response",
+      endingIds: defaultValues?.endingIds || null,
+      emailTo: defaultValues?.emailTo ?? emailSendToOptions[0]?.id,
+      replyTo: defaultValues?.replyTo ?? [userEmail],
+      subject: defaultValues?.subject ?? t("environments.surveys.edit.follow_ups_modal_action_subject"),
+      body: defaultValues?.body ?? getSurveyFollowUpActionDefaultBody(t),
+      attachResponseData: defaultValues?.attachResponseData ?? false,
+      includeVariables: defaultValues?.includeVariables ?? false,
+      includeHiddenFields: defaultValues?.includeHiddenFields ?? false,
+      attachment: defaultValues?.attachment,
+    },
+>>>>>>> origin/main
     resolver: zodResolver(ZCreateSurveyFollowUpFormSchema),
     mode: "onChange",
   });
@@ -196,6 +218,7 @@ export const FollowUpModal = ({
             attachResponseData: data.attachResponseData,
             includeVariables: data.includeVariables,
             includeHiddenFields: data.includeHiddenFields,
+            attachment: data.attachment,
           },
         },
       };
@@ -240,6 +263,7 @@ export const FollowUpModal = ({
           attachResponseData: data.attachResponseData,
           includeVariables: data.includeVariables,
           includeHiddenFields: data.includeHiddenFields,
+          attachment: data.attachment,
         },
       },
     };
@@ -286,6 +310,7 @@ export const FollowUpModal = ({
 
   useEffect(() => {
     if (open && defaultValues) {
+<<<<<<< HEAD
       // Same builder as the initial `defaultValues` above: two hand-maintained copies of this object
       // is what shipped #7218, and this one had already drifted — its `subject` fallback was a
       // hardcoded English string, so a non-English author editing a follow-up with no stored subject
@@ -298,6 +323,21 @@ export const FollowUpModal = ({
           t,
         })
       );
+=======
+      form.reset({
+        followUpName: defaultValues?.followUpName ?? "",
+        triggerType: defaultValues?.triggerType ?? "response",
+        endingIds: defaultValues?.endingIds || null,
+        emailTo: defaultValues?.emailTo ?? emailSendToOptions[0]?.id,
+        replyTo: defaultValues?.replyTo ?? [userEmail],
+        subject: defaultValues?.subject ?? "Thanks for your answers!",
+        body: defaultValues?.body ?? getSurveyFollowUpActionDefaultBody(t),
+        attachResponseData: defaultValues?.attachResponseData ?? false,
+        includeVariables: defaultValues?.includeVariables ?? false,
+        includeHiddenFields: defaultValues?.includeHiddenFields ?? false,
+        attachment: defaultValues?.attachment,
+      });
+>>>>>>> origin/main
     }
   }, [open, defaultValues, emailSendToOptions, form, userEmail, locale, t]);
 
@@ -804,6 +844,15 @@ export const FollowUpModal = ({
                         );
                       }}
                     />
+
+                    <FollowUpAttachmentField environmentId={localSurvey.environmentId} />
+
+                    {mode === "edit" && defaultValues?.surveyFollowUpId && defaultValues.attachment ? (
+                      <FollowUpFileDownloads
+                        surveyId={localSurvey.id}
+                        followUpId={defaultValues.surveyFollowUpId}
+                      />
+                    ) : null}
 
                     <FormField
                       control={form.control}

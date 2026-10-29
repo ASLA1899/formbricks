@@ -114,6 +114,7 @@
 /*
  * Restore list styling for rich text (questions/descriptions).
  * Preflight resets ul/ol with list-style:none; these overrides restore bullets/numbers.
+ * (Upstream's superset covers .htmlbody plus the headline/description variants.)
  */
 #fbjs .htmlbody ul,
 #fbjs .htmlbody ol,
@@ -148,6 +149,19 @@
  * the editor itself. Source of truth for those class names:
  * apps/web/modules/ui/components/editor/lib/example-theme.ts
  */
+
+/* ASLA: Hide native up/down spinner buttons on number inputs in surveys.
+   They invite negative values via mouse-wheel/click and are rarely wanted
+   in survey contexts (contact info, quantities, IDs). */
+#fbjs input[type="number"]::-webkit-inner-spin-button,
+#fbjs input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#fbjs input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
 
 /* without this, it wont override the color */
 #fbjs p.editor-paragraph {

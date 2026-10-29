@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Files GitHub should treat as generated: collapsed by default in pull-request diffs and left out of
 # the repository's language statistics. Only build outputs that are committed on purpose belong here.
 
@@ -16,3 +17,8 @@ packages/api-v3-schemas/src/generated/** linguist-generated=true eol=lf
 apps/web/modules/survey/import/qsf/__fixtures__/*.qsf linguist-generated=true
 apps/web/modules/survey/import/qsf/__fixtures__/*.json linguist-generated=true
 apps/web/modules/survey/import/qsf/__fixtures__/plans/** linguist-generated=true
+=======
+
+# Use bd merge for beads JSONL files
+.beads/issues.jsonl merge=beads
+>>>>>>> origin/main

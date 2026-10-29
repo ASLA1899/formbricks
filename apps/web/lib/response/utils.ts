@@ -21,7 +21,11 @@ import {
   TSurveyContactAttributes,
   TSurveyMetaFieldFilter,
 } from "@formbricks/types/responses";
+<<<<<<< HEAD
 import { formatFieldNameToTitleCase } from "@formbricks/types/safe-identifier";
+=======
+import { getAddressValuesInDisplayOrder } from "@formbricks/types/surveys/compound-fields";
+>>>>>>> origin/main
 import {
   TSurveyElement,
   TSurveyMultipleChoiceElement,
@@ -36,7 +40,7 @@ import { displayEmbeddedValue } from "@/modules/embedded-data/lib/value-display"
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
 import { processResponseData } from "../responses";
 import { getTodaysDateTimeFormatted } from "../time";
-import { getFormattedDateTimeString } from "../utils/datetime";
+import { formatDurationClock, getFormattedDateTimeString } from "../utils/datetime";
 import { sanitizeString } from "../utils/strings";
 
 /**
@@ -279,9 +283,16 @@ const exportElementHeadlines = (survey: TSurvey): string[][] => {
   return modifiedElements.map((element, idx) => {
     const headline = getTextContent(getLocalizedValue(element.headline, "default")) ?? element.id;
     if (element.type === "matrix") {
-      return element.rows.map((row) => {
+      // Exclude "other" row from fixed columns — other responses are collected separately
+      const regularRows = element.rows.filter((row) => row.id !== "other");
+      const hasOtherRow = element.rows.some((row) => row.id === "other");
+      const headers = regularRows.map((row) => {
         return `${idx + 1}. ${headline} - ${getTextContent(getLocalizedValue(row.label, "default"))}`;
       });
+      if (hasOtherRow) {
+        headers.push(`${idx + 1}. ${headline} - Other`);
+      }
+      return headers;
     } else if (
       element.type === "multipleChoiceMulti" ||
       element.type === "multipleChoiceSingle" ||
@@ -393,6 +404,7 @@ export const getResponsesJson = (
 
   responses.forEach((response, idx) => {
     // basic response details
+<<<<<<< HEAD
     jsonData.push(
       newExportRow({
         "No.": idx + 1,
@@ -405,6 +417,23 @@ export const getResponsesJson = (
         Tags: response.tags.map((tag) => tag.name).join(", "),
       })
     );
+=======
+    jsonData.push({
+      "No.": idx + 1,
+      "Response ID": response.id,
+      "Started At": getFormattedDateTimeString(response.createdAt),
+      "Completed At": response.finished ? getFormattedDateTimeString(response.updatedAt) : "",
+      Duration:
+        typeof response.ttc?._total === "number" && response.ttc._total > 0
+          ? formatDurationClock(response.ttc._total)
+          : "",
+      Finished: response.finished ? "Yes" : "No",
+      "Survey ID": response.surveyId,
+      "Formbricks ID (internal)": response.contact?.id || "",
+      "User ID": response.contact?.userId || "",
+      Tags: response.tags.map((tag) => tag.name).join(", "),
+    });
+>>>>>>> origin/main
 
     if (isQuotasAllowed) {
       jsonData[idx]["Quotas"] = response.quotas?.map((quota) => quota.name).join(", ") || "";
@@ -427,17 +456,29 @@ export const getResponsesJson = (
 
       if (element.type === "matrix") {
         // For matrix elements, we need to handle each row separately
+        const regularRows = element.rows.filter((row) => row.id !== "other");
+        const hasOtherRow = element.rows.some((row) => row.id === "other");
+        const knownRowLabels = new Set(regularRows.map((row) => row.label.default));
+
         elementHeadline.forEach((headline, index) => {
           if (answer) {
-            const row = element.rows[index];
-            if (
-              row &&
-              row.label.default &&
-              (answer as Record<string, string>)[row.label.default] !== undefined
-            ) {
-              jsonData[idx][headline] = (answer as Record<string, string>)[row.label.default];
+            if (hasOtherRow && index === regularRows.length) {
+              // Last column is the "Other" row — find the response key not matching any known row
+              const otherEntry = Object.entries(answer as Record<string, string>).find(
+                ([key]) => !knownRowLabels.has(key)
+              );
+              jsonData[idx][headline] = otherEntry ? `${otherEntry[0]}: ${otherEntry[1]}` : "";
             } else {
-              jsonData[idx][headline] = "";
+              const row = regularRows[index];
+              if (
+                row &&
+                row.label.default &&
+                (answer as Record<string, string>)[row.label.default] !== undefined
+              ) {
+                jsonData[idx][headline] = (answer as Record<string, string>)[row.label.default];
+              } else {
+                jsonData[idx][headline] = "";
+              }
             }
           }
         });
@@ -454,6 +495,32 @@ export const getResponsesJson = (
           const choiceIds = extractChoiceIdsFromResponse(answer, element, response.language || "default");
           jsonData[idx][elementHeadline[1]] = choiceIds.join(", ");
         }
+      } else if (element.type === "address" && Array.isArray(answer)) {
+        // Stored name/organization come last (storage order); export them first (display order).
+        jsonData[idx][elementHeadline[0]] = processResponseData(getAddressValuesInDisplayOrder(answer));
+      } else if (
+        element.type === "contactInfo" &&
+        answer &&
+        typeof answer === "object" &&
+        !Array.isArray(answer)
+      ) {
+        // Map custom field IDs to human-readable labels
+        const BUILTIN_LABELS: Record<string, string> = {
+          firstName: "First Name",
+          lastName: "Last Name",
+          email: "Email",
+          phone: "Phone",
+          company: "Company",
+        };
+        const customFields = (element as any).customFields ?? [];
+        const formattedString = Object.entries(answer as Record<string, string>)
+          .filter(([_, value]) => value !== "")
+          .map(([key, value]) => {
+            const label = BUILTIN_LABELS[key] ?? customFields.find((cf: any) => cf.id === key)?.label ?? key;
+            return `${label}: ${value}`;
+          })
+          .join("\n");
+        jsonData[idx][elementHeadline[0]] = formattedString;
       } else {
         jsonData[idx][elementHeadline[0]] = processResponseData(answer);
       }

@@ -1,5 +1,9 @@
 import { logger } from "@formbricks/logger";
+<<<<<<< HEAD
 import { TIntegrationNotionInput } from "@formbricks/types/integration/notion";
+=======
+import { TIntegrationNotionConfigData, TIntegrationNotionInput } from "@formbricks/types/integration/notion";
+>>>>>>> origin/main
 import { responses } from "@/app/lib/api/response";
 import { withV1ApiWrapper } from "@/app/lib/api/with-api-logging";
 import {
@@ -11,6 +15,7 @@ import {
 } from "@/lib/constants";
 import { symmetricEncrypt } from "@/lib/crypto";
 import { createOrUpdateIntegration, getIntegrationByType } from "@/lib/integration/service";
+<<<<<<< HEAD
 import {
   IntegrationOAuthStateError,
   consumeIntegrationOAuthState,
@@ -19,6 +24,10 @@ import {
 import { capturePostHogEvent } from "@/lib/posthog";
 import { getOrganizationIdFromWorkspaceId } from "@/lib/utils/helper";
 import { canUserWriteWorkspaceIntegrations } from "@/lib/workspace/auth";
+=======
+import { capturePostHogEvent } from "@/lib/posthog";
+import { getOrganizationIdFromEnvironmentId } from "@/lib/utils/helper";
+>>>>>>> origin/main
 
 export const GET = withV1ApiWrapper({
   handler: async ({ req, authentication }) => {
@@ -137,6 +146,7 @@ export const GET = withV1ApiWrapper({
 
       if (result) {
         try {
+<<<<<<< HEAD
           const organizationId = await getOrganizationIdFromWorkspaceId(workspaceId);
           capturePostHogEvent(
             authentication.user.id,
@@ -148,6 +158,13 @@ export const GET = withV1ApiWrapper({
             },
             { organizationId, workspaceId }
           );
+=======
+          const organizationId = await getOrganizationIdFromEnvironmentId(environmentId);
+          capturePostHogEvent(authentication.user.id, "integration_connected", {
+            integration_type: "notion",
+            organization_id: organizationId,
+          });
+>>>>>>> origin/main
         } catch (err) {
           logger.error({ error: err }, "Failed to capture PostHog integration_connected event for notion");
         }

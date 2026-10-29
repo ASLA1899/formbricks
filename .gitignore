@@ -1,5 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# brainstorming artifacts
+.superpowers/
+
 # dependencies
 **/node_modules
 .pnp
@@ -42,6 +45,7 @@ yarn-error.log*
 **/.env.*backup*
 !apps/web/.env
 
+<<<<<<< HEAD
 # local cloud credentials — the Hub's google-gemini (Vertex) enrichment providers need a GCP
 # service-account JSON on disk (HUB_GOOGLE_APPLICATION_CREDENTIALS). It belongs outside the repo,
 # but these patterns keep the obvious in-repo spots from being committable if someone drops one here.
@@ -49,6 +53,23 @@ yarn-error.log*
 **/service-account*.json
 **/*-credentials.json
 secrets/
+=======
+# ASLA local-only working docs (not for the public fork)
+/FORK_DIVERGENCE.md
+/CLAUDE.md
+/PHASE_1A_CONTACT_MIRROR_RUNBOOK.md
+/securitybackportfinal.tar.gz
+.beads/
+# internal ops runbooks (not AGPL source — keep local)
+/SURVEY_ACL_RUNBOOK.md
+/DEPLOYMENT_GUIDE.md
+/AZURE_SSO_SETUP.md
+/SCHEDULE_WINDOW_RUNBOOK.md
+/ENV_SETUP_GUIDE.md
+/DEPLOYMENT_SAVED_OPTION_LISTS.md
+# internal superpowers planning/design artifacts (not AGPL source)
+/docs/superpowers/
+>>>>>>> origin/main
 
 # build tools
 .turbo
@@ -78,6 +99,12 @@ branch.json
 packages/ios/FormbricksSDK/FormbricksSDK.xcodeproj/project.xcworkspace/xcuserdata
 .cursorrules
 i18n.cache
+.env.docker
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
+
 stats.html
 
 # authzed:perf sample logs — multi-MB JSONL written next to the tracked authzed/ assets
@@ -86,6 +113,7 @@ authzed/*.perf.jsonl
 # next-agents-md
 .next-docs/
 
+<<<<<<< HEAD
 # robots (installed agent assets - machine-local, do not commit)
 # .claude is machine-local except committed symlinks into .agents/skills
 .claude/*
@@ -99,3 +127,7 @@ authzed/*.perf.jsonl
 docs/api-v3-reference/contract-tests/fixtures.json
 .schemathesis/
 __pycache__/
+=======
+# Local SSO-loop repro harness (fb-bm6.12) — never commit
+.sso-repro/
+>>>>>>> origin/main

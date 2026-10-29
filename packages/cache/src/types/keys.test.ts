@@ -93,6 +93,7 @@ describe("@formbricks/cache types/keys", () => {
   describe("CustomCacheNamespace type", () => {
     test("should support known custom namespaces in parsed cache keys", () => {
       // Type test - this will fail at compile time if types don't match
+<<<<<<< HEAD:packages/cache/src/types/keys.test.ts
       const namespaces: CustomCacheNamespace[] = [
         "account_deletion",
         "analytics",
@@ -109,6 +110,14 @@ describe("@formbricks/cache types/keys", () => {
         "oauth:test:123",
         "github:test:123",
       ]);
+=======
+      const accountDeletionNamespace: CustomCacheNamespace = "account_deletion";
+      const analyticsNamespace: CustomCacheNamespace = "analytics";
+      const billingNamespace: CustomCacheNamespace = "billing";
+      expect(accountDeletionNamespace).toBe("account_deletion");
+      expect(analyticsNamespace).toBe("analytics");
+      expect(billingNamespace).toBe("billing");
+>>>>>>> origin/main:packages/cache/types/keys.test.ts
     });
 
     test("should be usable in cache key construction", () => {

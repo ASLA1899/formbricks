@@ -1,8 +1,13 @@
 "use client";
 
+<<<<<<< HEAD
 import type { TFunction } from "i18next";
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from "lucide-react";
 import { useState } from "react";
+=======
+import { useState } from "react";
+import toast from "react-hot-toast";
+>>>>>>> origin/main
 import { useTranslation } from "react-i18next";
 import { TMember, TOrganizationRole } from "@formbricks/types/memberships";
 import { TOrganization } from "@formbricks/types/organizations";
@@ -10,6 +15,7 @@ import { getReportingTimeZone } from "@/lib/date-ranges";
 import { getAccessFlags } from "@/lib/membership/utils";
 import { formatDateForDisplay, formatDateWithOrdinal } from "@/lib/utils/datetime";
 import { EditMembershipRole } from "@/modules/ee/role-management/components/edit-membership-role";
+import { setMembershipSurveyAdminAction } from "@/modules/organization/settings/teams/actions";
 import { MemberActions } from "@/modules/organization/settings/teams/components/edit-memberships/member-actions";
 import {
   type TLastSignInSort,
@@ -18,7 +24,11 @@ import {
 import { hasMoreThanOneActiveOwner, isInviteExpired } from "@/modules/organization/settings/teams/lib/utils";
 import { TInvite } from "@/modules/organization/settings/teams/types/invites";
 import { Badge } from "@/modules/ui/components/badge";
+<<<<<<< HEAD
 import { SettingsTable, type TSettingsTableColumn } from "@/modules/ui/components/settings-table";
+=======
+import { Switch } from "@/modules/ui/components/switch";
+>>>>>>> origin/main
 import { TooltipRenderer } from "@/modules/ui/components/tooltip";
 
 /** The two row shapes this table mixes: accepted memberships and pending invites. */
@@ -255,6 +265,7 @@ interface MembersInfoProps {
   invites: TInvite[];
   currentUserRole: TOrganizationRole;
   currentUserId: string;
+  callerCanManageSurveyAdmin: boolean;
   isAccessControlAllowed: boolean;
   isFormbricksCloud: boolean;
   isUserManagementDisabledFromUi: boolean;
@@ -266,6 +277,7 @@ export const MembersInfo = ({
   currentUserRole,
   members,
   currentUserId,
+  callerCanManageSurveyAdmin,
   isAccessControlAllowed,
   isFormbricksCloud,
   isUserManagementDisabledFromUi,
@@ -273,12 +285,55 @@ export const MembersInfo = ({
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language ?? "en-US";
 
+<<<<<<< HEAD
   // Unsorted until the header is clicked, then newest first, then oldest first. Invites have no sign-in
   // and always follow the members.
   const [lastSignInSort, setLastSignInSort] = useState<TLastSignInSort | null>(null);
   const toggleLastSignInSort = () => setLastSignInSort((current) => (current === "desc" ? "asc" : "desc"));
   const sortedMembers = lastSignInSort ? sortMembersByLastSignIn(members, lastSignInSort) : members;
   const allMembers = [...sortedMembers, ...invites];
+=======
+  const [surveyAdminState, setSurveyAdminState] = useState<Record<string, boolean>>(
+    Object.fromEntries(members.map((m) => [m.userId, m.surveyAdmin]))
+  );
+
+  const onToggleSurveyAdmin = async (userId: string, next: boolean) => {
+    const prev = surveyAdminState[userId] ?? false;
+    setSurveyAdminState({ ...surveyAdminState, [userId]: next });
+    const res = await setMembershipSurveyAdminAction({
+      organizationId: organization.id,
+      userId,
+      surveyAdmin: next,
+    });
+    if (res?.data) {
+      toast.success(next ? "Granted survey admin" : "Revoked survey admin");
+    } else {
+      setSurveyAdminState((s) => ({ ...s, [userId]: prev }));
+      toast.error("Failed to update survey admin");
+    }
+  };
+
+  const getMembershipBadge = (member: TMember | TInvite) => {
+    if (isInvitee(member)) {
+      return isInviteExpired(member) ? (
+        <Badge type="gray" text="Expired" size="tiny" data-testid="expired-badge" />
+      ) : (
+        <TooltipRenderer
+          tooltipContent={`${t("environments.settings.general.invite_expires_on", {
+            date: formatDateWithOrdinal(member.expiresAt, locale),
+          })}`}>
+          <Badge type="warning" text="Pending" size="tiny" />
+        </TooltipRenderer>
+      );
+    }
+
+    if (!member.isActive) {
+      return <Badge type="gray" text="Inactive" size="tiny" />;
+    }
+
+    return <Badge type="success" text="Active" size="tiny" />;
+  };
+>>>>>>> origin/main
 
   const { isOwner, isManager } = getAccessFlags(currentUserRole);
   const isOwnerOrManager = isOwner || isManager;
@@ -286,6 +341,7 @@ export const MembersInfo = ({
   const doesOrgHaveMoreThanOneOwner = hasMoreThanOneActiveOwner(members);
 
   return (
+<<<<<<< HEAD
     <SettingsTable
       columns={getMemberColumns({
         t,
@@ -314,5 +370,64 @@ export const MembersInfo = ({
       getRowProps={() => ({ id: "singleMemberInfo" })}
       aria-label={t("workspace.settings.general.manage_members")}
     />
+=======
+    <div className="max-w-full space-y-4 px-4 py-3" id="membersInfoWrapper">
+      {allMembers.map((member) => (
+        <div
+          id="singleMemberInfo"
+          className="grid w-full max-w-full grid-cols-12 items-center gap-x-4 text-left text-sm text-slate-900"
+          key={member.email}>
+          <div className="ph-no-capture col-span-2 overflow-hidden">
+            <p className="w-full truncate">{member.name}</p>
+          </div>
+          <div className="ph-no-capture col-span-3 overflow-hidden">
+            <p className="w-full truncate"> {member.email}</p>
+          </div>
+
+          {isAccessControlAllowed && allMembers?.length > 0 && (
+            <div className="ph-no-capture col-span-2">
+              <EditMembershipRole
+                currentUserRole={currentUserRole}
+                memberRole={member.role}
+                memberId={!isInvitee(member) ? member.userId : ""}
+                organizationId={organization.id}
+                userId={currentUserId}
+                memberAccepted={!isInvitee(member) ? member.accepted : undefined}
+                inviteId={isInvitee(member) ? member.id : ""}
+                doesOrgHaveMoreThanOneOwner={doesOrgHaveMoreThanOneOwner}
+                isFormbricksCloud={isFormbricksCloud}
+                isUserManagementDisabledFromUi={isUserManagementDisabledFromUi}
+              />
+            </div>
+          )}
+          <div className="col-span-2">
+            {isInvitee(member) ? (
+              <span className="text-xs text-slate-400">—</span>
+            ) : (
+              <Switch
+                checked={surveyAdminState[member.userId] ?? false}
+                onCheckedChange={(next) => void onToggleSurveyAdmin(member.userId, next)}
+                disabled={!callerCanManageSurveyAdmin}
+                aria-label={`Toggle survey admin for ${member.name}`}
+              />
+            )}
+          </div>
+
+          <div className="col-span-2 flex items-center">{getMembershipBadge(member)}</div>
+
+          {!isUserManagementDisabledFromUi && (
+            <div className="col-span-3">
+              <MemberActions
+                organization={organization}
+                member={isInvitee(member) ? undefined : member}
+                invite={isInvitee(member) ? member : undefined}
+                showDeleteButton={showDeleteButton(member)}
+              />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+>>>>>>> origin/main
   );
 };

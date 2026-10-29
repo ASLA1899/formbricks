@@ -6,6 +6,8 @@ import { useTranslation } from "react-i18next";
 import { getComputedEmbeddedFields, getIngestedStorageKeys } from "@formbricks/types/embedded-data-resolver";
 import { TSurveyQuota } from "@formbricks/types/quota";
 import { TResponseDataValue, TResponseTableData, TResponseWithQuotas } from "@formbricks/types/responses";
+import { ADDRESS_FIELDS } from "@formbricks/types/surveys/compound-fields";
+import type { TSurveyAddressElement } from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { TTag } from "@formbricks/types/tags";
 import { TUser, TUserLocale } from "@formbricks/types/user";
@@ -40,12 +42,42 @@ const formatArrayToRecord = (responseValue: TResponseDataValue, keys: string[]):
   return result;
 };
 
+<<<<<<< HEAD:apps/web/app/(app)/workspaces/[workspaceId]/surveys/[surveyId]/(analysis)/responses/components/ResponseDataView.tsx
 const formatAddressData = (responseValue: TResponseDataValue): Record<string, string> => {
   const addressKeys = ["addressLine1", "addressLine2", "city", "state", "zip", "country"];
   return formatArrayToRecord(responseValue, addressKeys);
 };
 
 const formatContactInfoData = (responseValue: TResponseDataValue): Record<string, string> => {
+=======
+// Export for testing
+export const formatAddressData = (
+  responseValue: TResponseDataValue,
+  element?: TSurveyAddressElement
+): Record<string, string> => {
+  // Storage order; arrays from before name/organization existed are shorter and leave them unset.
+  const result = formatArrayToRecord(responseValue, [...ADDRESS_FIELDS]);
+  // These keys are flattened into one shared record, so only emit name/organization when the survey
+  // shows them. Otherwise an empty value could shadow another element whose id is "name"/"organization".
+  if (element) {
+    if (!element.name?.show) delete result.name;
+    if (!element.organization?.show) delete result.organization;
+  }
+  return result;
+};
+
+// Export for testing
+export const formatContactInfoData = (responseValue: TResponseDataValue): Record<string, string> => {
+  // Handle new object format (from custom fields feature)
+  if (responseValue && typeof responseValue === "object" && !Array.isArray(responseValue)) {
+    const result: Record<string, string> = {};
+    for (const [key, val] of Object.entries(responseValue)) {
+      result[key] = String(val || "");
+    }
+    return result;
+  }
+  // Handle legacy array format
+>>>>>>> origin/main:apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/responses/components/ResponseDataView.tsx
   const contactInfoKeys = ["firstName", "lastName", "email", "phone", "company"];
   return formatArrayToRecord(responseValue, contactInfoKeys);
 };
@@ -64,7 +96,7 @@ const extractResponseData = (response: TResponseWithQuotas, survey: TSurvey): Re
         }
         break;
       case "address":
-        Object.assign(responseData, formatAddressData(responseValue));
+        Object.assign(responseData, formatAddressData(responseValue, element as TSurveyAddressElement));
         break;
       case "contactInfo":
         Object.assign(responseData, formatContactInfoData(responseValue));
@@ -90,6 +122,9 @@ const mapResponsesToTableData = (
   return responses.map((response) => ({
     responseData: extractResponseData(response, survey),
     createdAt: response.createdAt,
+    completedAt: response.finished ? response.updatedAt : null,
+    duration:
+      typeof response.ttc?._total === "number" && response.ttc._total > 0 ? response.ttc._total : null,
     status: response.finished
       ? t("workspace.surveys.responses.completed")
       : t("workspace.surveys.responses.not_completed"),

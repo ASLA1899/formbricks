@@ -1,4 +1,8 @@
 import { google } from "googleapis";
+<<<<<<< HEAD
+=======
+import { getServerSession } from "next-auth";
+>>>>>>> origin/main
 import { logger } from "@formbricks/logger";
 import { TIntegrationGoogleSheetsConfig } from "@formbricks/types/integration/google-sheet";
 import { responses } from "@/app/lib/api/response";
@@ -9,6 +13,7 @@ import {
   WEBAPP_URL,
 } from "@/lib/constants";
 import { createOrUpdateIntegration, getIntegrationByType } from "@/lib/integration/service";
+<<<<<<< HEAD
 import {
   IntegrationOAuthStateError,
   consumeIntegrationOAuthState,
@@ -79,6 +84,11 @@ const captureGoogleSheetsConnectedEvent = async (userId: string, workspaceId: st
     logger.error({ error: err }, "Failed to capture PostHog integration_connected event for googleSheets");
   }
 };
+=======
+import { capturePostHogEvent } from "@/lib/posthog";
+import { getOrganizationIdFromEnvironmentId } from "@/lib/utils/helper";
+import { authOptions } from "@/modules/auth/lib/authOptions";
+>>>>>>> origin/main
 
 export const GET = async (req: Request) => {
   const url = new URL(req.url);
@@ -152,9 +162,27 @@ export const GET = async (req: Request) => {
     },
   };
 
+<<<<<<< HEAD
   const result = await createOrUpdateIntegration(workspaceId, googleSheetIntegration);
   if (!result) {
     return responses.internalServerErrorResponse("Failed to create or update Google Sheets integration");
+=======
+  const result = await createOrUpdateIntegration(environmentId, googleSheetIntegration);
+  if (result) {
+    try {
+      const organizationId = await getOrganizationIdFromEnvironmentId(environmentId);
+      capturePostHogEvent(session.user.id, "integration_connected", {
+        integration_type: "googleSheets",
+        organization_id: organizationId,
+      });
+    } catch (err) {
+      logger.error({ error: err }, "Failed to capture PostHog integration_connected event for googleSheets");
+    }
+
+    return Response.redirect(
+      `${WEBAPP_URL}/environments/${environmentId}/workspace/integrations/google-sheets`
+    );
+>>>>>>> origin/main
   }
 
   await captureGoogleSheetsConnectedEvent(session.user.id, workspaceId);

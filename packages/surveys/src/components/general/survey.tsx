@@ -44,10 +44,16 @@ import { AutoCloseWrapper } from "@/components/wrappers/auto-close-wrapper";
 import { CardlessSurveyLayout } from "@/components/wrappers/cardless-survey-layout";
 import { StackedCardsContainer } from "@/components/wrappers/stacked-cards-container";
 import { ApiClient } from "@/lib/api-client";
+<<<<<<< HEAD
 import { advanceFromBlock } from "@/lib/block-flow";
 import { type TWebSurveyMeta, createWebSurveyMetaSnapshot } from "@/lib/browser-context";
 import { getLocalizedValue } from "@/lib/i18n";
 import { INGEST_DROP_MESSAGES, logIngestResult } from "@/lib/ingest-logging";
+=======
+import { computeConfiguredPrefill } from "@/lib/compound-prefill";
+import { callExternalAPI } from "@/lib/external-api-client";
+import { evaluateLogic, performActions } from "@/lib/logic";
+>>>>>>> origin/main
 import {
   type SerializedSurveyState,
   clearSurveyProgress,
@@ -110,7 +116,7 @@ export function Survey({
   mode,
   survey,
   styling,
-  isBrandingEnabled,
+  isBrandingEnabled: _isBrandingEnabled,
   onDisplay,
   onResponse,
   onClose,
@@ -132,6 +138,8 @@ export function Survey({
   hiddenFieldsRecord,
   shouldResetQuestionId,
   fullSizeCards = false,
+  cardSize,
+  autoAdvance,
   autoFocus,
   action,
   singleUseId,
@@ -142,8 +150,13 @@ export function Survey({
   isSpamProtectionEnabled,
   dir = "auto",
   setDir,
+<<<<<<< HEAD
   onLanguageChange,
   onPageChange,
+=======
+  resumedResponse,
+  onResponseIdReceived,
+>>>>>>> origin/main
   placement,
   offlineSupport = false,
   onOfflineStatusChange,
@@ -161,6 +174,7 @@ export function Survey({
   }
 
   const surveyState = useMemo(() => {
+<<<<<<< HEAD
     if (appUrl && workspaceId) {
       if (mode === "inline") {
         return new SurveyState(survey.id, singleUseId, singleUseResponseId, userId, contactId, pinAuthToken);
@@ -180,6 +194,35 @@ export function Survey({
     contactId,
     pinAuthToken,
   ]);
+=======
+    if (appUrl && environmentId) {
+      const initialResponseId = resumedResponse?.id ?? null;
+      let state: SurveyState;
+      if (mode === "inline") {
+        state = new SurveyState(
+          survey.id,
+          singleUseId,
+          initialResponseId ?? singleUseResponseId,
+          userId,
+          contactId
+        );
+      } else {
+        state = new SurveyState(survey.id, null, initialResponseId, userId, contactId);
+      }
+      if (resumedResponse) {
+        state.responseAcc = {
+          finished: false,
+          data: resumedResponse.data,
+          ttc: resumedResponse.ttc,
+          variables: resumedResponse.variables,
+        };
+      }
+      return state;
+    }
+    return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resumedResponse intentionally captured only on initial mount; it does not change for a given session
+  }, [appUrl, environmentId, mode, survey.id, userId, singleUseId, singleUseResponseId, contactId]);
+>>>>>>> origin/main
 
   // Update the responseQueue to use the stored responseId
 
@@ -217,8 +260,21 @@ export function Survey({
     [onResponseCreated]
   );
 
+  const persistSurveyStateSnapshot = useCallback(
+    async (snapshotPatch: Partial<SerializedSurveyState>) => {
+      if (!offlinePersistEnabled) return;
+      await patchSurveyProgressSnapshot(survey.id, snapshotPatch);
+    },
+    [offlinePersistEnabled, survey.id]
+  );
+
   const responseQueue = useMemo(() => {
+<<<<<<< HEAD
     if (appUrl && workspaceId && surveyState) {
+=======
+    if (appUrl && environmentId && surveyState) {
+      let lastSeenResponseId: string | null = surveyState.responseId;
+>>>>>>> origin/main
       return new ResponseQueue(
         {
           appUrl,
@@ -250,6 +306,7 @@ export function Survey({
               setBlockId(quotaInfo.endingCardId);
             }
           },
+<<<<<<< HEAD
           onResponseCreated: (responseId) => {
             void persistSurveyStateSnapshot({ responseId });
             try {
@@ -262,6 +319,17 @@ export function Survey({
               console.error("Formbricks: onResponseCreated handler threw", error);
             }
           },
+=======
+          setSurveyState: (state) => {
+            if (state.responseId && state.responseId !== lastSeenResponseId) {
+              lastSeenResponseId = state.responseId;
+              onResponseIdReceived?.(state.responseId);
+            }
+          },
+          onResponseCreated: (responseId) => {
+            void persistSurveyStateSnapshot({ responseId });
+          },
+>>>>>>> origin/main
         },
         surveyState
       );
@@ -274,9 +342,13 @@ export function Survey({
     getSetIsError,
     getSetIsResponseSendingFinished,
     surveyState,
+    onResponseIdReceived,
     offlinePersistEnabled,
     persistSurveyStateSnapshot,
+<<<<<<< HEAD
     triggerResponseCreatedOnce,
+=======
+>>>>>>> origin/main
     survey.id,
   ]);
 
@@ -301,6 +373,7 @@ export function Survey({
   // ENG-1837: computed fields are seeded from their definitions in the EmbeddedData tables. Only
   // `embeddedFields` is passed (and depended on), since nothing else can change this map.
   useEffect(() => {
+<<<<<<< HEAD
     setCurrentVariables(
       getComputedEmbeddedFields({ embeddedFields: survey.embeddedFields }).reduce<TResponseVariables>(
         (acc, { field, link }) => {
@@ -316,6 +389,17 @@ export function Survey({
       )
     );
   }, [survey.embeddedFields]);
+=======
+    setCurrentVariables({
+      ...survey.variables.reduce<TResponseVariables>((acc, variable) => {
+        acc[variable.id] = variable.value;
+        return acc;
+      }, {}),
+      ...(resumedResponse?.variables ?? {}),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resumedResponse is captured only on mount; reseeding from it on every change would clobber later edits
+  }, [survey.variables]);
+>>>>>>> origin/main
 
   const autoFocusEnabled = autoFocus ?? window.self === window.top;
 
@@ -325,7 +409,21 @@ export function Survey({
       // If starting at a specific question, find its parent block
       const startBlock = findBlockByElementId(localSurvey.blocks, startAtQuestionId);
       return startBlock?.id || localSurvey.blocks[0]?.id;
-    } else if (localSurvey.welcomeCard.enabled) {
+    }
+
+    if (resumedResponse) {
+      // Resume on the first block that has at least one unanswered element.
+      // Note: this ignores branching logic, so a resumed user may briefly land
+      // on a question that would normally have been skipped — the runtime will
+      // re-evaluate logic on the next submit and route correctly.
+      const answered = new Set(Object.keys(resumedResponse.data));
+      const resumeBlock = localSurvey.blocks.find((b) => b.elements.some((el) => !answered.has(el.id)));
+      if (resumeBlock) return resumeBlock.id;
+      // Everything answered — fall through to first ending
+      if (localSurvey.endings.length > 0) return localSurvey.endings[0].id;
+    }
+
+    if (localSurvey.welcomeCard.enabled) {
       return "start";
     }
 
@@ -347,6 +445,7 @@ export function Survey({
   const [selectedLanguage, setSelectedLanguage] = useState(languageCode);
   const [loadingElement, setLoadingElement] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
+<<<<<<< HEAD
   const isNavigatingBackRef = useRef(false);
   /**
    * The Embedded Data ingest contract (ENG-1845) applied to whatever the host handed us — URL params
@@ -392,9 +491,15 @@ export function Survey({
     );
   });
   const [responseData, setResponseData] = useState<TResponseData>(ingestedFieldsRecord);
+=======
+  const [responseData, setResponseData] = useState<TResponseData>({
+    ...(hiddenFieldsRecord ?? {}),
+    ...(resumedResponse?.data ?? {}),
+  });
+>>>>>>> origin/main
   const [_variableStack, setVariableStack] = useState<VariableStackEntry[]>([]);
 
-  const [ttc, setTtc] = useState<TResponseTtc>({});
+  const [ttc, setTtc] = useState<TResponseTtc>(resumedResponse?.ttc ?? {});
   const isOnline = useOnlineStatus();
   const [isSyncing, setIsSyncing] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
@@ -872,6 +977,7 @@ export function Survey({
     });
   };
 
+<<<<<<< HEAD
   /**
    * The browser-runtime context, snapshotted **once on this survey's first render** and frozen for
    * the rest of its life. `onResponseCreateOrUpdate` runs on every submit, so reading the runtime
@@ -887,6 +993,173 @@ export function Survey({
   webSurveyMetaRef.current ??= createWebSurveyMetaSnapshot(isWebEnvironment);
 
   const getWebSurveyMeta = useCallback((): TWebSurveyMeta => webSurveyMetaRef.current?.() ?? {}, []);
+=======
+  const evaluateLogicAndGetNextBlockId = async (
+    data: TResponseData
+  ): Promise<{ nextBlockId: string | undefined; calculatedVariables: TResponseVariables }> => {
+    const firstEndingId = survey.endings.length > 0 ? survey.endings[0].id : undefined;
+
+    if (blockId === "start")
+      return {
+        nextBlockId: localSurvey.blocks[0]?.id || firstEndingId,
+        calculatedVariables: {},
+      };
+
+    if (!currentBlock) {
+      console.error(
+        "Block not found. blockId:",
+        blockId,
+        "available blocks:",
+        localSurvey.blocks.map((b) => b.id)
+      );
+      throw new Error("Block not found");
+    }
+
+    const localResponseData = { ...responseData, ...data };
+    let calculationResults = { ...currentVariables };
+
+    // Process a single logic rule
+    const processLogicRule = (
+      logic: TSurveyBlockLogic,
+      currentJumpTarget: string | undefined,
+      currentRequiredIds: string[],
+      allApiCalls: any[]
+    ): {
+      jumpTarget: string | undefined;
+      requiredIds: string[];
+      updatedCalculations: TResponseVariables;
+      apiCalls: any[];
+    } => {
+      const isLogicMet = evaluateLogic(
+        localSurvey,
+        localResponseData,
+        calculationResults,
+        logic.conditions,
+        selectedLanguage
+      );
+
+      if (!isLogicMet) {
+        return {
+          jumpTarget: currentJumpTarget,
+          requiredIds: currentRequiredIds,
+          updatedCalculations: calculationResults,
+          apiCalls: allApiCalls,
+        };
+      }
+
+      const { jumpTarget, requiredQuestionIds, calculations, apiCallsToMake } = performActions(
+        localSurvey,
+        logic.actions,
+        localResponseData,
+        calculationResults
+      );
+
+      const newJumpTarget = jumpTarget && !currentJumpTarget ? jumpTarget : currentJumpTarget;
+      const newRequiredIds = [...currentRequiredIds, ...requiredQuestionIds];
+      const updatedCalculations = { ...calculationResults, ...calculations };
+      const newApiCalls = [...allApiCalls, ...apiCallsToMake];
+
+      return {
+        jumpTarget: newJumpTarget,
+        requiredIds: newRequiredIds,
+        updatedCalculations,
+        apiCalls: newApiCalls,
+      };
+    };
+
+    // Evaluate block-level logic
+    const evaluateBlockLogic = () => {
+      let firstJumpTarget: string | undefined;
+      const allRequiredQuestionIds: string[] = [];
+      const allApiCalls: any[] = [];
+
+      if (currentBlock.logic && currentBlock.logic.length > 0) {
+        for (const logic of currentBlock.logic) {
+          const result = processLogicRule(logic, firstJumpTarget, allRequiredQuestionIds, allApiCalls);
+          firstJumpTarget = result.jumpTarget;
+          allRequiredQuestionIds.length = 0;
+          allRequiredQuestionIds.push(...result.requiredIds);
+          calculationResults = result.updatedCalculations;
+          allApiCalls.length = 0;
+          allApiCalls.push(...result.apiCalls);
+        }
+      }
+
+      // Use logicFallback if no jump target was set
+      if (!firstJumpTarget && currentBlock.logicFallback) {
+        firstJumpTarget = currentBlock.logicFallback;
+      }
+
+      return { firstJumpTarget, allRequiredQuestionIds, allApiCalls };
+    };
+
+    const { firstJumpTarget, allRequiredQuestionIds, allApiCalls } = evaluateBlockLogic();
+
+    // Execute external API calls if any
+    if (allApiCalls.length > 0) {
+      for (const apiCall of allApiCalls) {
+        if (apiCall.objective === "callExternalAPI") {
+          const externalDataSource = localSurvey.externalDataSources?.find(
+            (ds) => ds.id === apiCall.externalDataSourceId
+          );
+
+          if (externalDataSource) {
+            try {
+              const result = await callExternalAPI({
+                externalDataSource,
+                parametersMapping: apiCall.parametersMapping,
+                responseData: localResponseData,
+                variables: calculationResults,
+                hiddenFields: Object.fromEntries(
+                  Object.entries(hiddenFieldsRecord || {}).map(([k, v]) => [k, String(v)])
+                ),
+              });
+
+              if (result.success && result.updatedVariables) {
+                calculationResults = { ...calculationResults, ...result.updatedVariables };
+              }
+            } catch (error) {
+              console.error("Failed to call external API:", error);
+              // Continue with the survey even if API call fails
+            }
+          }
+        }
+      }
+    }
+
+    // Handle required questions
+    const handleRequiredQuestions = (requiredIds: string[]) => {
+      if (requiredIds.length > 0) {
+        if (currentBlock.elements[0]) {
+          questionRequiredByMap.current[currentBlock.elements[0].id] = requiredIds;
+        }
+        makeQuestionsRequired(requiredIds);
+      }
+    };
+
+    handleRequiredQuestions(allRequiredQuestionIds);
+
+    // Return the jump target (which is a block ID) or the next block in sequence
+    const nextBlockId = firstJumpTarget || localSurvey.blocks[currentBlockIndex + 1]?.id;
+
+    return {
+      nextBlockId,
+      calculatedVariables: calculationResults,
+    };
+  };
+
+  const getWebSurveyMeta = useCallback(() => {
+    if (!isWebEnvironment) return {};
+
+    const url = new URL(window.location.href);
+    const source = url.searchParams.get("source");
+
+    return {
+      url: url.href,
+      ...(source ? { source } : {}),
+    };
+  }, [isWebEnvironment]);
+>>>>>>> origin/main
 
   const onResponseCreateOrUpdate = useCallback(
     async (responseUpdate: TResponseUpdate) => {
@@ -1109,6 +1382,7 @@ export function Survey({
 
     pushVariableState(firstRespondedElementId);
 
+<<<<<<< HEAD
     const {
       nextCardId,
       finished,
@@ -1131,6 +1405,11 @@ export function Survey({
       }
       makeQuestionsRequired(requiredQuestionIds);
     }
+=======
+    const { nextBlockId, calculatedVariables } = await evaluateLogicAndGetNextBlockId(surveyResponseData);
+    const finished =
+      nextBlockId === undefined || !localSurvey.blocks.map((block) => block.id).includes(nextBlockId);
+>>>>>>> origin/main
 
     setIsSurveyFinished(finished);
 
@@ -1296,7 +1575,11 @@ export function Survey({
             variablesData={currentVariables}
             isPreviewMode={isPreviewMode}
             fullSizeCards={fullSizeCards}
+<<<<<<< HEAD
             isCardless={isCardless}
+=======
+            cardSize={cardSize}
+>>>>>>> origin/main
           />
         );
       } else if (blockIdx >= localSurvey.blocks.length) {
@@ -1318,7 +1601,11 @@ export function Survey({
               onOpenExternalURL={onOpenExternalURL}
               isPreviewMode={isPreviewMode}
               fullSizeCards={fullSizeCards}
+<<<<<<< HEAD
               isCardless={isCardless}
+=======
+              cardSize={cardSize}
+>>>>>>> origin/main
               isOfflineWithPending={offlinePersistEnabled && !isOnline && isSurveyFinished}
             />
           );
@@ -1345,8 +1632,18 @@ export function Survey({
               setTtc={setTtc}
               onFileUpload={onFileUpload}
               isFirstBlock={block.id === localSurvey.blocks[0]?.id}
+<<<<<<< HEAD
               skipPrefilled={skipPrefilled && !isNavigatingBackRef.current}
               prefilledResponseData={offset === 0 ? prefillResponseData : undefined}
+=======
+              skipPrefilled={skipPrefilled}
+              prefilledResponseData={(() => {
+                const configuredPrefill = computeConfiguredPrefill(block.elements, responseData);
+                const urlPrefill = offset === 0 ? prefillResponseData : undefined;
+                if (!Object.keys(configuredPrefill).length && !urlPrefill) return undefined;
+                return { ...configuredPrefill, ...urlPrefill };
+              })()}
+>>>>>>> origin/main
               isLastBlock={block.id === localSurvey.blocks[localSurvey.blocks.length - 1].id}
               languageCode={selectedLanguage}
               autoFocusEnabled={autoFocusEnabled}
@@ -1356,7 +1653,12 @@ export function Survey({
               onOpenExternalURL={onOpenExternalURL}
               dir={dir}
               fullSizeCards={fullSizeCards}
+<<<<<<< HEAD
               isCardless={isCardless}
+=======
+              cardSize={cardSize}
+              autoAdvance={autoAdvance}
+>>>>>>> origin/main
             />
           )
         );
@@ -1437,7 +1739,7 @@ export function Survey({
                 "flex flex-col justify-center gap-2",
                 isCloseButtonVisible || isLanguageSwitchVisible ? "p-2" : "p-3"
               )}>
-              {isBrandingEnabled ? <FormbricksBranding /> : null}
+              <FormbricksBranding />
               {isSpamProtectionEnabled ? <RecaptchaBranding /> : null}
             </div>
           </div>

@@ -14,6 +14,7 @@ import { createInviteToken } from "@/lib/jwt";
 import { getMembershipByUserIdOrganizationId } from "@/lib/membership/service";
 import { getAccessFlags } from "@/lib/membership/utils";
 import { capturePostHogEvent } from "@/lib/posthog";
+import { getSurveyAccessMembership } from "@/lib/survey/access";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
 import { getOrganizationIdFromInviteId } from "@/lib/utils/helper";
 import { applyRateLimit } from "@/modules/core/rate-limit/helpers";
@@ -404,6 +405,7 @@ export const inviteUserAction = authenticatedActionClient.inputSchema(ZInviteUse
   })
 );
 
+<<<<<<< HEAD
 const ZBulkInviteUsersAction = z.object({
   organizationId: ZId,
   invitees: ZInvitees,
@@ -514,6 +516,35 @@ export const bulkInviteUsersAction = authenticatedActionClient.inputSchema(ZBulk
     return results;
   })
 );
+=======
+const ZSetMembershipSurveyAdminAction = z.object({
+  organizationId: ZId,
+  userId: ZId,
+  surveyAdmin: z.boolean(),
+});
+
+export const setMembershipSurveyAdminAction = authenticatedActionClient
+  .inputSchema(ZSetMembershipSurveyAdminAction)
+  .action(async ({ ctx, parsedInput }) => {
+    // OrganizationRole is unreliable in non-EE deployments (every member defaults
+    // to "owner"), so the only trustworthy gate is an existing surveyAdmin promoting
+    // others. Bootstrap of the first surveyAdmin is via SQL migration, not UI.
+    const callerSurveyAdmin = await getSurveyAccessMembership(ctx.user.id, parsedInput.organizationId);
+    if (callerSurveyAdmin?.surveyAdmin !== true) {
+      throw new OperationNotAllowedError("Only existing survey admins can manage this.");
+    }
+    return prisma.membership.update({
+      where: {
+        userId_organizationId: {
+          userId: parsedInput.userId,
+          organizationId: parsedInput.organizationId,
+        },
+      },
+      data: { surveyAdmin: parsedInput.surveyAdmin },
+      select: { userId: true, surveyAdmin: true },
+    });
+  });
+>>>>>>> origin/main
 
 const ZLeaveOrganizationAction = z.object({
   organizationId: ZId,

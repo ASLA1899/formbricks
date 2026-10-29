@@ -26,6 +26,8 @@ export const TERMS_URL = env.TERMS_URL;
 export const IMPRINT_URL = env.IMPRINT_URL;
 export const IMPRINT_ADDRESS = env.IMPRINT_ADDRESS;
 
+export const DISABLE_ACCOUNT_DELETION_SSO_CONFIRMATION =
+  env.DISABLE_ACCOUNT_DELETION_SSO_CONFIRMATION === "1";
 export const DANGEROUSLY_ALLOW_WEBHOOK_INTERNAL_URLS = env.DANGEROUSLY_ALLOW_WEBHOOK_INTERNAL_URLS === "1";
 export const WEBHOOK_DELIVERY_TIMEOUT_MS = env.WEBHOOK_DELIVERY_TIMEOUT_MS ?? 5_000;
 export const DEBUG_SHOW_RESET_LINK = !IS_PRODUCTION && env.DEBUG_SHOW_RESET_LINK === "1";
@@ -69,6 +71,14 @@ export const EMAIL_AUTH_ENABLED = env.EMAIL_AUTH_DISABLED !== "1";
 export const INVITE_DISABLED = env.INVITE_DISABLED === "1";
 export const INVITE_RATE_LIMIT_PER_24_HOURS = env.INVITE_RATE_LIMIT_PER_24_HOURS;
 
+// Optional allowlist of email domains permitted to sign in / auto-provision via
+// SSO (e.g. "asla.org,aslafund.org"). Empty = no restriction. Lowercased and
+// trimmed; consumed by the Microsoft SSO callback handler.
+export const SSO_ALLOWED_EMAIL_DOMAINS = (env.AUTH_SSO_ALLOWED_EMAIL_DOMAINS ?? "")
+  .split(",")
+  .map((domain) => domain.trim().toLowerCase())
+  .filter(Boolean);
+
 export const SLACK_CLIENT_SECRET = env.SLACK_CLIENT_SECRET;
 export const SLACK_CLIENT_ID = env.SLACK_CLIENT_ID;
 export const SLACK_REDIRECT_URI = `${WEBAPP_URL}/api/v1/integrations/slack/callback`;
@@ -103,6 +113,15 @@ export const SMTP_AUTHENTICATED = env.SMTP_AUTHENTICATED !== "0";
 export const SMTP_REJECT_UNAUTHORIZED_TLS = env.SMTP_REJECT_UNAUTHORIZED_TLS !== "0";
 export const MAIL_FROM = env.MAIL_FROM;
 export const MAIL_FROM_NAME = env.MAIL_FROM_NAME;
+// Throttle between SMTP sends to stay under provider rate limits.
+// Resend is 2 req/s default, 10 req/s on paid plans. Default 250ms = 4 req/s.
+export const EMAIL_SEND_THROTTLE_MS = env.EMAIL_SEND_THROTTLE_MS
+  ? parseInt(env.EMAIL_SEND_THROTTLE_MS, 10)
+  : 250;
+// Per-tick cap on the email drainer so one cron invocation stays bounded.
+export const EMAIL_SEND_CHUNK_SIZE = env.EMAIL_SEND_CHUNK_SIZE
+  ? parseInt(env.EMAIL_SEND_CHUNK_SIZE, 10)
+  : 500;
 
 /**
  * Auth secret and base URL, resolved once for the whole app.

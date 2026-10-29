@@ -11,9 +11,13 @@ import { TUserLocale } from "@formbricks/types/user";
 import { deleteIntegrationAction } from "@/app/(app)/workspaces/[workspaceId]/settings/workspace/integrations/actions";
 import { AddIntegrationModal } from "@/app/(app)/workspaces/[workspaceId]/settings/workspace/integrations/airtable/components/AddIntegrationModal";
 import { timeSince } from "@/lib/time";
+<<<<<<< HEAD:apps/web/app/(app)/workspaces/[workspaceId]/settings/workspace/integrations/airtable/components/ManageIntegration.tsx
 import { getFormattedErrorMessage } from "@/lib/utils/error-message";
 import { RestrictedSurveyHint } from "@/modules/survey/visibility/components/restricted-survey-hint";
 import { hasRestrictedAttachedSurvey } from "@/modules/survey/visibility/lib/outbound";
+=======
+import { getFormattedErrorMessage } from "@/lib/utils/helper";
+>>>>>>> origin/main:apps/web/app/(app)/environments/[environmentId]/workspace/integrations/airtable/components/ManageIntegration.tsx
 import { Alert, AlertButton, AlertDescription } from "@/modules/ui/components/alert";
 import { Button } from "@/modules/ui/components/button";
 import { DeleteDialog } from "@/modules/ui/components/delete-dialog";
@@ -35,15 +39,25 @@ interface ManageIntegrationProps {
 
 export const ManageIntegration = ({
   airtableIntegration,
+<<<<<<< HEAD:apps/web/app/(app)/workspaces/[workspaceId]/settings/workspace/integrations/airtable/components/ManageIntegration.tsx
   workspaceId,
   setIsConnected,
   surveys,
   surveyVisibilityEnabled,
+=======
+  environmentId,
+  setIsConnected,
+  surveys,
+>>>>>>> origin/main:apps/web/app/(app)/environments/[environmentId]/workspace/integrations/airtable/components/ManageIntegration.tsx
   airtableArray,
   showReconnectButton,
   handleAirtableAuthorization,
   locale,
+<<<<<<< HEAD:apps/web/app/(app)/workspaces/[workspaceId]/settings/workspace/integrations/airtable/components/ManageIntegration.tsx
 }: Readonly<ManageIntegrationProps>) => {
+=======
+}: ManageIntegrationProps) => {
+>>>>>>> origin/main:apps/web/app/(app)/environments/[environmentId]/workspace/integrations/airtable/components/ManageIntegration.tsx
   const { t } = useTranslation();
 
   const tableHeaders = [
@@ -90,6 +104,7 @@ export const ManageIntegration = ({
   return (
     <div className="mt-6 flex w-full flex-col items-center justify-center p-6">
       {showReconnectButton && (
+<<<<<<< HEAD:apps/web/app/(app)/workspaces/[workspaceId]/settings/workspace/integrations/airtable/components/ManageIntegration.tsx
         <Alert variant="warning" size="small" className="mb-4 w-full" role="status">
           <AlertDescription>{t("workspace.integrations.reconnect_button_description")}</AlertDescription>
           <AlertButton onClick={handleAirtableAuthorization}>
@@ -102,6 +117,20 @@ export const ManageIntegration = ({
           <span className="mr-4 size-4 rounded-full bg-green-600"></span>
           <span className="text-slate-500">
             {t("workspace.integrations.connected_with_email", {
+=======
+        <Alert variant="warning" size="small" className="mb-4 w-full">
+          <AlertDescription>{t("environments.integrations.reconnect_button_description")}</AlertDescription>
+          <AlertButton onClick={handleAirtableAuthorization}>
+            {t("environments.integrations.reconnect_button")}
+          </AlertButton>
+        </Alert>
+      )}
+      <div className="flex w-full justify-end space-x-2">
+        <div className="mr-6 flex items-center">
+          <span className="mr-4 h-4 w-4 rounded-full bg-green-600"></span>
+          <span className="text-slate-500">
+            {t("environments.integrations.connected_with_email", {
+>>>>>>> origin/main:apps/web/app/(app)/environments/[environmentId]/workspace/integrations/airtable/components/ManageIntegration.tsx
               email: airtableIntegration.config.email,
             })}
           </span>
@@ -110,11 +139,19 @@ export const ManageIntegration = ({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="outline" onClick={handleAirtableAuthorization}>
+<<<<<<< HEAD:apps/web/app/(app)/workspaces/[workspaceId]/settings/workspace/integrations/airtable/components/ManageIntegration.tsx
                 <RefreshCcwIcon className="mr-2 size-4" />
                 {t("workspace.integrations.reconnect_button")}
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t("workspace.integrations.reconnect_button_tooltip")}</TooltipContent>
+=======
+                <RefreshCcwIcon className="mr-2 h-4 w-4" />
+                {t("environments.integrations.reconnect_button")}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t("environments.integrations.reconnect_button_tooltip")}</TooltipContent>
+>>>>>>> origin/main:apps/web/app/(app)/environments/[environmentId]/workspace/integrations/airtable/components/ManageIntegration.tsx
           </Tooltip>
         </TooltipProvider>
         <Button

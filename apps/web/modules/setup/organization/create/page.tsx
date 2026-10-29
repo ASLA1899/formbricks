@@ -1,13 +1,22 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AuthenticationError } from "@formbricks/types/errors";
+<<<<<<< HEAD
 import { IS_FORMBRICKS_CLOUD } from "@/lib/constants";
 import { getHasNoOrganizations } from "@/lib/instance/service";
+=======
+import { DISABLE_ACCOUNT_DELETION_SSO_CONFIRMATION, IS_FORMBRICKS_CLOUD } from "@/lib/constants";
+import { gethasNoOrganizations } from "@/lib/instance/service";
+>>>>>>> origin/main
 import { getOrganizationsByUserId } from "@/lib/organization/service";
 import { getUser } from "@/lib/user/service";
 import { getTranslate } from "@/lingodotdev/server";
 import { requiresPasswordConfirmationForAccountDeletion } from "@/modules/account/lib/account-deletion-auth";
+<<<<<<< HEAD
 import { getSession } from "@/modules/auth/lib/session";
+=======
+import { authOptions } from "@/modules/auth/lib/authOptions";
+>>>>>>> origin/main
 import { getIsMultiOrgEnabled } from "@/modules/ee/license-check/lib/utils";
 import { RemovedFromOrganization } from "@/modules/setup/organization/create/components/removed-from-organization";
 import { ClientLogout } from "@/modules/ui/components/client-logout";
@@ -42,6 +51,10 @@ export const CreateOrganizationPage = async () => {
       <RemovedFromOrganization
         user={user}
         isFormbricksCloud={IS_FORMBRICKS_CLOUD}
+<<<<<<< HEAD
+=======
+        isSsoIdentityConfirmationDisabled={DISABLE_ACCOUNT_DELETION_SSO_CONFIRMATION}
+>>>>>>> origin/main
         requiresPasswordConfirmation={requiresPasswordConfirmationForAccountDeletion(user)}
       />
     );

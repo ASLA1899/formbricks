@@ -48,6 +48,11 @@ export interface TWithV1ApiWrapperParams<
   targetType?: TAuditTarget;
   customRateLimitConfig?: TRateLimitConfig;
   /**
+   * Most v1 management routes are environment-scoped. Enable this only for routes that explicitly
+   * support organization-only API keys.
+   */
+  allowOrganizationOnlyApiKey?: boolean;
+  /**
    * When the route requires auth but the client is unauthenticated, the wrapper normally returns
    * the legacy JSON 401. Use this to return a custom response (e.g. RFC 9457 problem+json for V3).
    */
@@ -195,11 +200,16 @@ const handleAuthentication = async (
     case AuthenticationMethod.Session:
       return await getSession();
     case AuthenticationMethod.Both: {
+<<<<<<< HEAD
       if (getApiKeyFromHeaders(req.headers)) {
         return await authenticateRequest(req, { allowOrganizationOnlyApiKey });
       }
 
       return await getSession();
+=======
+      const session = await getServerSession(authOptions);
+      return session ?? (await authenticateRequest(req, { allowOrganizationOnlyApiKey }));
+>>>>>>> origin/main
     }
     case AuthenticationMethod.None:
       return null;
@@ -299,6 +309,7 @@ const getRouteType = (
 export const withV1ApiWrapper = <TResult extends { response: Response; error?: unknown }, TProps = unknown>(
   params: TWithV1ApiWrapperParams<TResult, TProps>
 ): ((req: NextRequest, props: TProps) => Promise<Response>) => {
+<<<<<<< HEAD
   const {
     handler,
     action,
@@ -307,6 +318,10 @@ export const withV1ApiWrapper = <TResult extends { response: Response; error?: u
     unauthenticatedResponse,
     allowOrganizationOnlyApiKey,
   } = params;
+=======
+  const { handler, action, targetType, customRateLimitConfig, allowOrganizationOnlyApiKey, unauthenticatedResponse } =
+    params;
+>>>>>>> origin/main
   return async (req: NextRequest, props: TProps): Promise<Response> => {
     // === Audit Log Setup ===
     const saveAuditLog = action && targetType;

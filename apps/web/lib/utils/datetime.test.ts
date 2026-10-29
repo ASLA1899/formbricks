@@ -4,8 +4,12 @@ import {
   formatDateForDisplay,
   formatDateTimeForDisplay,
   formatDateWithOrdinal,
+<<<<<<< HEAD
   formatLocalDay,
   getDateFnsLocale,
+=======
+  formatDurationClock,
+>>>>>>> origin/main
   getFormattedDateTimeString,
   isValidDateString,
   parseLocalDay,
@@ -220,5 +224,23 @@ describe("getDateFnsLocale", () => {
   test("accepts a bare language tag without a region", () => {
     expect(getDateFnsLocale("de").code).toBe("de");
     expect(getDateFnsLocale("ja").code).toBe("ja");
+  });
+});
+
+describe("formatDurationClock", () => {
+  test("formats sub-minute durations", () => {
+    expect(formatDurationClock(38000)).toBe("0:00:38");
+  });
+  test("formats minutes and seconds", () => {
+    expect(formatDurationClock(2650411)).toBe("0:44:10");
+  });
+  test("rounds fractional milliseconds", () => {
+    expect(formatDurationClock(2650411.5)).toBe("0:44:10");
+  });
+  test("formats durations over an hour", () => {
+    expect(formatDurationClock(3750000)).toBe("1:02:30");
+  });
+  test("formats zero", () => {
+    expect(formatDurationClock(0)).toBe("0:00:00");
   });
 });

@@ -48,6 +48,14 @@ export const formatDateWithOrdinal = (date: Date, locale: string = DEFAULT_LOCAL
   });
 };
 
+export const isMonthYearString = (value: string): boolean => /^\d{4}-\d{2}$/.test(value);
+
+export const formatMonthYear = (value: string, locale: string = "en-US"): string => {
+  const [year, month] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, 1);
+  return new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(date);
+};
+
 export const isValidDateString = (value: string) => {
   const regex = /^(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}-\d{1,2}-\d{4})$/;
 
@@ -178,4 +186,17 @@ export const parseStoredDay = (value: string | null | undefined): Date | null =>
   const parsed = parseLocalDay(day);
 
   return formatLocalDay(parsed) === day ? parsed : null;
+};
+
+/**
+ * Formats a duration in milliseconds as an H:MM:SS clock string.
+ * Hours are unpadded; minutes and seconds are zero-padded. Seconds are rounded.
+ * e.g. 2650411 -> "0:44:10", 38000 -> "0:00:38", 3750000 -> "1:02:30".
+ */
+export const formatDurationClock = (ms: number): string => {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 };

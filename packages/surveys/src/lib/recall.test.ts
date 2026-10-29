@@ -15,6 +15,8 @@ vi.mock("./i18n", () => ({
 // Mock date-time functions as they are used internally and we want to isolate recall logic
 vi.mock("./date-time", () => ({
   isValidDateString: (val: string) => /^\d{4}-\d{2}-\d{2}$/.test(val) || /^\d{2}-\d{2}-\d{4}$/.test(val),
+  isMonthYearString: (val: string) => /^\d{4}-\d{2}$/.test(val),
+  formatMonthYear: vi.fn((val: string) => `${val}_monthYear`),
   formatDateWithOrdinal: vi.fn(
     (date: Date) =>
       `${date.getUTCFullYear()}-${("0" + (date.getUTCMonth() + 1)).slice(-2)}-${("0" + date.getUTCDate()).slice(-2)}_formatted`

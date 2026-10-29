@@ -33,7 +33,14 @@ describe("checkExternalUrlsPermission", () => {
     hiddenFields: { enabled: false },
     delay: 0,
     autoComplete: null,
+<<<<<<< HEAD
     workspaceOverwrites: null,
+=======
+    runOnDate: null,
+    closeOnDate: null,
+    scheduleTimezone: null,
+    projectOverwrites: null,
+>>>>>>> origin/main
     styling: null,
     showLanguageSwitch: false,
     segment: null,

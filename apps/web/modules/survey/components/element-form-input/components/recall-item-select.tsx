@@ -16,6 +16,7 @@ import {
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+<<<<<<< HEAD
   RESERVED_FIELD_CATALOG,
   getSurveyEmbeddedFields,
   listMidSurveyReservedEntries,
@@ -23,6 +24,13 @@ import {
 } from "@formbricks/types/embedded-data-resolver";
 import { TSurveyElement, TSurveyElementId, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import { TSurvey, TSurveyRecallItem } from "@formbricks/types/surveys/types";
+=======
+  COMPOUND_FIELD_LABELS,
+  getCompoundFields,
+} from "@formbricks/types/surveys/compound-fields";
+import { TSurveyElement, TSurveyElementId, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
+import { TSurvey, TSurveyHiddenFields, TSurveyRecallItem } from "@formbricks/types/surveys/types";
+>>>>>>> origin/main
 import { getTextContent } from "@formbricks/types/surveys/validation";
 import { getTextContentWithRecallTruncated } from "@/lib/utils/recall";
 import {
@@ -196,12 +204,19 @@ export const RecallItemSelect = ({
     const idx = isEndingCard
       ? elements.length
       : elements.findIndex((recallElement) => recallElement.id === elementId);
+<<<<<<< HEAD
 
     return elements
+=======
+    const result: TSurveyRecallItem[] = [];
+
+    elements
+>>>>>>> origin/main
       .filter((element, index) => {
         const notAllowed = isNotAllowedElementType(element);
-        return !recallItemIds.includes(element.id) && !notAllowed && element.id !== elementId && idx > index;
+        return !notAllowed && element.id !== elementId && idx > index;
       })
+<<<<<<< HEAD
       .map((element) => ({
         id: element.id,
         label: element.headline[selectedLanguageCode],
@@ -249,6 +264,87 @@ export const RecallItemSelect = ({
     () => filteredGroups.reduce((count, group) => count + group.options.length, 0),
     [filteredGroups]
   );
+=======
+      .forEach((element) => {
+        const compoundFields = getCompoundFields(element.type);
+        if (compoundFields) {
+          // For compound elements (contactInfo, address), show individual sub-fields
+          const headline = getTextContent(element.headline[selectedLanguageCode] || element.id);
+          compoundFields.forEach((fieldName) => {
+            const subFieldId = `${element.id}.${fieldName}`;
+            // Only include visible sub-fields that aren't already recalled
+            const fieldConfig = (element as Record<string, any>)[fieldName];
+            if (fieldConfig?.show && !recallItemIds.includes(subFieldId)) {
+              result.push({
+                id: subFieldId,
+                label: `${headline} > ${COMPOUND_FIELD_LABELS[fieldName] || fieldName}`,
+                type: "element" as const,
+              });
+            }
+          });
+
+          // Also include custom fields for contactInfo elements
+          if (element.type === TSurveyElementTypeEnum.ContactInfo) {
+            const customFields = (element as any).customFields ?? [];
+            for (const cf of customFields) {
+              if (!cf.show) continue;
+              const subFieldId = `${element.id}.${cf.id}`;
+              if (!recallItemIds.includes(subFieldId)) {
+                result.push({
+                  id: subFieldId,
+                  label: `${headline} > ${cf.label}`,
+                  type: "element" as const,
+                });
+              }
+            }
+          }
+        } else if (!recallItemIds.includes(element.id)) {
+          result.push({
+            id: element.id,
+            label: element.headline[selectedLanguageCode],
+            type: "element" as const,
+          });
+        }
+      });
+
+    return result;
+  }, [elementId, elements, recallItemIds, selectedLanguageCode]);
+
+  const filteredRecallItems: TSurveyRecallItem[] = useMemo(() => {
+    return [...surveyElementRecallItems, ...hiddenFieldRecallItems, ...variableRecallItems].filter(
+      (recallItems) => {
+        if (searchValue.trim() === "") return true;
+        else {
+          return recallItems.label.toLowerCase().includes(searchValue.toLowerCase());
+        }
+      }
+    );
+  }, [surveyElementRecallItems, hiddenFieldRecallItems, variableRecallItems, searchValue]);
+
+  const getRecallItemIcon = (recallItem: TSurveyRecallItem) => {
+    switch (recallItem.type) {
+      case "element": {
+        // Handle sub-field IDs (e.g., "questionId.firstName")
+        const elementId = recallItem.id.includes(".")
+          ? recallItem.id.split(".", 2)[0]
+          : recallItem.id;
+        const element = elements.find((el) => el.id === elementId);
+        if (element) {
+          return elementIconMapping[element?.type as keyof typeof elementIconMapping];
+        }
+        return null;
+      }
+      case "hiddenField":
+        return EyeOffIcon;
+      case "variable": {
+        const variable = localSurvey.variables.find((variable) => variable.id === recallItem.id);
+        return variable?.type === "number" ? FileDigitIcon : FileTextIcon;
+      }
+      default:
+        return null;
+    }
+  };
+>>>>>>> origin/main
 
   return (
     <DropdownMenu defaultOpen={true} modal={true}>

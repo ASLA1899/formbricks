@@ -1,7 +1,16 @@
 import { z } from "zod";
 
 // Field types for field-specific validation (address and contact info elements)
-export const ZAddressField = z.enum(["addressLine1", "addressLine2", "city", "state", "zip", "country"]);
+export const ZAddressField = z.enum([
+  "name",
+  "organization",
+  "addressLine1",
+  "addressLine2",
+  "city",
+  "state",
+  "zip",
+  "country",
+]);
 export type TAddressField = z.infer<typeof ZAddressField>;
 
 export const ZContactInfoField = z.enum(["firstName", "lastName", "email", "phone", "company"]);

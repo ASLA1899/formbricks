@@ -53,7 +53,10 @@ export const findElementLocation = (
 // BLOCK OPERATIONS
 // ============================================
 
+const AUTO_BLOCK_NAME_REGEX = /^Block \d+$/;
+
 /**
+<<<<<<< HEAD
  * Max length of a creator-set block name, enforced in the editor input.
  * Deliberately not added to ZSurveyBlock: `name` is a shipped API field, and tightening it
  * would reject surveys whose existing (e.g. AI-generated) names are longer.
@@ -108,6 +111,19 @@ export const renumberAutoNamedBlocks = (blocks: TSurveyBlock[]): TSurveyBlock[] 
   blocks.map((block, index) =>
     isAutoBlockName(block.name) ? { ...block, name: getAutoBlockName(index) } : block
   );
+=======
+ * Renumbers blocks sequentially, but only for blocks whose name still looks
+ * auto-generated (matches /^Block \d+$/). Custom block names are preserved.
+ */
+export const renumberBlocks = (blocks: TSurveyBlock[]): TSurveyBlock[] => {
+  return blocks.map((block, index) => {
+    if (!block.name || AUTO_BLOCK_NAME_REGEX.test(block.name)) {
+      return { ...block, name: `Block ${index + 1}` };
+    }
+    return block;
+  });
+};
+>>>>>>> origin/main
 
 /**
  * Adds a new block to the survey. Always generates a new CUID for the block ID to prevent conflicts

@@ -4,6 +4,7 @@ import { responses } from "@/app/lib/api/response";
 import { withV1ApiWrapper } from "@/app/lib/api/with-api-logging";
 import { fetchAirtableAuthToken } from "@/lib/airtable/service";
 import { AIRTABLE_CLIENT_ID, WEBAPP_URL } from "@/lib/constants";
+<<<<<<< HEAD
 import { createOrUpdateIntegration, getIntegrationByType } from "@/lib/integration/service";
 import {
   IntegrationOAuthStateError,
@@ -13,6 +14,12 @@ import {
 import { capturePostHogEvent } from "@/lib/posthog";
 import { getOrganizationIdFromWorkspaceId } from "@/lib/utils/helper";
 import { canUserWriteWorkspaceIntegrations } from "@/lib/workspace/auth";
+=======
+import { hasUserEnvironmentAccess } from "@/lib/environment/auth";
+import { createOrUpdateIntegration, getIntegrationByType } from "@/lib/integration/service";
+import { capturePostHogEvent } from "@/lib/posthog";
+import { getOrganizationIdFromEnvironmentId } from "@/lib/utils/helper";
+>>>>>>> origin/main
 
 const getEmail = async (token: string) => {
   const req_ = await fetch("https://api.airtable.com/v0/meta/whoami", {
@@ -194,6 +201,34 @@ export const GET = withV1ApiWrapper({
 
       await captureAirtableConnectedEvent(authentication.user.id, workspaceId);
 
+<<<<<<< HEAD
+=======
+      // Preserve existing integration data (survey-to-table mappings) when re-authorizing
+      const existingIntegration = await getIntegrationByType(environmentId, "airtable");
+      const existingData = existingIntegration?.config?.data ?? [];
+
+      const airtableIntegrationInput = {
+        type: "airtable" as "airtable",
+        environment: environmentId,
+        config: {
+          key,
+          data: existingData,
+          email,
+        },
+      };
+      await createOrUpdateIntegration(environmentId, airtableIntegrationInput);
+
+      try {
+        const organizationId = await getOrganizationIdFromEnvironmentId(environmentId);
+        capturePostHogEvent(authentication.user.id, "integration_connected", {
+          integration_type: "airtable",
+          organization_id: organizationId,
+        });
+      } catch (err) {
+        logger.error({ error: err }, "Failed to capture PostHog integration_connected event for airtable");
+      }
+
+>>>>>>> origin/main
       return {
         response: Response.redirect(redirectUrl),
       };

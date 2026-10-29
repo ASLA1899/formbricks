@@ -23,6 +23,112 @@ import { Input } from "@/modules/ui/components/input";
 import { Label } from "@/modules/ui/components/label";
 import { Slider } from "@/modules/ui/components/slider";
 
+function ScheduleRow({
+  mode,
+  survey,
+  setLocalSurvey,
+  tz,
+}: {
+  mode: "open" | "close";
+  survey: TSurvey;
+  setLocalSurvey: (s: TSurvey) => void;
+  tz: string;
+}) {
+  const { t } = useTranslation();
+  const fieldName = mode === "open" ? "runOnDate" : "closeOnDate";
+  const value: Date | null = (survey as any)[fieldName];
+  const enabled = value !== null;
+
+  const dateFmt = useMemo(
+    () => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }),
+    [tz]
+  );
+  const timeFmt = useMemo(
+    () => new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }),
+    [tz]
+  );
+  const previewFmt = useMemo(
+    () =>
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: tz,
+        dateStyle: "full",
+        timeStyle: "short",
+      }),
+    [tz]
+  );
+
+  // value -> wall-clock parts
+  const dateStr = value ? dateFmt.format(value) : ""; // YYYY-MM-DD
+  const timeStr = value ? timeFmt.format(value) : ""; // HH:MM
+
+  // wall-clock + tz -> UTC instant (round-trip via toLocaleString)
+  const updateFromWallClock = (date: string, time: string) => {
+    if (!date || !time) return;
+    const naive = new Date(`${date}T${time}:00`);
+    const tzOffsetMs = naive.getTime() - new Date(naive.toLocaleString("en-US", { timeZone: tz })).getTime();
+    const utc = new Date(naive.getTime() + tzOffsetMs);
+    setLocalSurvey({ ...survey, [fieldName]: utc } as TSurvey);
+  };
+
+  const checkboxId = `schedule-${mode}-enabled`;
+  const labelText = t(
+    mode === "open"
+      ? "environments.surveys.edit.schedule_open_label"
+      : "environments.surveys.edit.schedule_close_label"
+  );
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <input
+          id={checkboxId}
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) =>
+            setLocalSurvey({ ...survey, [fieldName]: e.target.checked ? new Date() : null } as TSurvey)
+          }
+        />
+        <label htmlFor={checkboxId} className="w-32 text-sm font-semibold text-slate-700">
+          {labelText}
+        </label>
+        <Input
+          type="date"
+          data-testid={`schedule-${mode}-date`}
+          value={dateStr}
+          disabled={!enabled}
+          onChange={(e) => updateFromWallClock(e.target.value, timeStr || "09:00")}
+          className="w-36"
+        />
+        <Input
+          type="time"
+          data-testid={`schedule-${mode}-time`}
+          value={timeStr}
+          disabled={!enabled}
+          onChange={(e) => updateFromWallClock(dateStr, e.target.value)}
+          className="w-24"
+        />
+      </div>
+      {enabled && value && (
+        <>
+          <p className="pl-32 text-xs text-slate-500">
+            {t(
+              mode === "open"
+                ? "environments.surveys.edit.schedule_preview_open"
+                : "environments.surveys.edit.schedule_preview_close",
+              { date: previewFmt.format(value) }
+            )}
+          </p>
+          {value.getTime() < Date.now() && (
+            <p className="pl-32 text-xs text-yellow-700">
+              {t("environments.surveys.edit.schedule_time_in_past")}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 interface ResponseOptionsCardProps {
   localSurvey: TSurvey;
   setLocalSurvey: (survey: TSurvey | ((prev: TSurvey) => TSurvey)) => void;
@@ -123,8 +229,33 @@ export const ResponseOptionsCard = ({
   };
 
   const handleVerifyEmailToogle = () => {
+<<<<<<< HEAD
     setVerifyEmailToggle(!verifyEmailToggle);
     setLocalSurvey({ ...localSurvey, isVerifyEmailEnabled: !localSurvey.isVerifyEmailEnabled });
+=======
+    const next = !verifyEmailToggle;
+    setVerifyEmailToggle(next);
+    // Disabling email verification forces the dedupe sub-option off too —
+    // it has no meaning without a verified email.
+    setLocalSurvey({
+      ...localSurvey,
+      isVerifyEmailEnabled: next,
+      isSingleResponsePerEmailEnabled: next ? localSurvey.isSingleResponsePerEmailEnabled : false,
+    });
+    if (!next) setSingleResponsePerEmailToggle(false);
+  };
+
+  const handleLimitOneResponsePerPersonToggle = () => {
+    const next = !singleResponsePerEmailToggle;
+    setSingleResponsePerEmailToggle(next);
+    // Dedupe implies verification: flip both on together; flipping off leaves verification alone.
+    setLocalSurvey({
+      ...localSurvey,
+      isSingleResponsePerEmailEnabled: next,
+      isVerifyEmailEnabled: next ? true : localSurvey.isVerifyEmailEnabled,
+    });
+    if (next) setVerifyEmailToggle(true);
+>>>>>>> origin/main
   };
 
   const handleClosedSurveyMessageChange = ({
@@ -278,6 +409,30 @@ export const ResponseOptionsCard = ({
     }
   };
 
+  const browserTz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+  const allTzs = useMemo<string[]>(() => {
+    try {
+      return (Intl as any).supportedValuesOf?.("timeZone") ?? [browserTz];
+    } catch {
+      return [browserTz];
+    }
+  }, [browserTz]);
+
+  const scheduleEnabled = !!(
+    localSurvey.runOnDate ||
+    localSurvey.closeOnDate ||
+    localSurvey.scheduleTimezone
+  );
+
+  const toggleSchedule = (next: boolean) => {
+    setLocalSurvey({
+      ...localSurvey,
+      runOnDate: null,
+      closeOnDate: null,
+      scheduleTimezone: next ? browserTz : null,
+    });
+  };
+
   const handleRecaptchaToggle = () => {
     if (!isSpamProtectionAllowed) return;
     if (recaptchaToggle) {
@@ -314,7 +469,11 @@ export const ResponseOptionsCard = ({
         "w-full space-y-2 rounded-lg border border-slate-300 bg-white"
       )}>
       <Collapsible.CollapsibleTrigger asChild className="h-full w-full cursor-pointer">
+<<<<<<< HEAD
         <button type="button" className="inline-flex px-4 py-4 text-left">
+=======
+        <div className="inline-flex px-4 py-4">
+>>>>>>> origin/main
           <div className="flex items-center pr-5 pl-2">
             <CheckIcon
               strokeWidth={3}
@@ -332,6 +491,7 @@ export const ResponseOptionsCard = ({
       <Collapsible.CollapsibleContent className="flex flex-col overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
         <hr className="py-1 text-slate-600" />
         <div className="p-3">
+<<<<<<< HEAD
           <AdvancedOptionToggle
             htmlId="publishSurveyOnDate"
             isChecked={isPublishOnDateEnabled}
@@ -404,6 +564,60 @@ export const ResponseOptionsCard = ({
               />
             </div>
           </AdvancedOptionToggle>
+=======
+          {/* Schedule survey window */}
+          <AdvancedOptionToggle
+            htmlId="scheduleSurveyWindow"
+            isChecked={scheduleEnabled}
+            onToggle={toggleSchedule}
+            title={t("environments.surveys.edit.schedule_survey_window_title")}
+            description={t("environments.surveys.edit.schedule_survey_window_description")}
+            childBorder={true}>
+            <div className="flex flex-col gap-3 bg-slate-50 p-4">
+              {/* Timezone dropdown */}
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="scheduleTimezoneSelect"
+                  className="w-32 text-sm font-semibold text-slate-700">
+                  {t("environments.surveys.edit.schedule_timezone_label")}
+                </label>
+                <select
+                  id="scheduleTimezoneSelect"
+                  value={localSurvey.scheduleTimezone ?? browserTz}
+                  onChange={(e) => setLocalSurvey({ ...localSurvey, scheduleTimezone: e.target.value })}
+                  className="rounded border border-slate-300 bg-white px-2 py-1 text-sm">
+                  {allTzs.map((tz) => (
+                    <option key={tz} value={tz}>
+                      {tz}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <ScheduleRow
+                mode="open"
+                survey={localSurvey}
+                setLocalSurvey={(s) => setLocalSurvey(s)}
+                tz={localSurvey.scheduleTimezone ?? browserTz}
+              />
+              <ScheduleRow
+                mode="close"
+                survey={localSurvey}
+                setLocalSurvey={(s) => setLocalSurvey(s)}
+                tz={localSurvey.scheduleTimezone ?? browserTz}
+              />
+
+              {localSurvey.runOnDate &&
+                localSurvey.closeOnDate &&
+                localSurvey.closeOnDate.getTime() <= localSurvey.runOnDate.getTime() && (
+                  <p className="text-sm text-red-600">
+                    {t("environments.surveys.edit.schedule_close_must_be_after_open")}
+                  </p>
+                )}
+            </div>
+          </AdvancedOptionToggle>
+
+>>>>>>> origin/main
           {/* Close Survey on Limit */}
           <AdvancedOptionToggle
             htmlId="closeOnNumberOfResponse"
@@ -416,6 +630,7 @@ export const ResponseOptionsCard = ({
             childBorder={true}>
             <label htmlFor="autoCompleteResponses" className="cursor-pointer bg-slate-50 p-4">
               <p className="text-sm font-semibold text-slate-700">
+<<<<<<< HEAD
                 <Trans
                   i18nKey="workspace.surveys.edit.automatically_mark_complete_after_n_responses"
                   components={{
@@ -432,6 +647,18 @@ export const ResponseOptionsCard = ({
                       />
                     ),
                   }}
+=======
+                {t("environments.surveys.edit.automatically_mark_the_survey_as_complete_after")}
+                <Input
+                  autoFocus
+                  type="number"
+                  min={responseCount ? (responseCount + 1).toString() : "1"}
+                  id="autoCompleteResponses"
+                  value={localSurvey.autoComplete?.toString()}
+                  onChange={handleInputResponse}
+                  onBlur={handleInputResponseBlur}
+                  className="mr-2 ml-2 inline w-20 bg-white text-center text-sm"
+>>>>>>> origin/main
                 />
               </p>
             </label>
@@ -520,8 +747,22 @@ export const ResponseOptionsCard = ({
                 htmlId="verifyEmailBeforeSubmission"
                 isChecked={verifyEmailToggle}
                 onToggle={handleVerifyEmailToogle}
+<<<<<<< HEAD
                 title={t("workspace.surveys.edit.verify_email_before_submission")}
                 description={t("workspace.surveys.edit.verify_email_before_submission_description")}
+=======
+                title={t("environments.surveys.edit.verify_email_before_submission")}
+                description={t("environments.surveys.edit.verify_email_before_submission_description")}
+              />
+
+              {/* Limit One Response Per Person (was nested; promoted to top-level so it's discoverable) */}
+              <AdvancedOptionToggle
+                htmlId="limitOneResponsePerPerson"
+                isChecked={singleResponsePerEmailToggle}
+                onToggle={handleLimitOneResponsePerPersonToggle}
+                title={t("environments.surveys.edit.limit_one_response_per_person")}
+                description={t("environments.surveys.edit.limit_one_response_per_person_description")}
+>>>>>>> origin/main
               />
 
               {/* Protect Survey with Pin */}
@@ -581,6 +822,31 @@ export const ResponseOptionsCard = ({
            * with no reason for it — two adjacent toggles that both decide whether the IP is stored, one
            * of them inert, and nothing on screen saying which wins.
            */}
+          <AdvancedOptionToggle
+            htmlId="autoAdvance"
+            isChecked={localSurvey.autoAdvance ?? false}
+            onToggle={() => {
+              setLocalSurvey({ ...localSurvey, autoAdvance: !localSurvey.autoAdvance });
+            }}
+            title="Auto-advance on answer"
+            description="Automatically scroll to the next question and submit when all single-choice questions in a block are answered"
+          />
+          <AdvancedOptionToggle
+            htmlId="snowflakeSync"
+            isChecked={localSurvey.snowflakeSync ?? false}
+            onToggle={() => {
+              setLocalSurvey({ ...localSurvey, snowflakeSync: !localSurvey.snowflakeSync });
+            }}
+            title="Sync responses to Snowflake"
+            description={
+              localSurvey.snowflakeSync &&
+              !localSurvey.hiddenFields?.fieldIds?.some((id) =>
+                ["recordnumber", "customerid", "contactid"].includes(id.toLowerCase())
+              )
+                ? "Warning: No recordnumber hidden field found — responses will sync but RECORD_NUMBER will be NULL unless contacts have this attribute"
+                : "Automatically send each response to the Snowflake data warehouse"
+            }
+          />
           <AdvancedOptionToggle
             htmlId="captureIp"
             isChecked={captureIpToggle}

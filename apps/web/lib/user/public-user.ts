@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { Prisma } from "@formbricks/database/prisma";
+=======
+import { Prisma } from "@prisma/client";
+>>>>>>> origin/main
 
 export const publicUserSelect = {
   id: true,

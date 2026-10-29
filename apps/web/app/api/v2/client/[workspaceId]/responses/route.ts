@@ -15,11 +15,13 @@ import { applyIngestContractToResponseData } from "@/lib/response/ingest";
 import { getSurvey } from "@/lib/survey/service";
 import { getElementsFromBlocks } from "@/lib/survey/utils";
 import { getClientIpFromHeaders } from "@/lib/utils/client-ip";
+<<<<<<< HEAD:apps/web/app/api/v2/client/[workspaceId]/responses/route.ts
 import { getOrganizationIdFromWorkspaceId } from "@/lib/utils/helper";
 import { resolveClientApiIds } from "@/lib/utils/resolve-client-id";
+=======
+>>>>>>> origin/main:apps/web/app/api/v2/client/[environmentId]/responses/route.ts
 import { formatValidationErrorsForV1Api, validateResponseData } from "@/modules/api/lib/validation";
 import { validateOtherOptionLengthForMultipleChoice } from "@/modules/api/v2/lib/element";
-import { getIsContactsEnabled } from "@/modules/ee/license-check/lib/utils";
 import { createQuotaFullObject } from "@/modules/ee/quotas/lib/helpers";
 import { validateClientFileUploads } from "@/modules/storage/utils";
 import { createResponseWithQuotaEvaluation } from "./lib/response";
@@ -70,6 +72,7 @@ const parseAndValidateResponseInput = async (
   };
 };
 
+<<<<<<< HEAD:apps/web/app/api/v2/client/[workspaceId]/responses/route.ts
 const getContactsDisabledResponse = async (
   workspaceId: string,
   contactId: string | null | undefined
@@ -84,6 +87,18 @@ const getContactsDisabledResponse = async (
   return isContactsEnabled
     ? null
     : responses.forbiddenResponse("User identification is only available for enterprise users.", true);
+=======
+// ASLA fork: allow contactId WITHOUT an EE Contacts license. Our /c/<jwt> invitation flow
+// stores contactId on responses (non-EE) so we can detect already-responded. Upstream gates
+// this behind EE Contacts (getIsContactsEnabled), which would 403 every invitation submission
+// in our license-free deployment — so the gate is intentionally a no-op here. The helper and
+// its POST call site are kept to minimize divergence from upstream's structure on future merges.
+const getContactsDisabledResponse = (
+  _environmentId: string,
+  _contactId: string | null | undefined
+): Promise<Response | null> => {
+  return Promise.resolve(null);
+>>>>>>> origin/main:apps/web/app/api/v2/client/[environmentId]/responses/route.ts
 };
 
 const validateResponseSubmission = async (

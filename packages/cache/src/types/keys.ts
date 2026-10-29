@@ -16,6 +16,7 @@ export type CacheKey = z.infer<typeof ZCacheKey>;
  * Possible namespaces for custom cache keys
  * Add new namespaces here as they are introduced
  */
+<<<<<<< HEAD:packages/cache/src/types/keys.ts
 export type CustomCacheNamespace =
   | "account_deletion"
   | "analytics"
@@ -23,3 +24,6 @@ export type CustomCacheNamespace =
   | "oauth"
   | "github"
   | "sso_recovery";
+=======
+export type CustomCacheNamespace = "account_deletion" | "analytics" | "billing";
+>>>>>>> origin/main:packages/cache/types/keys.ts

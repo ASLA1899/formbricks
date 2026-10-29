@@ -184,6 +184,11 @@ describe("rateLimitConfigs", () => {
       const storageConfigs = Object.keys(rateLimitConfigs.storage);
       expect(storageConfigs).toEqual(["upload", "uploadPerWorkspace", "delete", "attachmentsExport"]);
     });
+
+    test("should have all storage configurations", () => {
+      const storageConfigs = Object.keys(rateLimitConfigs.storage);
+      expect(storageConfigs).toEqual(["upload", "uploadPerEnvironment", "delete"]);
+    });
   });
 
   describe("Zod Validation", () => {
@@ -248,9 +253,14 @@ describe("rateLimitConfigs", () => {
         { config: rateLimitConfigs.api.clientEnvironment, identifier: "environment-id" },
         { config: rateLimitConfigs.actions.emailUpdate, identifier: "user-profile" },
         { config: rateLimitConfigs.actions.accountDeletion, identifier: "user-account-delete" },
+<<<<<<< HEAD
         { config: rateLimitConfigs.actions.unsplash, identifier: "user-unsplash" },
         { config: rateLimitConfigs.storage.upload, identifier: "storage-upload" },
         { config: rateLimitConfigs.storage.uploadPerWorkspace, identifier: "storage-upload-workspace" },
+=======
+        { config: rateLimitConfigs.storage.upload, identifier: "storage-upload" },
+        { config: rateLimitConfigs.storage.uploadPerEnvironment, identifier: "storage-upload-env" },
+>>>>>>> origin/main
         { config: rateLimitConfigs.storage.delete, identifier: "storage-delete" },
       ];
 
@@ -280,13 +290,22 @@ describe("rateLimitConfigs", () => {
       expect(config.namespace).toBe("storage:upload");
     });
 
+<<<<<<< HEAD
     test("should properly configure storage upload per workspace rate limit", async () => {
       const config = rateLimitConfigs.storage.uploadPerWorkspace;
+=======
+    test("should properly configure storage upload per environment rate limit", async () => {
+      const config = rateLimitConfigs.storage.uploadPerEnvironment;
+>>>>>>> origin/main
 
       // Verify configuration values
       expect(config.interval).toBe(60); // 1 minute
       expect(config.allowedPerInterval).toBe(100); // 100 requests per minute
+<<<<<<< HEAD
       expect(config.namespace).toBe("storage:upload:workspace");
+=======
+      expect(config.namespace).toBe("storage:upload:environment");
+>>>>>>> origin/main
     });
 
     test("should properly configure storage delete rate limit", async () => {

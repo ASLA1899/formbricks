@@ -8,6 +8,7 @@ import { responses } from "@/app/lib/api/response";
 import { withV1ApiWrapper } from "@/app/lib/api/with-api-logging";
 import { SLACK_CLIENT_ID, SLACK_CLIENT_SECRET, SLACK_REDIRECT_URI, WEBAPP_URL } from "@/lib/constants";
 import { createOrUpdateIntegration, getIntegrationByType } from "@/lib/integration/service";
+<<<<<<< HEAD
 import {
   IntegrationOAuthStateError,
   consumeIntegrationOAuthState,
@@ -16,6 +17,10 @@ import {
 import { capturePostHogEvent } from "@/lib/posthog";
 import { getOrganizationIdFromWorkspaceId } from "@/lib/utils/helper";
 import { canUserWriteWorkspaceIntegrations } from "@/lib/workspace/auth";
+=======
+import { capturePostHogEvent } from "@/lib/posthog";
+import { getOrganizationIdFromEnvironmentId } from "@/lib/utils/helper";
+>>>>>>> origin/main
 
 export const GET = withV1ApiWrapper({
   handler: async ({ req, authentication }) => {
@@ -144,6 +149,7 @@ export const GET = withV1ApiWrapper({
 
       if (result) {
         try {
+<<<<<<< HEAD
           const organizationId = await getOrganizationIdFromWorkspaceId(workspaceId);
           capturePostHogEvent(
             authentication.user.id,
@@ -155,6 +161,13 @@ export const GET = withV1ApiWrapper({
             },
             { organizationId, workspaceId }
           );
+=======
+          const organizationId = await getOrganizationIdFromEnvironmentId(environmentId);
+          capturePostHogEvent(authentication.user.id, "integration_connected", {
+            integration_type: "slack",
+            organization_id: organizationId,
+          });
+>>>>>>> origin/main
         } catch (err) {
           logger.error({ error: err }, "Failed to capture PostHog integration_connected event for slack");
         }

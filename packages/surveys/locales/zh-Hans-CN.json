@@ -41,7 +41,10 @@
     "terms_of_service": "服务条款",
     "the_servers_cannot_be_reached_at_the_moment": "目前无法连接到服务器。",
     "they_will_be_redirected_immediately": "他们将立即被重定向",
+<<<<<<< HEAD:packages/surveys/locales/zh-Hans-CN.json
     "time_remaining_before_the_survey_closes": "调查关闭前的剩余时间",
+=======
+>>>>>>> origin/main:packages/surveys/locales/zh-Hans.json
     "welcome_video": "欢迎卡片视频",
     "your_feedback_is_stuck": "您的反馈卡住了 :("
   },

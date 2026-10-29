@@ -16,8 +16,13 @@ import {
 import { ElementError, getElementErrorAria } from "@/components/general/element-error";
 import { ElementHeader } from "@/components/general/element-header";
 import { Input } from "@/components/general/input";
+<<<<<<< HEAD
 import { FB_PART } from "@/lib/parts";
 import { useRovingRadioGroup } from "@/lib/use-roving-radio-group";
+=======
+import { RadioGroup, RadioGroupItem } from "@/components/general/radio-group";
+import { renderInlineMarkdown } from "@/lib/inline-markdown";
+>>>>>>> origin/main
 import { cn } from "@/lib/utils";
 
 type Direction = "ltr" | "rtl" | "auto";
@@ -78,6 +83,8 @@ interface SingleSelectProps {
   imageAltText?: string;
   /** Video URL to display above the headline */
   videoUrl?: string;
+  /** Number of columns for list display: "1" (default) or "2" (responsive: single column on mobile, two columns on desktop) */
+  columns?: "1" | "2";
   /** Placeholder text for the search input in dropdown mode */
   searchPlaceholder?: string;
   /** Message shown when search yields no results */
@@ -691,6 +698,7 @@ function SingleSelect({
   imageUrl,
   imageAltText,
   videoUrl,
+  columns = "1",
   searchPlaceholder = "Search...",
   searchNoResultsText = "No results found",
 }: Readonly<SingleSelectProps>): React.JSX.Element {
@@ -758,6 +766,7 @@ function SingleSelect({
 
   return (
     <div className="w-full space-y-4" id={elementId} dir={dir}>
+<<<<<<< HEAD
       {isListVariant ? (
         // role="radiogroup" makes aria-required/aria-invalid valid on the group (a bare
         // <fieldset> is role="group", which supports neither). The group is named by its headline
@@ -850,6 +859,224 @@ function SingleSelect({
               hasNoResults={hasNoResults}
               options={options}
             />
+=======
+      {/* Headline */}
+      <ElementHeader
+        headline={headline}
+        description={description}
+        required={required}
+        requiredLabel={requiredLabel}
+        htmlFor={inputId}
+        imageUrl={imageUrl}
+        videoUrl={videoUrl}
+      />
+
+      {/* Options */}
+      <div data-element-input>
+        {variant === "dropdown" ? (
+          <>
+            <ElementError errorMessage={errorMessage} dir={dir} />
+            <DropdownMenu
+              onOpenChange={(open) => {
+                if (open) handleDropdownOpen();
+                else handleDropdownClose();
+              }}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  disabled={disabled}
+                  className="rounded-input min-h-input bg-input-bg border-input-border text-input-text py-input-y px-input-x w-full justify-between"
+                  aria-invalid={Boolean(errorMessage)}
+                  aria-label={headline}>
+                  <span
+                    className={cn(
+                      "font-input font-input-weight text-input-text truncate",
+                      !selectedOption && !isOtherSelected && "opacity-50"
+                    )}>
+                    {displayText}
+                  </span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                ref={contentRef}
+                side={lockedSide}
+                avoidCollisions={lockedSide === undefined}
+                className="bg-option-bg border-input-border w-(--radix-dropdown-menu-trigger-width) overflow-hidden"
+                align="start">
+                {showSearch ? (
+                  <DropdownSearchInput
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    searchInputRef={searchInputRef}
+                    placeholder={searchPlaceholder}
+                    dir={dir}
+                  />
+                ) : null}
+                <div className="max-h-[260px] overflow-y-auto">
+                  <DropdownMenuRadioGroup value={selectedValue} onValueChange={onChange}>
+                    {filteredRegularOptions.map((option) => {
+                      const optionId = `${inputId}-${option.id}`;
+
+                      return (
+                        <DropdownMenuRadioItem
+                          key={option.id}
+                          value={option.id}
+                          id={optionId}
+                          dir={dir}
+                          disabled={disabled}>
+                          <span className={optionLabelClassName}>{renderInlineMarkdown(option.label)}</span>
+                        </DropdownMenuRadioItem>
+                      );
+                    })}
+                    {otherMatchesSearch && otherOptionId ? (
+                      <DropdownMenuRadioItem
+                        value={otherOptionId}
+                        id={`${inputId}-${otherOptionId}`}
+                        dir={dir}
+                        disabled={disabled}>
+                        <span className={optionLabelClassName}>
+                          {otherValue || renderInlineMarkdown(otherOptionLabel)}
+                        </span>
+                      </DropdownMenuRadioItem>
+                    ) : null}
+                    {noneOption && noneMatchesSearch ? (
+                      <DropdownMenuRadioItem
+                        key={noneOption.id}
+                        value={noneOption.id}
+                        id={`${inputId}-${noneOption.id}`}
+                        dir={dir}
+                        disabled={disabled}>
+                        <span className={optionLabelClassName}>{renderInlineMarkdown(noneOption.label)}</span>
+                      </DropdownMenuRadioItem>
+                    ) : null}
+                    {hasNoResults ? (
+                      <div className="text-input-placeholder px-2 py-4 text-center text-sm">
+                        {searchNoResultsText}
+                      </div>
+                    ) : null}
+                  </DropdownMenuRadioGroup>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {isOtherSelected ? (
+              <Input
+                ref={otherInputRef}
+                type="text"
+                value={otherValue}
+                onChange={handleOtherInputChange}
+                placeholder={otherOptionPlaceholder}
+                disabled={disabled}
+                aria-invalid={Boolean(errorMessage)}
+                dir={dir}
+                className="mt-2 w-full"
+              />
+            ) : null}
+          </>
+        ) : (
+          <div className="relative" data-element-input>
+            <ElementError errorMessage={errorMessage} dir={dir} />
+            <RadioGroup
+              name={inputId}
+              value={selectedValue}
+              onValueChange={onChange}
+              disabled={disabled}
+              errorMessage={errorMessage}
+              className={
+                columns === "2" ? "grid w-full grid-cols-1 gap-2 md:grid-cols-2" : "w-full gap-0 space-y-2"
+              }>
+              {options
+                .filter((option) => option.id !== "none")
+                .map((option) => {
+                  const optionId = `${inputId}-${option.id}`;
+                  const isSelected = selectedValue === option.id;
+
+                  return (
+                    <label
+                      key={option.id}
+                      dir={dir}
+                      htmlFor={optionId}
+                      className={cn(getOptionContainerClassName(isSelected), isSelected && "z-10")}>
+                      <span className="flex items-center">
+                        <RadioGroupItem
+                          value={option.id}
+                          id={optionId}
+                          disabled={disabled}
+                          aria-required={required}
+                        />
+                        <span
+                          className={cn("mr-3 ml-3 grow", optionLabelClassName)}
+                          style={{ fontSize: "var(--fb-option-font-size)" }}>
+                          {renderInlineMarkdown(option.label)}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              {hasOtherOption && otherOptionId ? (
+                <label
+                  htmlFor={`${inputId}-${otherOptionId}`}
+                  dir={dir}
+                  className={cn(getOptionContainerClassName(isOtherSelected), isOtherSelected && "z-10")}>
+                  <span className="flex items-center">
+                    <RadioGroupItem
+                      value={otherOptionId}
+                      id={`${inputId}-${otherOptionId}`}
+                      disabled={disabled}
+                      aria-required={required}
+                    />
+                    <span
+                      className={cn("mr-3 ml-3 grow", optionLabelClassName)}
+                      style={{ fontSize: "var(--fb-option-font-size)" }}>
+                      {renderInlineMarkdown(otherOptionLabel)}
+                    </span>
+                  </span>
+                  {isOtherSelected ? (
+                    <Input
+                      ref={otherInputRef}
+                      type="text"
+                      value={otherValue}
+                      onChange={handleOtherInputChange}
+                      placeholder={otherOptionPlaceholder}
+                      disabled={disabled}
+                      aria-required={required}
+                      aria-invalid={Boolean(errorMessage)}
+                      dir={dir}
+                      className="mt-2 w-full"
+                    />
+                  ) : null}
+                </label>
+              ) : null}
+              {options
+                .filter((option) => option.id === "none")
+                .map((option) => {
+                  const optionId = `${inputId}-${option.id}`;
+                  const isSelected = selectedValue === option.id;
+
+                  return (
+                    <label
+                      key={option.id}
+                      htmlFor={optionId}
+                      dir={dir}
+                      className={cn(getOptionContainerClassName(isSelected), isSelected && "z-10")}>
+                      <span className="flex items-center">
+                        <RadioGroupItem
+                          value={option.id}
+                          id={optionId}
+                          disabled={disabled}
+                          aria-required={required}
+                        />
+                        <span
+                          className={cn("mr-3 ml-3 grow", optionLabelClassName)}
+                          style={{ fontSize: "var(--fb-option-font-size)" }}>
+                          {renderInlineMarkdown(option.label)}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+            </RadioGroup>
+>>>>>>> origin/main
           </div>
         </>
       )}

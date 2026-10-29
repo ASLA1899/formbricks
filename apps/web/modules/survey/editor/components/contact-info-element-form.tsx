@@ -12,6 +12,7 @@ import { ElementFormInput } from "@/modules/survey/components/element-form-input
 import { ValidationRulesEditor } from "@/modules/survey/editor/components/validation-rules-editor";
 import { Button } from "@/modules/ui/components/button";
 import { ElementToggleTable } from "@/modules/ui/components/element-toggle-table";
+import { CustomFieldsSection } from "./custom-fields-section";
 
 interface ContactInfoElementFormProps {
   localSurvey: TSurvey;
@@ -43,31 +44,36 @@ export const ContactInfoElementForm = ({
       id: "firstName",
       label: t("workspace.surveys.edit.first_name"),
       ...element.firstName,
+      prefillFrom: element.firstName.prefillFrom,
     },
     {
       id: "lastName",
       label: t("workspace.surveys.edit.last_name"),
       ...element.lastName,
+      prefillFrom: element.lastName.prefillFrom,
     },
     {
       id: "email",
       label: t("common.email"),
       ...element.email,
+      prefillFrom: element.email.prefillFrom,
     },
     {
       id: "phone",
       label: t("common.phone"),
       ...element.phone,
+      prefillFrom: element.phone.prefillFrom,
     },
     {
       id: "company",
       label: t("workspace.surveys.edit.company"),
       ...element.company,
+      prefillFrom: element.company.prefillFrom,
     },
   ];
 
   useEffect(() => {
-    const allFieldsAreOptional = [
+    const builtInAllOptional = [
       element.firstName,
       element.lastName,
       element.email,
@@ -77,9 +83,18 @@ export const ContactInfoElementForm = ({
       .filter((field) => field.show)
       .every((field) => !field.required);
 
+<<<<<<< HEAD
     updateElement(elementIdx, { required: !allFieldsAreOptional });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sync-only effect; adding updateElement/elementIdx would loop as it writes back into the survey
   }, [element.firstName, element.lastName, element.email, element.phone, element.company]);
+=======
+    const customHasRequired = (element.customFields ?? []).some((cf) => cf.show && cf.required);
+
+    updateElement(elementIdx, { required: !builtInAllOptional || customHasRequired });
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [element.firstName, element.lastName, element.email, element.phone, element.company, element.customFields]);
+>>>>>>> origin/main
 
   const [parent] = useAutoAnimate();
 
@@ -142,6 +157,18 @@ export const ContactInfoElementForm = ({
           elementIdx={elementIdx}
           isInvalid={isInvalid}
           updateElement={updateElement}
+          locale={locale}
+          isStorageConfigured={isStorageConfigured}
+        />
+
+        <CustomFieldsSection
+          localSurvey={localSurvey}
+          element={element}
+          elementIdx={elementIdx}
+          updateElement={updateElement}
+          isInvalid={isInvalid}
+          selectedLanguageCode={selectedLanguageCode}
+          setSelectedLanguageCode={setSelectedLanguageCode}
           locale={locale}
           isStorageConfigured={isStorageConfigured}
         />

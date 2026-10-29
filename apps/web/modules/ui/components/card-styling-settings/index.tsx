@@ -42,7 +42,11 @@ export const CardStylingSettings = ({
 
   const linkCardArrangement = form.watch("cardArrangement.linkSurveys") ?? "straight";
   const appCardArrangement = form.watch("cardArrangement.appSurveys") ?? "straight";
+<<<<<<< HEAD
   const linkSurveyCardWidth = form.watch("linkSurveyCardWidth") ?? "default";
+=======
+  const cardSize = form.watch("cardSize") ?? "normal";
+>>>>>>> origin/main
   const hideProgressBar = form.watch("hideProgressBar");
 
   return (
@@ -93,8 +97,55 @@ export const CardStylingSettings = ({
             description={t("workspace.surveys.edit.roundness_description")}
           />
 
+<<<<<<< HEAD
           <ColorField
             form={form}
+=======
+          <div className="flex flex-col justify-center">
+            <FormField
+              control={form.control}
+              name="cardSize"
+              render={() => (
+                <FormItem>
+                  <div>
+                    <FormLabel>Card Height</FormLabel>
+                    <FormDescription>Set the maximum height of the survey card</FormDescription>
+                  </div>
+
+                  <FormControl>
+                    <div className="flex items-center gap-2 rounded-lg border bg-slate-50 p-3">
+                      <button
+                        type="button"
+                        onClick={() => form.setValue("cardSize", "normal")}
+                        className={cn(
+                          "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                          cardSize === "normal" || !cardSize
+                            ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                            : "text-slate-600 hover:text-slate-900"
+                        )}>
+                        Normal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => form.setValue("cardSize", "tall")}
+                        className={cn(
+                          "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                          cardSize === "tall"
+                            ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                            : "text-slate-600 hover:text-slate-900"
+                        )}>
+                        Tall
+                      </button>
+                    </div>
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <FormField
+            control={form.control}
+>>>>>>> origin/main
             name="cardBackgroundColor.light"
             label={t("workspace.surveys.edit.card_background_color")}
             description={t("workspace.surveys.edit.card_background_color_description")}

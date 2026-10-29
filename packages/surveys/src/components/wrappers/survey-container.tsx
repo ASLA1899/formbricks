@@ -330,6 +330,7 @@ export function SurveyContainer({
     };
   }, [clickOutside, hasOverlay, modalRef, onClose, isModal, isOpen]);
 
+<<<<<<< HEAD
   // Escape handling and the open announcement, both of which only a modal survey WITHOUT an overlay
   // has to do for itself — see the hook for why.
   useNoOverlayModal({
@@ -347,6 +348,26 @@ export function SurveyContainer({
     containerRef: modalRef,
     onChange: onCardRectChange,
   });
+=======
+  const getPlacementStyle = (placement: TPlacement): string => {
+    switch (placement) {
+      case "bottomRight":
+        return "sm:bottom-3 sm:right-3";
+      case "topRight":
+        return "sm:top-3 sm:right-3 sm:bottom-3";
+      case "topLeft":
+        return "sm:top-3 sm:left-3 sm:bottom-3";
+      case "bottomLeft":
+        return "sm:bottom-3 sm:left-3";
+      case "center":
+        // Note: Using margin:auto instead of transform to avoid breaking fixed positioning
+        // for portaled elements (dropdowns, tooltips, etc.)
+        return "sm:top-0 sm:bottom-0 sm:left-0 sm:right-0 sm:m-auto";
+      default:
+        return "sm:bottom-3 sm:right-3";
+    }
+  };
+>>>>>>> origin/main
 
   if (!isOpen) return null;
 

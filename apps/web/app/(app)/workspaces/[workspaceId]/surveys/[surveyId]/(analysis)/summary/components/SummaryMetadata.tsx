@@ -107,7 +107,11 @@ export const SummaryMetadata = ({
           label={t("workspace.surveys.summary.time_to_complete")}
           percentage={null}
           value={ttcAverage === 0 ? <span>-</span> : `${formatTime(ttcAverage)}`}
+<<<<<<< HEAD:apps/web/app/(app)/workspaces/[workspaceId]/surveys/[surveyId]/(analysis)/summary/components/SummaryMetadata.tsx
           tooltipText={t("workspace.surveys.summary.ttc_survey_tooltip", {
+=======
+          tooltipText={t("environments.surveys.summary.ttc_survey_tooltip", {
+>>>>>>> origin/main:apps/web/app/(app)/environments/[environmentId]/surveys/[surveyId]/(analysis)/summary/components/SummaryMetadata.tsx
             defaultValue: "Average time to complete the survey.",
           })}
           isLoading={isLoading}

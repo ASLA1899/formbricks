@@ -5,7 +5,11 @@ import { DEFAULT_LOCALE, IS_FORMBRICKS_CLOUD, SURVEYS_PER_PAGE } from "@/lib/con
 import { getPublicDomain } from "@/lib/getPublicUrl";
 import { resolveDefaultSurveyLanguage } from "@/lib/i18n/default-survey-language";
 import { getBillingFallbackPath } from "@/lib/membership/navigation";
+<<<<<<< HEAD
 import { getPostHogFeatureFlag } from "@/lib/posthog/get-feature-flag";
+=======
+import { getSurveyAccessMembership } from "@/lib/survey/access";
+>>>>>>> origin/main
 import { getUserLocale } from "@/lib/user/service";
 import { getTranslate } from "@/lingodotdev/server";
 import { getSurveyAIAvailability } from "@/modules/survey/lib/get-survey-ai-availability";
@@ -35,12 +39,19 @@ export const SurveysPage = async ({ params: paramsProps }: SurveyTemplateProps) 
     throw new ResourceNotFoundError(t("common.workspace"), null);
   }
 
+<<<<<<< HEAD
   const { session, isBilling, isReadOnly } = await getWorkspaceAuth(params.workspaceId);
+=======
+  const { session, isBilling, environment, isReadOnly, organization } = await getEnvironmentAuth(
+    params.environmentId
+  );
+>>>>>>> origin/main
 
   if (isBilling) {
     return redirect(getBillingFallbackPath(workspace.organizationId, IS_FORMBRICKS_CLOUD));
   }
 
+<<<<<<< HEAD
   const currentWorkspaceChannel = workspace.config.channel ?? null;
   const [locale, featuredTemplatesVariant, { isAIAvailable, aiUnavailableReason }, surveyVisibilityGate] =
     await Promise.all([
@@ -52,6 +63,29 @@ export const SurveysPage = async ({ params: paramsProps }: SurveyTemplateProps) 
   const workspaceWithRequiredProps = {
     ...workspace,
     brandColor: workspace.styling?.brandColor?.light ?? null,
+=======
+  const surveyAccessMembership = await getSurveyAccessMembership(session.user.id, organization.id);
+
+  const surveyCount = await getSurveyCount(params.environmentId, {
+    userId: session.user.id,
+    membership: surveyAccessMembership,
+  });
+
+  const currentProjectChannel = project.config.channel ?? null;
+  const locale = (await getUserLocale(session.user.id)) ?? DEFAULT_LOCALE;
+  const createSurveyButton = (
+    <Button size="sm" asChild>
+      <Link href={`/environments/${environment.id}/surveys/templates`}>
+        {t("environments.surveys.new_survey")}
+        <PlusIcon />
+      </Link>
+    </Button>
+  );
+
+  const projectWithRequiredProps = {
+    ...project,
+    brandColor: project.styling?.brandColor?.light ?? null,
+>>>>>>> origin/main
     highlightBorderColor: null,
   };
 

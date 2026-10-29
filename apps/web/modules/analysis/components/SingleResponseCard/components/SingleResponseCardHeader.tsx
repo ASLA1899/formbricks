@@ -9,6 +9,7 @@ import { TUser, TUserLocale } from "@formbricks/types/user";
 import { useWorkspace } from "@/app/(app)/workspaces/[workspaceId]/context/workspace-context";
 import { timeSince } from "@/lib/time";
 import { getContactIdentifier } from "@/lib/utils/contact";
+import { formatDateTimeForDisplay, formatDurationClock } from "@/lib/utils/datetime";
 import { PersonAvatar } from "@/modules/ui/components/avatars";
 import { Button } from "@/modules/ui/components/button";
 import { IdBadge } from "@/modules/ui/components/id-badge";
@@ -95,9 +96,24 @@ export const SingleResponseCardHeader = ({
           )}
         </div>
 
+<<<<<<< HEAD
         <div className="flex items-center gap-x-2 text-sm">
           <time className="text-slate-500" dateTime={timeSince(response.createdAt.toISOString(), locale)}>
             {timeSince(response.createdAt.toISOString(), locale)}
+=======
+        <div className="flex items-center space-x-2 text-sm">
+          <time className="text-slate-500" dateTime={response.createdAt.toISOString()}>
+            {t("common.started")} {timeSince(response.createdAt.toISOString(), locale)}
+            {response.finished && (
+              <>
+                {" · "}
+                {t("common.completed")} {formatDateTimeForDisplay(response.updatedAt, locale)}
+                {typeof response.ttc?._total === "number" && response.ttc._total > 0
+                  ? ` · ${formatDurationClock(response.ttc._total)}`
+                  : ""}
+              </>
+            )}
+>>>>>>> origin/main
           </time>
           {user &&
             !isReadOnly &&

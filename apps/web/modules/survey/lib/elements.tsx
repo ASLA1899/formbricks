@@ -264,6 +264,7 @@ export const getElementTypes = (t: TFunction): TElement[] => [
     preset: {
       headline: createI18nString("", []),
       format: "M-d-y",
+      dateKind: "full",
     },
   },
   {
@@ -285,6 +286,8 @@ export const getElementTypes = (t: TFunction): TElement[] => [
     category: TElementCategory.Contact,
     preset: {
       headline: createI18nString("", []),
+      name: { show: false, required: false, placeholder: { default: "Name" } },
+      organization: { show: false, required: false, placeholder: { default: "Organization" } },
       addressLine1: { show: true, required: true, placeholder: { default: "Address Line 1" } },
       addressLine2: { show: true, required: true, placeholder: { default: "Address Line 2" } },
       city: { show: true, required: true, placeholder: { default: "City" } },
@@ -306,6 +309,8 @@ export const getElementTypes = (t: TFunction): TElement[] => [
       email: { show: true, required: true, placeholder: { default: "Email" } },
       phone: { show: true, required: true, placeholder: { default: "Phone" } },
       company: { show: true, required: true, placeholder: { default: "Company" } },
+      customFields: [],
+      fieldOrder: undefined,
     },
   },
 ];

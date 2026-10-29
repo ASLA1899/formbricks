@@ -109,7 +109,11 @@ describe("authenticateRequest", () => {
     expect(result).toBeNull();
   });
 
+<<<<<<< HEAD
   test("returns authentication data when API key has no workspace permissions", async () => {
+=======
+  test("returns null by default when API key has no environment permissions", async () => {
+>>>>>>> origin/main
     const request = new NextRequest("http://localhost", {
       headers: { "x-api-key": "valid-api-key" },
     });
@@ -295,5 +299,71 @@ describe("handleErrorResponse", () => {
     expect(response.status).toBe(500);
     const body = await response.json();
     expect(body.message).toBe("Something went wrong. Please try again.");
+  });
+
+  test("authenticates a valid API key with no environment permissions when explicitly allowed", async () => {
+    const request = new NextRequest("http://localhost", {
+      headers: { "x-api-key": "valid-api-key" },
+    });
+
+    const mockApiKeyData = {
+      id: "api-key-id",
+      organizationId: "org-id",
+      organizationAccess: "all" as const,
+      createdAt: new Date(),
+      createdBy: "user-id",
+      lastUsedAt: null,
+      label: "Test API Key",
+      apiKeyEnvironments: [],
+    };
+
+    vi.mocked(getApiKeyWithPermissions).mockResolvedValue(mockApiKeyData as any);
+
+    const result = await authenticateRequest(request, { allowOrganizationOnlyApiKey: true });
+    expect(result).toEqual({
+      type: "apiKey",
+      environmentPermissions: [],
+      apiKeyId: "api-key-id",
+      organizationId: "org-id",
+      organizationAccess: "all",
+    });
+  });
+
+  test("authenticates a read-only organization API key with no environment permissions", async () => {
+    const request = new NextRequest("http://localhost/api/v1/management/surveys", {
+      headers: { "x-api-key": "read-only-org-api-key" },
+    });
+
+    const mockApiKeyData = {
+      id: "api-key-id",
+      organizationId: "org-id",
+      organizationAccess: {
+        accessControl: {
+          read: true,
+          write: false,
+        },
+      },
+      createdAt: new Date(),
+      createdBy: "user-id",
+      lastUsedAt: null,
+      label: "Read-only Organization API Key",
+      apiKeyEnvironments: [],
+    };
+
+    vi.mocked(getApiKeyWithPermissions).mockResolvedValue(mockApiKeyData as any);
+
+    const result = await authenticateRequest(request, { allowOrganizationOnlyApiKey: true });
+    expect(result).toEqual({
+      type: "apiKey",
+      environmentPermissions: [],
+      apiKeyId: "api-key-id",
+      organizationId: "org-id",
+      organizationAccess: {
+        accessControl: {
+          read: true,
+          write: false,
+        },
+      },
+    });
   });
 });

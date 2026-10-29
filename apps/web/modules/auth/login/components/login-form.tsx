@@ -10,9 +10,16 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import { cn } from "@/lib/cn";
 import { FORMBRICKS_LOGGED_IN_WITH_LS } from "@/lib/localStorage";
+<<<<<<< HEAD
 import { buildAttributionQuerySuffix } from "@/modules/auth/lib/attribution";
 import { authClient } from "@/modules/auth/lib/auth-client";
 import { getOAuthErrorVariant } from "@/modules/auth/lib/oauth-error";
+=======
+import { getFormattedErrorMessage } from "@/lib/utils/helper";
+import { createEmailTokenAction } from "@/modules/auth/actions";
+import { buildVerificationRequestedPath } from "@/modules/auth/lib/verification-links";
+import { MicrosoftButton } from "@/modules/auth/login/components/microsoft-button";
+>>>>>>> origin/main
 import { SSOOptions } from "@/modules/ee/sso/components/sso-options";
 import { TwoFactor } from "@/modules/ee/two-factor-auth/components/two-factor";
 import { TwoFactorBackup } from "@/modules/ee/two-factor-auth/components/two-factor-backup";
@@ -45,6 +52,7 @@ interface LoginFormProps {
   googleOAuthEnabled: boolean;
   githubOAuthEnabled: boolean;
   azureOAuthEnabled: boolean;
+  azureNonEeEnabled: boolean;
   oidcOAuthEnabled: boolean;
   oidcDisplayName?: string;
   isMultiOrgEnabled: boolean;
@@ -65,6 +73,7 @@ export const LoginForm = ({
   googleOAuthEnabled,
   githubOAuthEnabled,
   azureOAuthEnabled,
+  azureNonEeEnabled,
   oidcOAuthEnabled,
   oidcDisplayName,
   isMultiOrgEnabled,
@@ -334,6 +343,7 @@ export const LoginForm = ({
               </Button>
             )}
           </form>
+          {azureNonEeEnabled && !isSsoEnabled && <MicrosoftButton callbackUrl={resolvedCallbackUrl} />}
           {isSsoEnabled && (
             <SSOOptions
               googleOAuthEnabled={googleOAuthEnabled}
