@@ -1,6 +1,6 @@
 # PRD: Formbricks survey building and response analysis from ASLA Chat
 
-Status: draft v9, 10/28/2026. gcohen answered rounds 1, 2 and 3. Path decided: upgrade, then port our features, all in a sandbox first because live surveys are in the field. v5 through v7 applied three rounds of Copy Editor and feasibility review. v8 applies gcohen's round-3 answers. Chat can now change settings that send no email, and can pause, resume and close a live survey after a yes in chat. It can also build four more question types. Ported question fields join the API, and invitations and reminders stay in Formbricks. v8 also documents skip logic in the tool text and adds a branched-survey gate test. v9 applies the fifth review round: one private writer for status and schedule dates, a scheduled publish that actually opens, and a reminder check that runs again when the change is applied. Owner: Product Strategist. Source: ASL-1794 (Paperclip), ASL-1795 (Paperclip).
+Status: draft v9, 10/28/2026. gcohen answered rounds 1, 2 and 3. Path decided: upgrade, then port our features, all in a sandbox first because live surveys are in the field. v5 through v7 applied three rounds of Copy Editor and feasibility review. v8 applies gcohen's round-3 answers. Chat can now change settings that send no email, and can pause, resume and close a live survey after a yes in chat. It can also build four more question types. Ported question fields join the API, and invitations and reminders stay in Formbricks. v8 also documents skip logic in the tool text and adds a branched-survey gate test. v9 applies the fifth review round: one private writer for status and schedule dates, a scheduled publish that opens the survey, and a reminder check that runs again when the change is applied. Owner: Product Strategist. Source: ASL-1794 (Paperclip), ASL-1795 (Paperclip).
 
 ## Recommendation
 
@@ -97,7 +97,7 @@ Checked 10/28/2026. Research notes are attached to ASL-1795 (Paperclip) as `rese
 ## Non-goals (first release)
 
 - Members using it. LibreChat is staff-only.
-- Editing the questions of a live survey, or deleting a published survey, from chat. Changing questions mid-field splits the results. Those stay in the Formbricks UI.
+- Editing the questions of a published or scheduled survey, or deleting it, from chat. Changing questions mid-field splits the results. Those stay in the Formbricks UI.
 - Sending invitations or reminders from chat (decided 10/28/2026, round 3; revisit after the pilot). No chat action sends email: status changes never trigger a send, and chat refuses a publish, resume or scheduled publish that would trigger reminders (Must 3).
 - Settings that send email, control who can respond, or collect respondent data: follow-up emails, PIN, email verification, single-use links, reCAPTCHA, quotas, IP capture, survey visibility and a custom link slug.
 - App or website-intercept surveys, targeting, segments, actions, website banners (creatives), custom CSS. The first release covers link surveys only.
@@ -124,13 +124,13 @@ Checked 10/28/2026. Research notes are attached to ASL-1795 (Paperclip) as `rese
    - Create a survey only with `status: "draft"`; reject any other status on create.
    - Edit questions, reorder blocks and delete only surveys still in `draft`. Reject any status change through `patch_survey`. `delete_survey` keeps upstream's two-round confirmation; on LibreChat the model can set `confirm` itself, which is acceptable because only drafts can be deleted.
    - Every status change goes through one path: `prepare_status_change`, then `apply_status_change`. The actions:
-     - `publish`: `draft` to `inProgress`. It also publishes a scheduled survey now (`paused` with a publish date), which clears the publish date.
+     - `publish`: `draft` to `inProgress`. It also publishes a scheduled survey now (`paused` with a publish date) and clears the publish date.
      - `schedule_publish`: give a `draft` a future publish date. The survey moves to `paused` with `publishOn` set, the state upstream's scheduler picks up. When the date passes, the scheduler moves it to `inProgress` with no sends. Any close date is kept and must be after the publish date. Once scheduled, the survey's questions can't be edited from chat. Cancelling a scheduled publish stays in Formbricks.
      - `pause`: `inProgress` to `paused`.
      - `resume`: `paused` to `inProgress`, for a survey with no publish date. A scheduled survey that was never published is refused with a pointer to `publish`.
      - `close`: `inProgress` or `paused` to `completed`.
      - `set_close_date`: set, move or clear the close date of an `inProgress` or `paused` survey. A draft's close date is set with `update_survey_settings` (Must 11).
-   - `at` is an ISO 8601 date-time in the future. `schedule_publish` and `set_close_date` require it; `set_close_date` with `at: null` clears the close date. Other actions refuse `at`.
+   - `at` is an ISO 8601 date-time in the future. `schedule_publish` requires it. `set_close_date` takes a date, or `null` to clear the close date. Other actions refuse `at`.
    - `prepare_status_change` checks the survey: the current status allows the action, the survey is valid and a link survey, and the caller has write access. It returns a plain summary and a token. The summary gives the name, current and new status, response count, and editor and public links. It also says what the change does:
      - publish: question count and estimated minutes; a publish date, if set, is cleared.
      - schedule_publish: the survey publishes on `<date>` and shows as paused until then; no email is sent; its questions can't be edited from chat after this.
@@ -139,11 +139,11 @@ Checked 10/28/2026. Research notes are attached to ASL-1795 (Paperclip) as `rese
      - close: the survey stops taking responses, and both dates are cleared.
      - set_close_date: the close date becomes `<date>`, or is cleared.
    - **No reminder sends from a status change.** Invitations can be sent from a survey in any status (see Evidence), so any survey that becomes `inProgress` can trigger the reminder cron.
-     - For `publish` and `resume`, the server runs a reminder check. It is a new function with no side effects, built from the cron's eligibility rules (sent, not responded, under `maxReminders`, offset not yet sent). It is not the cron function with a flag, because that function claims offsets and sends in one loop. It claims nothing and never calls the email sender. It counts invitations with any reminder that is already due or falls due within the next 25 hours, a lookahead longer than the roughly daily cron interval (proposed default; open question 9). It counts each invitation at most once and never past the `maxReminders` cap. Above zero, the action is refused and the person is told to make the change in Formbricks, where the reminder schedule is visible (open question 10).
+     - For `publish` and `resume`, the server runs a reminder check. It is a new function with no side effects, built from the cron's eligibility rules (sent, not responded, under `maxReminders`, offset not yet sent). It is not the cron function with a flag, because that function claims offsets and sends in one loop. It claims nothing and never calls the email sender. It counts invitations with a reminder already due or due within the next 25 hours, a lookahead longer than the roughly daily cron interval (proposed default; open question 9). An invitation counts once, however many offsets are due, and not at all once it has reached `maxReminders`. Above zero, the action is refused and the person is told to make the change in Formbricks, where the reminder schedule is visible (open question 10).
      - For `schedule_publish`, nobody is in chat when the survey goes live, so the check can't run at the right moment. The action is refused if reminders are turned on and any sent invitation still has a reminder left to send.
      - `apply_status_change` runs the same check again, at its own current time, before it consumes the token or changes anything. A survey that passed at prepare and fails at apply is refused. Eligibility changes with time and with invitation rows, which the token's `updatedAt` binding doesn't cover.
-     - Invitations sent in Formbricks after a survey is scheduled are that person's action in Formbricks, not chat's.
-   - The token is stored in the database, single-use, and expires in 10 minutes (proposed default; open question 9). It is bound to the user, the OAuth client, the survey, the action, `at` (for scheduled actions) and the survey's `updatedAt`. An edit after `prepare_status_change` invalidates it, and a token can't be used for a different action.
+     - Invitations someone sends in Formbricks after a survey is scheduled are their action, not chat's.
+   - The token is stored in the database, single-use, and expires in 10 minutes (proposed default; open question 9). It is bound to the user, the OAuth client, the survey, the action, `at` (for `schedule_publish` and `set_close_date`) and the survey's `updatedAt`. An edit after `prepare_status_change` invalidates it, and a token can't be used for a different action.
    - **One private writer for status and schedule dates.** `apply_status_change` takes the token, reruns the reminder check, consumes the token atomically, and rechecks the caller's permission and the survey's current status. It then writes through a private status-and-schedule writer that no public tool exposes. The writer:
      - has its own table of allowed actions, from-statuses and fields, separate from the `update_survey_settings` field allowlist;
      - writes status and dates together in one compare-and-set on `updatedAt`, like the v3 patch's `expectedUpdatedAt` (`apps/web/app/api/v3/surveys/patch.ts:362-375`);
@@ -165,7 +165,7 @@ Checked 10/28/2026. Research notes are attached to ASL-1795 (Paperclip) as `rese
    - deadline
 
    After the interview, the model shows the draft questions in chat. It calls `create_survey_draft` only after the person says yes.
-5. **First-release question types** (decided 10/28/2026, round 3): `openText`, `multipleChoiceSingle`, `multipleChoiceMulti`, `rating`, `nps`, `matrix`, `ranking`, `consent`, `date`, `cta`, `csat`, `ces` and `pictureSelection` (`csat` and `ces` aren't in the Fastest option). Other types are rejected with a message to add them in the editor. `address` and `contactInfo` collect PII. `fileUpload` files can carry PII past the response projection. `cal` needs a Cal.com account.
+5. **First-release question types** (decided 10/28/2026, round 3): `openText`, `multipleChoiceSingle`, `multipleChoiceMulti`, `rating`, `nps`, `matrix`, `ranking`, `consent`, `date`, `cta`, `csat`, `ces` and `pictureSelection` (the Fastest option can't offer `csat` or `ces`, which the fork on 4.9 lacks). Other types are rejected with a message to add them in the editor. `address` and `contactInfo` collect PII. `fileUpload` files can carry PII past the response projection. `cal` needs a Cal.com account.
    - **Image hosts.** Every image a survey carries must be a Formbricks storage path or on an allowed host: element `imageUrl`, picture-choice images, welcome-card `fileUrl`, ending `imageUrl`, `styling.logo.url`, an image or upload `styling.background.bg`, and any image inside a rich-text (HTML) field. Respondents' browsers load these images, so any other host would see their IP addresses. Proposed default: Formbricks storage and the ASLA DAM host, which Phase 0.3 records (open question 11).
    - A `cta` button URL must be https.
 6. **One PII-safe response projection** (decided 10/28/2026: answers, including open text, may go to the Anthropic and OpenAI models once PII is removed). Every tool that returns response data (`list_responses`, `get_response`, `summarize_responses` samples) goes through one ASLA output schema built by allowlist. It replaces upstream's v3 output schema for these tools and applies to both the text content and `structuredContent`.
@@ -185,9 +185,7 @@ Checked 10/28/2026. Research notes are attached to ASL-1795 (Paperclip) as `rese
     - `styling`, with image URLs held to the Must 5 host list
     - the close date, on a draft only and only in the future, written through the Must 3 private writer under the same date rules. On an `inProgress` or `paused` survey the close date goes through `set_close_date` (Must 3).
 
-    The publish date is written only by `apply_status_change` with `schedule_publish`.
-
-    It works on `draft`, `inProgress` and `paused` surveys the caller can write, and refuses `completed` ones. It refuses `publishOn` and `status`. It refuses every other field by default. That includes `customCss`, `isCaptureIpEnabled`, `pin`, `singleUse`, `isVerifyEmailEnabled`, `isSingleResponsePerEmailEnabled`, `recaptcha`, follow-ups, quotas, `visibility`, the link slug and targeting. Besides status changes, it is the only write chat can make to a published survey. It changes how the survey looks and behaves, not what it asks.
+    `update_survey_settings` works on `draft`, `inProgress` and `paused` surveys the caller can write, and refuses `completed` ones. It refuses `status` and `publishOn`: the publish date is written only by `apply_status_change` with `schedule_publish`. It refuses every other field by default. That includes `customCss`, `isCaptureIpEnabled`, `pin`, `singleUse`, `isVerifyEmailEnabled`, `isSingleResponsePerEmailEnabled`, `recaptcha`, follow-ups, quotas, `visibility`, the link slug and targeting. Besides status changes, it is the only write chat can make to a published survey. It changes how the survey looks and behaves, not what it asks.
 12. **Skip logic and branching from chat.** The descriptions of `create_survey_draft` and `edit_survey_blocks` document the block `logic` and `logicFallback` format:
     - conditions: and/or groups over answers, hidden fields and variables
     - actions: jump to a block or ending, require an answer, calculate a variable
@@ -221,8 +219,8 @@ These are the only tools `/api/mcp` exposes (Must 2). Names follow upstream 6.1.
 | `create_survey_draft` | `workspaceId`, `name`, `blocks[]` (Must 5 types only; blocks may carry `logic` and `logicFallback`, Must 12), optional `welcomeCard`, `endings`, `hiddenFields`, `variables`, `languages` | survey id, status `draft`, editor URL | upstream `create_survey` + ASLA guard (draft status and Must 5 types only) |
 | `edit_survey_blocks`, `patch_survey`, `set_survey_block_order` | `surveyId`, changes | updated summary | upstream + ASLA guard (draft surveys only, no status change; logic documented, Must 12) |
 | `delete_survey` | `surveyId`, `confirm` | deleted | upstream + ASLA guard (draft surveys only) |
-| `update_survey_settings` | `surveyId`, `expectedUpdatedAt`, any of `surveyClosedMessage`, `isBackButtonHidden`, `isAutoProgressingEnabled`, `styling`, close date (drafts only; no publish date) | updated settings, `updatedAt` | ASLA patch (new; Must 11) |
-| `prepare_status_change` | `surveyId`, `action` (`publish`, `schedule_publish`, `pause`, `resume`, `close`, `set_close_date`), `at` (ISO 8601, future; required for `schedule_publish` and `set_close_date`; `null` clears the close date) | summary of the change (Must 3), single-use `statusToken` (10-minute expiry, proposed default) | ASLA patch (new) |
+| `update_survey_settings` | `surveyId`, `expectedUpdatedAt`, any of `surveyClosedMessage`, `isBackButtonHidden`, `isAutoProgressingEnabled`, `styling`, close date (drafts only; never `publishOn` or `status`) | updated settings, `updatedAt` | ASLA patch (new; Must 11) |
+| `prepare_status_change` | `surveyId`, `action` (`publish`, `schedule_publish`, `pause`, `resume`, `close`, `set_close_date`), `at` (ISO 8601, future; required for `schedule_publish` and `set_close_date`; `null` clears the close date for `set_close_date`) | summary of the change (Must 3), single-use `statusToken` (10-minute expiry, proposed default) | ASLA patch (new) |
 | `apply_status_change` | `statusToken` | survey id, new status, scheduled dates, public link | ASLA patch (new; reruns the reminder check, then writes through the Must 3 private writer) |
 | `count_responses` | `workspaceId`, `surveyId`, filters, `precision` (`exact` when the number is reported) | count, and whether it is exact or a lower bound (`relation`) | upstream |
 | `list_responses` | `workspaceId`, `surveyId`, filters, `limit` (≤50), `cursor` | responses in the Must 6 projection, `nextCursor` | upstream + ASLA projection and cap |
@@ -243,13 +241,13 @@ Scopes requested by LibreChat: `surveys:read surveys:write responses:read offlin
 5. If the person wants branching ("skip the travel questions for anyone who didn't attend"), the model adds `logic` to the blocks and restates each rule in plain words.
 6. On "create it," the model calls `validate_survey`, then `create_survey_draft`, and returns the editor link.
 7. If the person asks to publish, the model calls `prepare_status_change` with `publish`, shows the summary, and asks "Publish this survey now?" Only on an explicit yes does it call `apply_status_change` and return the public link. Distribution (sharing the link, invitations) stays with the person.
+8. Instead of publishing now, the person says "Publish it on Monday at 9 a.m." The model calls `prepare_status_change` with `schedule_publish` and `at`. The summary says the survey shows as paused until then, no email is sent, and its questions can't be edited from chat after this. It calls `apply_status_change` only on an explicit yes.
 
 **Change a live survey**
 1. "Change the closed message and hide the back button." The model calls `update_survey_settings`. No token is needed, because no email goes out and the status doesn't change.
-2. "Publish it on Monday at 9 a.m." The model calls `prepare_status_change` with `schedule_publish` and `at`. The summary says the survey shows as paused until then and its questions can't be edited from chat after this. It calls `apply_status_change` only on an explicit yes.
-3. "Pause the summit survey." The model calls `prepare_status_change` with `pause`. It shows the summary, including whether the close date will be cleared, and calls `apply_status_change` only on an explicit yes.
-4. "Resume it." If any reminder is due within the lookahead, the server refuses, at prepare or again at apply, and the model tells the person to resume in Formbricks. Otherwise it follows the same summary-and-yes step.
-5. "Close it." Same step; the summary says the survey stops taking responses.
+2. "Pause the summit survey." The model calls `prepare_status_change` with `pause`. It shows the summary, including whether the close date will be cleared, and calls `apply_status_change` only on an explicit yes.
+3. "Resume it." If any reminder is due within the next 25 hours, the server refuses, at prepare or again at apply, and the model tells the person to resume in Formbricks. Otherwise it follows the same summary-and-yes step.
+4. "Close it." Same step; the summary says the survey stops taking responses.
 
 **Analyze**
 1. "How is the summit survey doing?" The model calls `list_surveys`, then `count_responses` with `precision: "exact"`, then `summarize_responses`.
@@ -346,7 +344,7 @@ Decided by gcohen, 10/28/2026 (round 2):
 Decided by gcohen, 10/28/2026 (round 3):
 - **Settings:** chat changes the settings that send no email (Must 11). Email, access and anti-abuse settings stay in Formbricks.
 - **Ported fields:** add them to the API during the port, so chat can read and set them (Must 13).
-- **Live surveys:** pause, resume and close from chat after a yes, through the token (Must 3). Question edits on a live survey stay in Formbricks.
+- **Live surveys:** pause, resume and close from chat after a yes, through the token (Must 3). Question edits on a published or scheduled survey stay in Formbricks.
 - **Invitations and reminders:** stay in Formbricks for the first release; revisit after the pilot.
 - **Question types:** add `cta`, `csat`, `ces` and `pictureSelection` (Must 5).
 
@@ -422,7 +420,7 @@ Each is sized for one issue. The CEO files them after gcohen approves. Phases ru
 - [ ] Calling create with `status: "inProgress"`, or patching any survey's status, is rejected by the server. Editing the questions of a published or scheduled survey, or deleting it, through MCP is rejected.
 - [ ] Creating a survey with an element type outside the Must 5 list is rejected with a message that says to add that question in the editor.
 - [ ] An element image, picture-choice image, welcome-card image, ending image, `styling.logo.url` or styling background on a host outside the Must 5 list (Formbricks storage and the DAM hostname recorded in 0.3) is rejected, and so is a `cta` button URL that isn't https.
-- [ ] A draft with one `cta`, `csat`, `ces` and `pictureSelection` question is created from chat. On a restored survey with each of those types, `summarize_responses` returns counts, CSAT and CES means and distributions, and the CTA click rate, and they match the Formbricks summary page.
+- [ ] A draft with one question of each type (`cta`, `csat`, `ces`, `pictureSelection`) is created from chat. On a restored survey with each of those types, `summarize_responses` returns counts, CSAT and CES means and distributions, and the CTA click rate, and they match the Formbricks summary page.
 - [ ] Branching from chat: in a test chat, the person describes a survey with at least one jump to a block, one jump to an ending, one required-answer rule, one calculated variable and a fallback. The model creates it as a draft with no hand edits. A scripted run in the editor's survey preview (the draft's public link is closed) takes every path, and each one reaches the block or ending the person described. A rule that points to a missing block or ending is refused by the server.
 - [ ] Ported-field round trip: on a restored survey that uses each field from 1.2a, `get_survey` returns the field, an unchanged `edit_survey_blocks` leaves the survey identical, and a chat edit can set the field.
 - [ ] `update_survey_settings` changes the closed message, back button, auto-advance, styling and a draft's close date. It refuses every other field (including `customCss`, `isCaptureIpEnabled`, `pin`, `singleUse`, `isVerifyEmailEnabled` and `recaptcha`), a close date on an `inProgress` or `paused` survey, and any `completed` survey.
