@@ -1,12 +1,24 @@
 # PRD: Formbricks survey building and response analysis from ASLA Chat
 
-Status: draft v7, 10/28/2026. gcohen answered rounds 1 and 2. Path decided: upgrade, then port our features, all in a sandbox first because live surveys are in the field. v6 applied the second Copy Editor and feasibility reviews: every OAuth client-mutation path is covered, `summarize_responses` is built before the guard gate, and limits gcohen didn't set are marked as proposed defaults. v7 applies the third feasibility review: each deployment accepts exactly one LibreChat callback, set by env, so the sandbox connector works and neither deployment accepts the other's callback. Owner: Product Strategist. Source: ASL-1794 (Paperclip), ASL-1795 (Paperclip).
+Status: draft v8, 10/28/2026. gcohen answered rounds 1, 2 and 3. Path decided: upgrade, then port our features, all in a sandbox first because live surveys are in the field. v5 through v7 applied three rounds of Copy Editor and feasibility review. v8 applies gcohen's round-3 answers. Chat can now change settings that send no email, and can pause, resume and close a live survey after a yes in chat. It can also build four more question types. Ported question fields join the API, and invitations and reminders stay in Formbricks. v8 also documents skip logic in the tool text and adds a branched-survey gate test. Owner: Product Strategist. Source: ASL-1794 (Paperclip), ASL-1795 (Paperclip).
 
 ## Recommendation
 
 In this PRD, "v1" means the first release (as in "Tools (v1)"). The fork's REST API versions are written "API v1" and "API v1/v2".
 
-**Upgrade our Formbricks fork to upstream 6.1.2 in a sandbox, port our features there, build and test the ASLA MCP guards there, and cut production over only after gcohen signs off. Then connect the MCP server that ships with Formbricks to ASLA Chat (LibreChat) as an opt-in OAuth connector, the same way Microsoft 365 is connected today.** The ASLA patches are a tool allowlist, a draft-only and publish-token guard, one PII projection for every response tool, a server-side `summarize_responses` tool, a first-release question-type allowlist, and restricting MCP sign-in to ASLA Chat. gcohen chose this path on 10/28/2026.
+**Upgrade our Formbricks fork to upstream 6.1.2 in a sandbox, port our features there, build and test the ASLA MCP guards there, and cut production over only after gcohen signs off. Then connect the MCP server that ships with Formbricks to ASLA Chat (LibreChat) as an opt-in OAuth connector, the same way Microsoft 365 is connected today.** The ASLA patches are:
+
+- a tool allowlist
+- a draft-only guard, with a single-use token for every status change
+- a settings tool limited to settings that send no email
+- one PII projection for every response tool
+- a server-side `summarize_responses` tool
+- question-type and image-host allowlists
+- skip-logic documentation in the tool text
+- the ported question fields added to the API
+- MCP sign-in restricted to ASLA Chat
+
+gcohen chose this path on 10/28/2026.
 
 Production (`surveys.asla.org`) stays on 4.9 and keeps serving the surveys in the field until cutover. All upgrade, porting and MCP work happens on a separate sandbox copy (see "Sandbox and cutover"). Production's MCP endpoints stay blocked at the proxy until the guarded build passes in the sandbox.
 
@@ -17,7 +29,7 @@ Why: upstream Formbricks already has what we were going to build. Since 5.2.0 it
 | Option | What it is | Pick it when |
 | --- | --- | --- |
 | **Best long-term (chosen 10/28/2026)** | Upgrade fork to 6.1.2 in a sandbox, port ASLA features, add ASLA guards, cut over, use built-in `/api/mcp` with per-user OAuth | Phase 0 says the effort is bounded |
-| **Fastest (fallback)** | ASLA-built MCP container on nan01 over the fork's existing API v1/v2. Entra sign-in, API keys held server-side, 14 tools (see "Tools (v1)"). The fork stays on 4.9 untouched | Phase 0 is no-go. Security backports continue one at a time |
+| **Fastest (fallback)** | ASLA-built MCP container on nan01 over the fork's existing API v1/v2. Entra sign-in, API keys held server-side, 15 tools (see "Tools (v1)"). The fork stays on 4.9 untouched | Phase 0 is no-go. Security backports continue one at a time |
 | Other: wrapper now, upgrade later | Build Fastest now; retire it when the upgrade lands | We want the chat feature soon and still plan to upgrade. Costs the wrapper twice over (build, then retire) |
 | Other: LibreChat Agent with OpenAPI actions | Point an Agent at the API v1/v2 OpenAPI specs | Not recommended. Actions aren't configured in our LibreChat. They would need one shared key in the chat client, and they can't aggregate responses server-side |
 | Other: third-party hosted MCP (Vinkius) | Hosted server; each user pastes a personal Formbricks API key | Not recommended. Survey data would pass through a vendor we haven't vetted, and our fork has no personal API keys |
@@ -40,6 +52,12 @@ Checked 10/28/2026. Research notes are attached to ASL-1795 (Paperclip) as `rese
   - Latest release is 6.1.2 (10/27/2026). Survey and response tools have no license check; some other tools do.
   - The handler registers every tool group automatically: surveys, workflows, workspaces, feedback records and responses (`modules/mcp/server.ts:115-122`). Turning on `/api/mcp` exposes all of them to any client that can sign in.
   - 6.1.2 tools: `list_surveys`, `get_survey`, `create_survey`, `validate_survey`, `patch_survey`, `edit_survey_blocks`, `set_survey_block_order`, `delete_survey`; `list_responses`, `count_responses`, `get_response`, `validate_response`, `create_response`, `update_response`, `delete_response`, `batch_delete_responses`; `list_workspaces`, `get_workspace_custom_css`, `patch_workspace_custom_css`; 13 workflow tools; 10 feedback-record tools. Creative (website banner) and dashboard tools exist only on upstream `main`, after 6.1.2.
+  - **Survey writes cover content, not settings.** The v3 patch writes name, status, metadata, the language-switch settings, welcome card, blocks, endings, languages and custom CSS. It carries `publishOn` and `closeOn` forward from the stored survey rather than from the request (`apps/web/app/api/v3/surveys/patch.ts:333-353`). `styling`, `surveyClosedMessage`, `isBackButtonHidden`, `isAutoProgressingEnabled`, `singleUse`, `pin`, `isVerifyEmailEnabled`, `recaptcha`, follow-ups and quotas have no MCP or v3 write path.
+  - **Status changes reset schedule dates.** Statuses are `draft`, `inProgress`, `paused` and `completed` (`packages/types/surveys/types.ts:901`). `normalizeSurveyScheduling` clears `publishOn` on a manual change to `inProgress`, clears `closeOn` on a manual pause when no publish date is set, and clears both on `completed` (`modules/survey/scheduling/lib/survey-scheduling.ts:272-299`).
+  - **Skip logic is in the write API but not in the tool text.** A block accepts `id`, `name`, `elements`, `logic`, `logicFallback`, `buttonLabel` and `backButtonLabel` (`apps/web/app/api/v3/surveys/schemas.ts:452-460`), and the server rejects a logic target that doesn't exist. The tool description shows a block only as `{ name, elements[], id? }` (`modules/mcp/tools/schemas.ts:197-207`), so a model reading it wouldn't know it can send logic.
+  - **Unknown fields are refused.** Each element key is checked against a per-type list and refused as `unsupported_field` (`apps/web/app/api/v3/surveys/schemas.ts:530-650`). A block edit replaces the whole block. Upstream already accepts block `name`, date `format` and `displayType`. Fork-only fields such as `dateKind` (month/year date) and `prefillFrom` (answer piping and prefill) aren't on the list, so a chat edit to a survey that uses them would be refused.
+  - **Image URLs can be any web address.** `ZStorageUrl` accepts a Formbricks `/storage/` path or any http(s) URL (`packages/types/common.ts:14-30`). Picture-choice, welcome-card, ending and styling images load in the respondent's browser from that host.
+  - 6.1.2 adds the `csat` and `ces` element types; the fork on 4.9 has neither. `cta` takes `buttonExternal`, `buttonUrl` and `ctaButtonLabel` (`apps/web/app/api/v3/surveys/schemas.ts:542-554`).
   - `list_surveys` allows up to 100 per page (`tools/schemas.ts:81-91`). `count_responses` defaults to `precision: "capped"`, a lower bound on large surveys; `"exact"` counts every row (`tools/response-schemas.ts:74-84`).
   - Deletes use a two-round confirmation (MCP elicitation, where the server asks the client to prompt the person; `request-state.ts`), with a `confirm` argument the model can set itself when the client can't show prompts (`tools/response-schemas.ts:91-102`). The signed request state lasts 5 minutes and isn't stored, so it can't serve as a single-use publish token.
   - Response tools return the v3 shape. List and detail both carry `answers`, `embeddedData` (named hidden fields plus reserved URL and device fields) and `unresolved[].rawValue` (answers to deleted elements). Detail adds raw `data` and `contact` (`apps/web/app/api/v3/responses/lib/serializers.ts:138-159,176-196`; `embedded-data.ts:123-182`; `answers.ts:569-617`).
@@ -49,13 +67,15 @@ Checked 10/28/2026. Research notes are attached to ASL-1795 (Paperclip) as `rese
 - **Our fork is on 4.9.7.** The merge base with upstream is `322f0be19` (04/12/2026). Upstream `main` is 1,190 commits ahead. The fork has 190 commits of its own, not counting merges.
 - **Fork inventory against 6.1.2 (first pass, by keyword search; a zero-hit search doesn't prove upstream lacks a feature):**
   - *Already upstream; take upstream's version:* about 45 security fixes, dependency bumps and backports. The dropdown display option for multiple choice (upstream has `displayType: list | dropdown`).
-  - *Port (no upstream equivalent found):* per-survey access control (`surveyAdmin`), survey invitations and reminders, survey schedule window (upstream removed scheduling in 09/2025), contact-info custom fields and address Name/Organization lines, saved option lists, answer piping and prefill, month/year date, tall card and auto-advance, two-column choices, matrix "Other", markdown links in choice labels, custom block names, PDF/DOCX/HTML export, Started/Completed/Duration columns, Snowflake response sync, bulk personal links, follow-up file links, link-survey resume, ASLA-branded emails.
+  - *Port (no upstream equivalent found):* per-survey access control (`surveyAdmin`; 6.1.2 has a per-survey `visibility` setting, which may overlap), survey invitations and reminders, survey schedule window (`runOnDate`, `closeOnDate`, `scheduleTimezone`; 6.1.2 has its own `publishOn` and `closeOn`, which may overlap), contact-info custom fields and address Name/Organization lines, saved option lists, answer piping and prefill, month/year date, tall card, auto-advance (fork `autoAdvance`; 6.1.2 has `isAutoProgressingEnabled`, which may overlap), two-column choices, matrix "Other", markdown links in choice labels, custom block names, PDF/DOCX/HTML export, Started/Completed/Duration columns, Snowflake response sync, bulk personal links, follow-up file links, link-survey resume, ASLA-branded emails.
+  - *Correction (round 3):* v7 listed the schedule window, per-survey access control and auto-advance as having no upstream equivalent. 6.1.2 has at least partial equivalents (above). Phase 0.1 compares each one before anything is estimated.
   - *Unresolved:* external API lookup. The fork has an editor test path and a survey-renderer HTTP client (`packages/surveys/src/lib/external-api-client.ts:140-163`, `docs/xm-and-surveys/surveys/advanced/external-api-lookup.mdx`), but no `externalDataSources` column in Prisma. Phase 0.1 finds where its configuration lives and whether it's in use.
   - *Rewrite:* Microsoft 365 sign-in without an Enterprise Edition (EE) license, SSO-only hardening, and the proxy JWT gate. These sit on NextAuth; upstream now uses Better Auth, and its own Entra sign-in lives under `ee/` (license-gated).
   - *Database:* 5 fork migrations (invitations, invitation names, survey ACL, schedule window, follow-up file link) plus a `schema.prisma` conflict. Production has been deployed with `prisma db push --accept-data-loss` (`~/dev/azure_vm/docs/apps/formbricks.md`), so its migration history table may not match the files.
 - **Trial merge (10/28/2026):** merging fork `main` into the 6.1.2 tag conflicts in 220 files: 64 in `apps/web/modules`, 46 in `apps/web/app`, 34 in `packages/surveys`, 19 in `apps/web/lib`, 11 in `packages/survey-ui`, the rest spread out. About 32 are translation files and about 27 are tests. The Reviewer reproduced the count with `git merge-tree`.
 - **The fork has no MCP code.** Its v3 API has only `GET /api/v3/surveys`, and v2 has no survey create. Creating a survey goes through API v1 `POST /api/v1/management/surveys`, which accepts `blocks` and defaults status to `draft`. A caller can pass `status: "inProgress"` and publish (`packages/types/surveys/types.ts:4025-4033`, `apps/web/lib/survey/service.ts:634-638`).
 - **API keys in the fork belong to the organization, not a person.** Only owners and managers can create them. They never expire. Each key is scoped per environment with read, write or manage permission (`packages/database/schema.prisma:842-886`, `apps/web/modules/organization/settings/api-keys/actions.ts:48-60`). Audit logs record the key, not a user.
+- **The fork's reminder cron sends whatever has come due.** It picks every `inProgress` survey with reminders turned on, then sends each reminder offset that has passed and hasn't gone out yet (`apps/web/modules/survey/invitations/lib/scheduled-reminders.ts:28-58`). A paused survey gets none, so resuming one sends every reminder that came due during the pause at the next cron run.
 - **Rate limit:** 100 requests per minute per key on each API version. Limiting is turned off when Redis is down (`apps/web/modules/core/rate-limit/rate-limit-configs.ts:11-15`).
 - **The live chat stack is `~/dev/librechat`, deployed at `/opt/librechat` on nan01** (image `librechat:v0.8.8`, released 10/01/2026). `~/dev/asla_ai` is a January prototype that was never deployed; the issue named it by mistake.
   - LibreChat already runs six MCP servers over streamable HTTP with per-user OAuth (`librechat.yaml:172-266`).
@@ -68,15 +88,16 @@ Checked 10/28/2026. Research notes are attached to ASL-1795 (Paperclip) as `rese
 
 ## Goals and success metrics
 
-- Staff can go from "I need a survey about X" to a reviewable Formbricks draft in one chat, and publish it from chat after they say yes.
+- Staff can go from "I need a survey about X" to a reviewable Formbricks draft in one chat, and publish, pause, resume or close it from chat after they say yes.
 - Staff can ask questions of a survey's responses in chat and get counts, cross-tabs and open-text themes that match the Formbricks summary page.
 - Success metric (decided 10/28/2026): no target for now. Report the number of surveys first drafted through the connector that are later published. gcohen sets a target, and the period it covers, after the pilot.
 
 ## Non-goals (first release)
 
 - Members using it. LibreChat is staff-only.
-- Pausing, closing, reopening or deleting a published survey from chat, or editing a survey once it's live. Those stay in the Formbricks UI.
-- Sending invitations or reminders from chat. Publishing never triggers a send.
+- Editing the questions of a live survey, or deleting a published survey, from chat. Changing questions mid-field splits the results. Those stay in the Formbricks UI.
+- Sending invitations or reminders from chat (decided 10/28/2026, round 3; revisit after the pilot). No chat action sends email: status changes never trigger a send, and chat refuses a resume that would send reminders (Must 3).
+- Settings that send email or control who can respond: follow-up emails, PIN, email verification, single-use links, reCAPTCHA, quotas, IP capture, survey visibility and a custom link slug.
 - App or website-intercept surveys, targeting, segments, actions, website banners (creatives), custom CSS. The first release covers link surveys only.
 - Writing or deleting responses, contacts, webhooks, workflows, dashboards, or feedback records.
 - Any MCP client other than ASLA Chat.
@@ -97,16 +118,27 @@ Checked 10/28/2026. Research notes are attached to ASL-1795 (Paperclip) as `rese
      - **No API keys on `/api/mcp`**, through either `x-api-key` or `Authorization: Bearer`.
    - Fastest: Entra sign-in to the wrapper, using the same pattern as the ms365 connector.
 2. **Tool allowlist.** `/api/mcp` exposes only the tools in the "Tools (v1)" table (the first-release tool set). Every other registered tool (workflow, feedback-record, custom-CSS, response-write tools, and any tool a later upgrade adds, such as creatives) is hidden from `tools/list` and refused if called. The allowlist applies on the server for every client, not only in the LibreChat config.
-3. **Drafts by default; publish only after a yes in chat** (decided 10/28/2026).
+3. **Drafts by default; every status change only after a yes in chat** (decided 10/28/2026, rounds 1 and 3).
    - Create a survey only with `status: "draft"`; reject any other status on create.
-   - Edit, reorder and delete only surveys still in `draft`. Reject any status change through `patch_survey`. `delete_survey` keeps upstream's two-round confirmation; on LibreChat the model can set `confirm` itself, which is acceptable because only drafts can be deleted.
-   - Publishing goes through one path: `prepare_publish`, then `publish_survey`.
-     - `prepare_publish` checks the survey (draft, valid, link type, caller has write access) and returns a plain summary (name, question count, estimated minutes, editor and public links) plus a token.
-     - The token is stored in the database, single-use, and expires in 10 minutes (proposed default; open question 9). It is bound to the user, the OAuth client, the survey and the survey's `updatedAt`, so any edit after `prepare_publish` invalidates it.
-     - `publish_survey` takes that token, consumes it atomically, rechecks the caller's permission and the draft state, sets the survey to `inProgress` through the v3 update path with `expectedUpdatedAt` (`apps/web/app/api/v3/surveys/patch.ts:362-375`), and returns the public link. A missing, expired, reused or stale token is rejected. The model can't set a `confirm` flag to skip the step.
-     - The tool description and server instructions require the model to show the summary and get an explicit yes before calling `publish_survey`.
-     - Publishing never sends invitations or reminders and never starts a schedule window.
-   - On LibreChat v0.8.8 the yes is enforced by the model, not proven by the server (see Evidence and Risks). When LibreChat ships MCP elicitation or tool-call confirmation, switch `publish_survey` to it.
+   - Edit questions, reorder blocks and delete only surveys still in `draft`. Reject any status change through `patch_survey`. `delete_survey` keeps upstream's two-round confirmation; on LibreChat the model can set `confirm` itself, which is acceptable because only drafts can be deleted.
+   - Every status change goes through one path: `prepare_status_change`, then `apply_status_change`. The actions:
+     - `publish`: draft to `inProgress`.
+     - `schedule_publish`: give a draft a future publish date. When the date arrives, it publishes the same way, with no sends.
+     - `pause`: `inProgress` to `paused`.
+     - `resume`: `paused` to `inProgress`.
+     - `close`: `inProgress` or `paused` to `completed`.
+     - `set_close_date`: set, move or clear the close date of an `inProgress` or `paused` survey. A draft's close date is set with `update_survey_settings` (Must 11).
+   - `prepare_status_change` checks the survey: the current status allows the action, the survey is valid and a link survey, and the caller has write access. It returns a plain summary and a token. The summary gives the name, current and new status, response count, and editor and public links. It also says what the change does:
+     - publish: question count and estimated minutes.
+     - pause: the link stops taking responses, and the close date is cleared if no publish date is set.
+     - close: the survey stops taking responses, and both dates are cleared.
+     - resume: a close date cleared by the pause isn't restored.
+   - **No reminder sends from resume.** For `resume`, `prepare_status_change` counts the reminder emails the fork's cron would send at its next run once the survey is live. If the count is above zero, it refuses and tells the person to resume in Formbricks, where the reminder schedule is visible (proposed default; open question 10).
+   - The token is stored in the database, single-use, and expires in 10 minutes (proposed default; open question 9). It is bound to the user, the OAuth client, the survey, the action, the date (for scheduled actions) and the survey's `updatedAt`. An edit after `prepare_status_change` invalidates it, and a token can't be used for a different action.
+   - `apply_status_change` takes the token, consumes it atomically, and rechecks the caller's permission and the survey's current status. Status changes go through the v3 update path with `expectedUpdatedAt` (`apps/web/app/api/v3/surveys/patch.ts:362-375`), so upstream's date rules apply. The v3 patch doesn't write schedule dates, so `schedule_publish` and `set_close_date` write the date through the Must 11 path, under the same date rules. Each write targets whichever schedule model Phase 0.1 keeps (upstream's dates or the fork's window). It returns the new status, any scheduled dates and the public link. A missing, expired, reused or stale token is rejected. The model can't set a `confirm` flag to skip the step.
+   - The tool description and server instructions require the model to show the summary and get an explicit yes before calling `apply_status_change`.
+   - No status change sends invitations or reminders.
+   - On LibreChat v0.8.8 the yes is enforced by the model, not proven by the server (see Evidence and Risks). When LibreChat ships MCP elicitation or tool-call confirmation, switch `apply_status_change` to it.
    - Enforce all of this on the server, not in the prompt.
 4. **Interview first.** The connector's server instructions tell the model to interview the person before drafting:
    - goal and decision the survey informs
@@ -118,28 +150,46 @@ Checked 10/28/2026. Research notes are attached to ASL-1795 (Paperclip) as `rese
    - deadline
 
    After the interview, the model shows the draft questions in chat. It calls `create_survey_draft` only after the person says yes.
-5. **First-release question types:** `openText`, `multipleChoiceSingle`, `multipleChoiceMulti`, `rating`, `nps`, `matrix`, `ranking`, `consent`, `date`. Other types (`fileUpload`, `cal`, `pictureSelection`, `address`, `contactInfo`, `cta`, and upstream's `csat`/`ces`) are rejected with a message to add them in the editor. `address` and `contactInfo` collect PII, so they stay out on purpose.
+5. **First-release question types** (decided 10/28/2026, round 3): `openText`, `multipleChoiceSingle`, `multipleChoiceMulti`, `rating`, `nps`, `matrix`, `ranking`, `consent`, `date`, `cta`, `csat`, `ces` and `pictureSelection`. Other types are rejected with a message to add them in the editor. `address` and `contactInfo` collect PII. `fileUpload` files can carry PII past the response projection. `cal` needs a Cal.com account.
+   - **Image hosts.** Picture-choice images, and every image a survey carries (welcome card, endings, styling backgrounds), must be a Formbricks storage path or on an allowed host. Respondents' browsers load these images, so any other host would see their IP addresses. Proposed default: Formbricks storage and the ASLA DAM host (open question 11).
+   - A `cta` button URL must be https.
 6. **One PII-safe response projection** (decided 10/28/2026: answers, including open text, may go to the Anthropic and OpenAI models once PII is removed). Every tool that returns response data (`list_responses`, `get_response`, `summarize_responses` samples) goes through one ASLA output schema built by allowlist. It replaces upstream's v3 output schema for these tools and applies to both the text content and `structuredContent`.
    - Kept: response id, `finished`, `createdAt`, `updatedAt`, `language`, country, and answers to elements whose current type is on the Must 5 list.
    - Dropped: v3 `data`, `contact`, contact attributes, every `embeddedData` key (named hidden fields and reserved URL, device and identity fields), every `unresolved[].rawValue`, IP address, user agent and URL, and answers to `contactInfo`, `address` and `fileUpload` elements.
    - Answers whose element type can't be established (deleted or renamed elements) are dropped, not passed through.
    - Any field the schema doesn't name is dropped by default, so a later upgrade can't add a new path for PII.
-7. **Server-side aggregation for analysis** (`summarize_responses`): per-question counts and percents, NPS score, rating mean and distribution, completion rate, and a cross-tab of any two closed questions. All of it is computed in the server with exact counts, not by paging raw responses into the model.
+7. **Server-side aggregation for analysis** (`summarize_responses`): per-question counts and percents, NPS score, rating, CSAT and CES mean and distribution, picture-choice counts, CTA click rate, completion rate, and a cross-tab of any two closed questions. All of it is computed in the server with exact counts, not by paging raw responses into the model.
 8. **Bounded payloads.** `list_responses` caps at 50 per page with a cursor (an ASLA cap below upstream's). Open-text sampling caps at 200 answers per call, each truncated to 1,000 characters, and reports the total so the model knows it is sampling. All three numbers are proposed defaults (open question 9).
 9. **Connector setup.** The server is opt-in in LibreChat, like `ms365`, and not in every preset. Add its host to `mcpSettings.allowedDomains` and to the comment block that limits MCP data to Anthropic and OpenAI.
-10. **Audit, recorded and kept.** `AUDIT_LOG_ENABLED=1` in sandbox and production. Audit lines go to a sink that is kept and searchable, not only to container stdout. Each write records the Formbricks user, OAuth client, tool, survey id and time. Publishes also record the `prepare_publish` token id. Verified with a real MCP write and publish in the sandbox at the guard gate (2.8) and again in production after 3.1.
+10. **Audit, recorded and kept.** `AUDIT_LOG_ENABLED=1` in sandbox and production. Audit lines go to a sink that is kept and searchable, not only to container stdout. Each write records the Formbricks user, OAuth client, tool, survey id and time. Status changes also record the token id. Verified with a real MCP write, settings change and status change in the sandbox at the guard gate (2.8) and again in production after 3.1.
+
+11. **Survey settings that send no email** (decided 10/28/2026, round 3). A new ASLA tool, `update_survey_settings`, writes only these fields, through its own path with `expectedUpdatedAt` and the Must 10 audit:
+    - `surveyClosedMessage` (heading and subheading)
+    - `isBackButtonHidden`
+    - auto-advance, as upstream's `isAutoProgressingEnabled` (Phase 0.1 decides how the fork's `autoAdvance` maps to it)
+    - `styling`, with image URLs held to the Must 5 host list
+    - the close date, on a draft only and only in the future. On an `inProgress` or `paused` survey the close date goes through `set_close_date` (Must 3).
+
+    It works on `draft`, `inProgress` and `paused` surveys the caller can write, and refuses `completed` ones. It refuses every other field by default. That includes `customCss`, `isCaptureIpEnabled`, `pin`, `singleUse`, `isVerifyEmailEnabled`, `isSingleResponsePerEmailEnabled`, `recaptcha`, follow-ups, quotas, `visibility`, the link slug and targeting. Besides status changes, it is the only write chat can make to a published survey. It changes how the survey looks and behaves, not what it asks.
+12. **Skip logic and branching from chat.** The descriptions of `create_survey_draft` and `edit_survey_blocks` document the block `logic` and `logicFallback` format:
+    - conditions: and/or groups over answers, hidden fields and variables
+    - actions: jump to a block or ending, require an answer, calculate a variable
+    - a worked example
+
+    Like upstream's element-type list, the description is derived from the schema, so it can't drift from what the server accepts. The worked example is tested against the create schema.
+13. **Ported question fields in the API** (decided 10/28/2026, round 3). Every field the port adds to a block or element goes into upstream's per-type key lists (`ELEMENT_KEYS_BY_TYPE`, `BLOCK_KEYS` and the translatable-key lists) and into the read serializer. Chat can then read and set it, and no edit drops or refuses it. Phase 1 derives the list by diffing the ported element and block schemas against 6.1.2; this PRD's examples aren't the list. Known examples: `dateKind` (month/year date) and `prefillFrom` (answer piping and prefill). Matrix "Other" and two-column choices are checked the same way. Upstream already accepts block `name`.
 
 ### Should
 
-11. `count_responses` (with `precision: "exact"` whenever the number is reported) so "how many" never pulls response data.
-12. Filters on response tools: `finished`, date range, `language`, and the answer to one closed question.
-13. A LibreChat "Survey builder" model spec or Agent that turns on only this connector and carries the interview instructions.
+14. `count_responses` (with `precision: "exact"` whenever the number is reported) so "how many" never pulls response data.
+15. Filters on response tools: `finished`, date range, `language`, and the answer to one closed question.
+16. A LibreChat "Survey builder" model spec or Agent that turns on only this connector and carries the interview instructions.
 
 ### Could
 
-14. Open-text theme clustering in the server (embeddings via the existing OpenAI embeddings path) instead of model-side theming over samples.
-15. Cross-tabs by member type or chapter through the Snowflake sync and `asla-metrics` (needs `DATA_SOURCES.md` disposition first).
-16. Upstream PR for the allowlist, draft-only and publish-token guard as operator settings, so the patch drops out of our fork.
+17. Open-text theme clustering in the server (embeddings via the existing OpenAI embeddings path) instead of model-side theming over samples.
+18. Cross-tabs by member type or chapter through the Snowflake sync and `asla-metrics` (needs `DATA_SOURCES.md` disposition first).
+19. Upstream PR for the allowlist, draft-only and status-token guard as operator settings, so the patch drops out of our fork.
 
 ## Tools (v1)
 
@@ -151,17 +201,18 @@ These are the only tools `/api/mcp` exposes (Must 2). Names follow upstream 6.1.
 | `list_surveys` | `workspaceId`, optional `filter.status`, `filter.name.contains`, `limit` (≤100, default 20), `cursor` | id, name, status, response count, updatedAt, `nextCursor` | upstream |
 | `get_survey` | `surveyId` | blocks, elements (id, type, headline, choices), status, editor URL | upstream |
 | `validate_survey` | survey document | ok, or errors by element position | upstream |
-| `create_survey_draft` | `workspaceId`, `name`, `blocks[]` (Must 5 types only), optional `welcomeCard`, `endings`, `languages` | survey id, status `draft`, editor URL | upstream `create_survey` + ASLA guard (draft status and Must 5 types only) |
-| `edit_survey_blocks`, `patch_survey`, `set_survey_block_order` | `surveyId`, changes | updated summary | upstream + ASLA guard (draft surveys only, no status change) |
+| `create_survey_draft` | `workspaceId`, `name`, `blocks[]` (Must 5 types only; blocks may carry `logic` and `logicFallback`, Must 12), optional `welcomeCard`, `endings`, `hiddenFields`, `variables`, `languages` | survey id, status `draft`, editor URL | upstream `create_survey` + ASLA guard (draft status and Must 5 types only) |
+| `edit_survey_blocks`, `patch_survey`, `set_survey_block_order` | `surveyId`, changes | updated summary | upstream + ASLA guard (draft surveys only, no status change; logic documented, Must 12) |
 | `delete_survey` | `surveyId`, `confirm` | deleted | upstream + ASLA guard (draft surveys only) |
-| `prepare_publish` | `surveyId` | summary (name, question count, estimated minutes, editor and public links), single-use `publishToken` (10-minute expiry, proposed default) | ASLA patch (new) |
-| `publish_survey` | `publishToken` | survey id, status `inProgress`, public link | ASLA patch (new) |
+| `update_survey_settings` | `surveyId`, `expectedUpdatedAt`, any of `surveyClosedMessage`, `isBackButtonHidden`, `isAutoProgressingEnabled`, `styling`, close date (drafts only) | updated settings, `updatedAt` | ASLA patch (new; Must 11) |
+| `prepare_status_change` | `surveyId`, `action` (`publish`, `schedule_publish`, `pause`, `resume`, `close`, `set_close_date`), `at` (for scheduled actions) | summary of the change (Must 3), single-use `statusToken` (10-minute expiry, proposed default) | ASLA patch (new) |
+| `apply_status_change` | `statusToken` | survey id, new status, scheduled dates, public link | ASLA patch (new) |
 | `count_responses` | `workspaceId`, `surveyId`, filters, `precision` (`exact` when the number is reported) | count, and whether it is exact or a lower bound (`relation`) | upstream |
 | `list_responses` | `workspaceId`, `surveyId`, filters, `limit` (≤50), `cursor` | responses in the Must 6 projection, `nextCursor` | upstream + ASLA projection and cap |
 | `get_response` | `responseId` | one response in the Must 6 projection | upstream + ASLA projection |
 | `summarize_responses` | `workspaceId`, `surveyId`, optional filters, optional `crossTab: {rowElementId, colElementId}`, optional `openTextElementId` + `sampleSize` (≤200) | per-element stats, NPS, completion rate, cross-tab table, open-text sample with total count | ASLA patch (new) |
 
-The `limit` (≤50) and `sampleSize` (≤200) caps are proposed defaults (Must 8; open question 9). That is 15 tools in the Best long-term option. The Fastest wrapper has 14; deleting a draft stays in the Formbricks UI.
+The `limit` (≤50) and `sampleSize` (≤200) caps are proposed defaults (Must 8; open question 9). That is 16 tools in the Best long-term option. The Fastest wrapper has 15; deleting a draft stays in the Formbricks UI, and it can't offer `csat` or `ces`, which the fork on 4.9 lacks.
 
 Scopes requested by LibreChat: `surveys:read surveys:write responses:read offline_access`. Not requested: `responses:write`, `workflows:*`, `dashboards:*`, `feedbackRecords:*`. `surveys:write` also covers `patch_workspace_custom_css`, so the allowlist (Must 2), not the scope, keeps it out.
 
@@ -172,8 +223,15 @@ Scopes requested by LibreChat: `surveys:read surveys:write responses:read offlin
 2. They ask: "Help me write a survey for chapter presidents about the leadership summit."
 3. The model interviews them (Must 4), one short round at a time, and picks the workspace with `list_workspaces`.
 4. The model shows numbered draft questions with types and choices, and an estimated completion time. The person edits in chat.
-5. On "create it," the model calls `validate_survey`, then `create_survey_draft`, and returns the editor link.
-6. If the person asks to publish, the model calls `prepare_publish`, shows the summary, and asks "Publish this survey now?" Only on an explicit yes does it call `publish_survey` and return the public link. Distribution (sharing the link, invitations) stays with the person.
+5. If the person wants branching ("skip the travel questions for anyone who didn't attend"), the model adds `logic` to the blocks and restates each rule in plain words.
+6. On "create it," the model calls `validate_survey`, then `create_survey_draft`, and returns the editor link.
+7. If the person asks to publish, the model calls `prepare_status_change` with `publish`, shows the summary, and asks "Publish this survey now?" Only on an explicit yes does it call `apply_status_change` and return the public link. Distribution (sharing the link, invitations) stays with the person.
+
+**Change a live survey**
+1. "Change the closed message and hide the back button." The model calls `update_survey_settings`. No token is needed, because no email goes out and the status doesn't change.
+2. "Pause the summit survey." The model calls `prepare_status_change` with `pause`. It shows the summary, including whether the close date will be cleared, and calls `apply_status_change` only on an explicit yes.
+3. "Resume it." If reminders would go out at the next cron run, the server refuses, and the model tells the person to resume in Formbricks. Otherwise it follows the same summary-and-yes step.
+4. "Close it." Same step; the summary says the survey stops taking responses.
 
 **Analyze**
 1. "How is the summit survey doing?" The model calls `list_surveys`, then `count_responses` with `precision: "exact"`, then `summarize_responses`.
@@ -187,7 +245,7 @@ Scopes requested by LibreChat: `surveys:read surveys:write responses:read offlin
   - The MCP server runs inside the Formbricks container on nan01 at `https://surveys.asla.org/api/mcp`, over streamable HTTP. There is no new container.
   - Env: correct public `WEBAPP_URL` / `BETTER_AUTH_URL` / `PUBLIC_URL`, `MCP_LIBRECHAT_CALLBACK_URI` (and `MCP_DCR_ALLOWED_REDIRECT_URIS` set to the same single value, if DCR stays), and `AUDIT_LOG_ENABLED=1`.
   - LibreChat sends the OAuth `resource` parameter. Don't copy ms365's `send_resource_parameter: false`, because upstream audience-binds tokens.
-  - The publish token needs a new table and migration, applied through the Formbricks migration runner like every other migration.
+  - The status-change token needs a new table and migration, applied through the Formbricks migration runner like every other migration.
 - **Fastest:**
   - A Node MCP container next to LibreChat on nan01, on its own private compose network that only `librechat-api` joins (the `librechat-ms365-mcp` pattern), listed in `mcpSettings.allowedAddresses`.
   - Transport: streamable HTTP. stdio is ruled out because LibreChat runs in Docker and stdio gives no per-user auth.
@@ -243,11 +301,16 @@ gcohen's condition (10/28/2026): do the upgrade in a sandbox, because surveys ar
 | Existing surveys store fork-only fields (custom contact fields, month/year dates, auto-advance, schedule window) | Upstream validators reject them and existing surveys break | Phase 0.4 loads every production survey through the 6.1.2 validators |
 | Production schema was applied with `db push`, and 6.1.2 needs TypeScript data migrations in order | Migrations fail, or backfills are skipped and data is lost | Formbricks migration runner only; reconcile migration history in 0.4; compare data before and after |
 | The v3 response shape carries PII in `embeddedData`, `unresolved`, `data` and `contact` | PII reaches the LLM provider | One allowlist projection for every response tool (Must 6), tested on both text and structured output |
-| LibreChat v0.8.8 can't show a server's confirmation prompt | The model could publish without a real yes | Stored single-use publish token bound to user, survey and revision; no self-confirm flag; draft-only for everything else; audit log; switch to client confirmation when LibreChat ships it (#11526, #13304). A wrongly published link survey reaches no one until its link is shared, and can be closed in Formbricks |
-| Audit is off unless `AUDIT_LOG_ENABLED=1`, and lines go only to the logger | No record of who published what | Must 10: enable it, ship lines to a kept sink, verify in the deployed configuration |
+| LibreChat v0.8.8 can't show a server's confirmation prompt | The model could publish, pause, resume or close without a real yes | Stored single-use token bound to user, survey, action and revision; no self-confirm flag; draft-only for question edits; audit log; switch to client confirmation when LibreChat ships it (#11526, #13304). A wrongly published link survey reaches no one until its link is shared. A wrong pause or close can be reversed in Formbricks, though cleared dates must be set again |
+| Resuming a paused survey sends every reminder that came due during the pause | Members get a burst of reminder email from a chat action | Must 3: chat refuses a resume when any reminder would go out; that resume happens in Formbricks |
+| A status change resets schedule dates (6.1.2 rules) | A pause or close silently removes a planned close or publish date | The summary states which dates are cleared before the person says yes |
+| The model sends wrong logic or none | Respondents see questions meant for others, or skip ones they should answer | Must 12 tool text; branched-survey gate test; logic is edited only on drafts, which the person can check in the editor before publishing |
+| A chat edit reaches a ported field upstream's API doesn't know | The edit is refused, or the field is lost | Must 13: add ported fields to the API in Phase 1; round-trip gate test |
+| The model picks image hosts | Respondents' IP addresses go to an outside host | Must 5 image-host list |
+| Audit is off unless `AUDIT_LOG_ENABLED=1`, and lines go only to the logger | No record of who changed what | Must 10: enable it, ship lines to a kept sink, verify in the deployed configuration |
 | LibreChat registers OAuth clients as confidential. Unverified whether Formbricks' anonymous DCR accepts that; asla-metrics did not | Connect fails | Spike 2.1, first task in Phase 2; fallback is an admin-registered confidential client, as done for asla-metrics |
 | Rate limit is per key/user and turns off when Redis is down | Throttling or no limit | Aggregation tool avoids paging; confirm Redis on nan01 is healthy |
-| Fork patches to the MCP module conflict with future upgrades | Merge pain later | Keep patches in one module; pin contracts per release; offer the guard upstream (Could 16) |
+| Fork patches to the MCP module conflict with future upgrades | Merge pain later | Keep patches in one module; pin contracts per release; offer the guard upstream (Could 19) |
 
 ## Decisions and open questions
 
@@ -259,7 +322,14 @@ Decided by gcohen, 10/28/2026 (round 1):
 
 Decided by gcohen, 10/28/2026 (round 2):
 - **Path:** upgrade to 6.1.x, then port our features, in a sandbox first because surveys are in the field. Fastest stays the fallback if Phase 0 is no-go.
-- **Publish confirmation:** accept the two-step publish token for v1. The model gets the yes; the server can't prove a person gave it. Switch to client confirmation when LibreChat ships it.
+- **Publish confirmation:** accept the two-step publish token for v1. The model gets the yes; the server can't prove a person gave it. Switch to client confirmation when LibreChat ships it. Round 3 extends the same token to every status change.
+
+Decided by gcohen, 10/28/2026 (round 3):
+- **Settings:** chat changes the settings that send no email (Must 11). Email, access and anti-abuse settings stay in Formbricks.
+- **Ported fields:** add them to the API during the port, so chat can read and set them (Must 13).
+- **Live surveys:** pause, resume and close from chat after a yes, through the token (Must 3). Question edits on a live survey stay in Formbricks.
+- **Invitations and reminders:** stay in Formbricks for the first release; revisit after the pilot.
+- **Question types:** add `cta`, `csat`, `ces` and `pictureSelection` (Must 5).
 
 Open, with the assumption this PRD makes:
 1. **Production during the port.** *Assume:* security fixes still ship on 4.9; new fork features wait until cutover, or each is built on both branches.
@@ -270,14 +340,16 @@ Open, with the assumption this PRD makes:
 6. **Phase 0 time-box.** *Assume:* the CEO sets the length when filing 0.2.
 7. **Audit log retention.** *Assume:* Infra Engineer picks the sink and uses the retention ASLA applies to other app logs on nan01.
 8. **Other MCP clients.** *Assume:* ASLA Chat is the only client (Must 1). Allowing, say, a desktop app would need its own data review.
-9. **Limits gcohen hasn't set.** *Proposed defaults:* publish token expires in 10 minutes; `list_responses` returns at most 50 per page; open-text samples hold at most 200 answers of at most 1,000 characters each; the aggregation accuracy test uses a survey with 500+ responses. Any can change before build without changing the design.
+9. **Limits gcohen hasn't set.** *Proposed defaults:* the status-change token expires in 10 minutes; `list_responses` returns at most 50 per page; open-text samples hold at most 200 answers of at most 1,000 characters each; the aggregation accuracy test uses a survey with 500+ responses. Any can change before build without changing the design.
+10. **Resume when reminders are due.** *Assume:* chat refuses the resume and points to Formbricks whenever any reminder would go out at the next cron run. The alternative, resuming and showing the count in the summary, would let a yes in chat send member email, which the round-3 decision on reminders rules out.
+11. **Image hosts.** *Assume:* Formbricks storage and the ASLA DAM host only. Each added host would see respondents' IP addresses.
 
 ## Phased breakdown (proposed Repo Worker / Infra issues)
 
 Each is sized for one issue. The CEO files them after gcohen approves. Phases run in order, except that Phase 2 runs in the sandbox alongside Phase 1 and must finish before sign-off (1.5). Nothing reaches production until 1.6.
 
 **Phase 0: Assessment (time-boxed go/no-go)**
-- 0.1 Finish the fork inventory: confirm each feature is ported, upstreamed or obsolete, and estimate each port. Find where external API lookup is configured and whether it's in use. Flag auth and EE re-implementations. *Repo Worker*
+- 0.1 Finish the fork inventory: confirm each feature is ported, upstreamed or obsolete, and estimate each port. Find where external API lookup is configured and whether it's in use. Compare the fork's schedule window, per-survey access control and auto-advance with 6.1.2's `publishOn`/`closeOn`, `visibility` and `isAutoProgressingEnabled`, and pick one for each: keep the fork's, take upstream's, or merge. Flag auth and EE re-implementations. *Repo Worker*
 - 0.2 Time-boxed conflict assessment: classify the 220 conflicts, check the toolchain and migration order, and stop when the time-box ends or every conflict has an estimate, whichever comes first. Not a complete merged build; that work goes into the Phase 1 port issues. *Repo Worker*
 - 0.3 Stand up the sandbox on nan01 (check RAM, disk and the storage bucket first) and apply every sandbox rule before first boot. Restore the latest production backup into it. Document it in `~/dev/azure_vm/docs/apps/formbricks.md`. *Infra Engineer*
 - 0.4 In the sandbox, on a clean upstream 6.1.2 image: reconcile production's migration history, run the Formbricks migration runner, load every survey through the 6.1.2 validators, compare stored data before and after, and list failures. *Repo Worker*
@@ -286,6 +358,7 @@ Each is sized for one issue. The CEO files them after gcohen approves. Phases ru
 **Phase 1: Upgrade in the sandbox (if go)**
 - 1.1 Rewrite Microsoft sign-in, SSO-only hardening and the proxy JWT gate on Better Auth. *Repo Worker*
 - 1.2 Merge and port fork features onto 6.1.2, one issue per feature group from 0.1. *Repo Worker*
+- 1.2a Ported fields in the API (Must 13): diff the ported element and block schemas against 6.1.2, add each field to the v3 key lists and the read serializer, and test a round trip. Runs after the 1.2 ports it depends on. *Repo Worker*
 - 1.3 Five issues, one per open security bead (`fb-bm6-7qz`, `-w14`, `-ud7`, `-7f9`, `-j9q`): fix on the upgrade branch, or confirm upstream fixed it. *Repo Worker*
 - 1.4 Cutover runbook: freeze window, quiesce and snapshot, migration runner, validation with sends paused, Caddy block on MCP, reopen, rollback before and after reopening with reconciliation, and a rehearsal in the sandbox. *Infra Engineer*
 - 1.5 Sandbox sign-off: every live survey, ported feature and the 1.4 rehearsal checked, and the guard gate (2.8) passed. Then gcohen's go. *Repo Worker → CEO → gcohen*
@@ -294,31 +367,33 @@ Each is sized for one issue. The CEO files them after gcohen approves. Phases ru
 **Phase 2: ASLA guards and analysis (fork patches; built and tested in the sandbox, before 1.5)**
 - 2.1 Spike, first: LibreChat OAuth against the sandbox. Add the temporary opt-in `formbricks-sandbox` connector to LibreChat over the private Docker network, try DCR limited to the LibreChat callback, and fall back to a server-side admin client. The outcome decides how 2.2 registers LibreChat. *Repo Worker*
 - 2.2 Tool allowlist and MCP client restriction (Must 1, Must 2): only the Tools (v1) table; `MCP_LIBRECHAT_CALLBACK_URI` read once and used by DCR, the admin client and the request check; every HTTP client-mutation route disabled or held to that callback; per-request client check on `/api/mcp`; no API keys through `x-api-key` or `Authorization: Bearer`; Vitest coverage of each route. *Repo Worker*
-- 2.3 Draft-only guard on `create_survey`, `patch_survey`, `edit_survey_blocks`, `set_survey_block_order` and `delete_survey`; Must 5 type allowlist; Vitest coverage. *Repo Worker*
-- 2.4 `prepare_publish` and `publish_survey`: stored single-use token bound to user, client, survey and `updatedAt`, atomic consume, recheck at publish, its migration, no self-confirm path, no sends or schedules; Vitest coverage. *Repo Worker*
+- 2.3 Draft-only guard on `create_survey`, `patch_survey`, `edit_survey_blocks`, `set_survey_block_order` and `delete_survey`; Must 5 type allowlist, image-host list and https CTA links; Vitest coverage. *Repo Worker*
+- 2.4 `prepare_status_change` and `apply_status_change` (Must 3): every action; a stored single-use token bound to user, client, survey, action, date and `updatedAt`; atomic consume; recheck at apply; the resume reminder count and refusal; its migration; no self-confirm path; no sends. Vitest coverage of each action from each status, and of a token used for the wrong action. *Repo Worker*
+- 2.4a `update_survey_settings` (Must 11): field allowlist, status rules, the draft-only close date, image-host check and audit; Vitest coverage, including each refused field. *Repo Worker*
+- 2.4b Logic in the tool text (Must 12): document `logic` and `logicFallback` in the create and block-edit descriptions, derived from the schema, with a worked example tested against the create schema. *Repo Worker*
 - 2.5 The Must 6 projection on `list_responses` and `get_response`, with Vitest fixtures for embedded URL and identity fields, deleted PII elements, text output and `structuredContent`. *Repo Worker*
-- 2.6 `summarize_responses` (Must 7, Must 8): exact stats, NPS, completion rate, cross-tab, and an open-text sample through the Must 6 projection, with the same Vitest fixtures as 2.5. *Repo Worker*
+- 2.6 `summarize_responses` (Must 7, Must 8): exact stats for every Must 5 type, NPS, completion rate, cross-tab, and an open-text sample through the Must 6 projection, with the same Vitest fixtures as 2.5. *Repo Worker*
 - 2.7 Audit: `AUDIT_LOG_ENABLED=1` and a kept, searchable sink, in the sandbox now and in production at cutover. *Infra Engineer*
 - 2.8 Guard gate: in the sandbox, through the `formbricks-sandbox` connector, every item under "Done when: guard gate" passes. *Repo Worker*
 
 **Phase 3: Connect production (after 1.6)**
 - 3.1 Set production's `MCP_LIBRECHAT_CALLBACK_URI` to the `formbricks` callback, and `MCP_DCR_ALLOWED_REDIRECT_URIS` to the same value (or create the admin client, per 2.1). Verify `/.well-known` metadata on `surveys.asla.org`, then lift the Caddy block. Rerun the client-restriction, cross-deployment and audit gate items against production. *Infra Engineer*
 - 3.2 Add the `formbricks` entry to `librechat.yaml`: opt-in, scopes as above, allowedDomains, provider-rule comment. *Repo Worker*
-- 3.3 Server instructions text for the interview and publish-confirmation flow (Must 3, Must 4). *Repo Worker; Copy Editor review*
+- 3.3 Server instructions text for the interview, logic and status-change confirmation flows (Must 3, Must 4, Must 12). *Repo Worker; Copy Editor review*
 
 **Phase 4: Pilot and cleanup**
 - 4.1 "Survey builder" model spec in LibreChat. *Repo Worker*
 - 4.2 Remove the `formbricks-sandbox` connector and tear down the sandbox. *Infra Engineer*
 - 4.3 Pilot with survey owners; check `summarize_responses` numbers against the Formbricks summary page on live surveys; collect feedback; report the published-survey count. *Product Strategist*
 
-**Fastest path, if chosen or if Phase 0 is no-go:** F.1 wrapper skeleton with Entra OAuth and a private network; F.2 `list_workspaces`, `list_surveys`, `get_survey`; F.3 `validate_survey`, `create_survey_draft`, and draft editing (`edit_survey_blocks`, `patch_survey`, `set_survey_block_order`) on API v1 with guards; F.4 `prepare_publish` and `publish_survey` on API v1; F.5 `count_responses`, `list_responses` and `get_response` on API v1/v2 with the Must 6 projection; F.6 `summarize_responses`; F.7 LibreChat config. Tasks 3.3, 4.1 and 4.3 carry over unchanged.
+**Fastest path, if chosen or if Phase 0 is no-go:** F.1 wrapper skeleton with Entra OAuth and a private network; F.2 `list_workspaces`, `list_surveys`, `get_survey`; F.3 `validate_survey`, `create_survey_draft`, and draft editing (`edit_survey_blocks`, `patch_survey`, `set_survey_block_order`) on API v1 with guards; F.4 `update_survey_settings`, `prepare_status_change` and `apply_status_change` on API v1, with the resume reminder check; F.5 `count_responses`, `list_responses` and `get_response` on API v1/v2 with the Must 6 projection; F.6 `summarize_responses`; F.7 LibreChat config. Tasks 3.3, 4.1 and 4.3 carry over unchanged.
 
 ## Done when
 
 ### Guard gate (checked in the sandbox at 2.8, before sign-off)
 
 - [ ] In ASLA Chat, a staff member with a Formbricks role connects with their own Formbricks login. A staff member with no role on a workspace gets an authorization error for it.
-- [ ] `tools/list` on `/api/mcp` returns exactly the 15 tools in the "Tools (v1)" table, and calling any other registered tool is refused, for every client.
+- [ ] `tools/list` on `/api/mcp` returns exactly the 16 tools in the "Tools (v1)" table, and calling any other registered tool is refused, for every client.
 - [ ] A DCR registration with a loopback, hosted-client or any non-LibreChat callback is refused (or DCR returns 403 if 2.1 turned it off).
 - [ ] As a signed-in Formbricks user, `/oauth2/create-client`, `/oauth2/update-client`, `/oauth2/client/rotate-secret` and `/oauth2/delete-client` (and `/admin/oauth2/create-client` and `/admin/oauth2/update-client`, if reachable over HTTP) are disabled or refuse any callback other than the LibreChat one.
 - [ ] A token issued to a client whose redirect URIs are not exactly the LibreChat callback, including a client changed after the token was issued, is refused by `/api/mcp`.
@@ -327,9 +402,14 @@ Each is sized for one issue. The CEO files them after gcohen approves. Phases ru
 - [ ] `create_survey_draft` creates a survey whose status is `draft` in Formbricks. Its editor link opens it.
 - [ ] Calling create with `status: "inProgress"`, or patching any survey's status, is rejected by the server. Editing or deleting a published survey through MCP is rejected.
 - [ ] Creating a survey with an element type outside the Must 5 list is rejected with a message that says to add that question in the editor.
-- [ ] `publish_survey` succeeds only with a valid token from `prepare_publish` for the same user, client and survey. A missing, expired, reused, or stale token (survey edited after `prepare_publish`) is rejected. No tool argument skips the token.
-- [ ] Publishing sends no invitation or reminder email and doesn't start a schedule window.
-- [ ] With `AUDIT_LOG_ENABLED=1`, a real MCP write and a publish both appear in the kept audit sink with the Formbricks user, client, tool, survey id, time and, for the publish, the token id.
+- [ ] A picture-choice, welcome-card, ending or styling image outside the Must 5 host list is rejected, and so is a `cta` button URL that isn't https.
+- [ ] Branching from chat: in a test chat, the person describes a survey with at least one jump to a block, one jump to an ending, one required-answer rule, one calculated variable and a fallback. The model creates it as a draft with no hand edits. A scripted run in the sandbox takes every path, and each one reaches the block or ending the person described. A rule that points to a missing block or ending is refused by the server.
+- [ ] Ported-field round trip: on a restored survey that uses each field from 1.2a, `get_survey` returns the field, an unchanged `edit_survey_blocks` leaves the survey identical, and a chat edit can set the field.
+- [ ] `update_survey_settings` changes the closed message, back button, auto-advance, styling and a draft's close date. It refuses every other field (including `customCss`, `isCaptureIpEnabled`, `pin`, `singleUse`, `isVerifyEmailEnabled` and `recaptcha`), a close date on an `inProgress` or `paused` survey, and any `completed` survey.
+- [ ] `apply_status_change` succeeds only with a valid token from `prepare_status_change` for the same user, client, survey and action. It rejects a missing, expired, reused or stale token (survey edited after `prepare_status_change`), and a token used for a different action. No tool argument skips the token.
+- [ ] Each action (`publish`, `schedule_publish`, `pause`, `resume`, `close`, `set_close_date`) works from the statuses Must 3 allows and is refused from the others, and each summary names the dates the change clears.
+- [ ] No status change sends an invitation or reminder email. On a paused survey with reminders due, `prepare_status_change` for `resume` refuses and points to Formbricks. With none due, resume works and the next cron run sends nothing.
+- [ ] With `AUDIT_LOG_ENABLED=1`, a real MCP write, a settings change and a status change all appear in the kept audit sink with the Formbricks user, client, tool, survey id, time and, for the status change, the token id.
 - [ ] Neither the text output nor `structuredContent` of `list_responses`, `get_response` or the `summarize_responses` sample contains v3 `data`, `contact`, contact attributes, any `embeddedData` key, any `unresolved[].rawValue`, IP address, user agent, URL, answers to `contactInfo`, `address` or `fileUpload` elements, or answers to deleted elements (Vitest fixtures prove it, including a hidden field named `email` and a deleted `contactInfo` element).
 - [ ] On a restored survey with 500+ responses (proposed default; open question 9), `summarize_responses` counts and NPS match the Formbricks summary page exactly, and no single tool result exceeds the Must 8 caps.
 - [ ] No Formbricks API key appears in the `formbricks-sandbox` connector config, LibreChat's database, or the transcripts of the test sessions.
@@ -353,5 +433,5 @@ Each is sized for one issue. The CEO files them after gcohen approves. Phases ru
 - [ ] Until 3.1, `/api/mcp` and the MCP OAuth and DCR endpoints on `surveys.asla.org` return a block from Caddy.
 - [ ] After cutover, with sends still paused: every survey that was in progress keeps its ID and public link and accepts a new response, a sent `/c/<token>` link and an encrypted single-use link still open, a link-resume partial response finishes, and historical response counts and sampled answers match the snapshot. After reopening, already-scheduled reminders fire exactly once.
 - [ ] After 3.1, the client-restriction items and the audit item from the guard gate pass again against `surveys.asla.org`.
-- [ ] After 3.3, in a test chat the model interviews the person (Must 4) before calling `create_survey_draft`, and shows the `prepare_publish` summary and gets an explicit yes before calling `publish_survey`.
+- [ ] After 3.3, in a test chat the model interviews the person (Must 4) before calling `create_survey_draft`, and shows the `prepare_status_change` summary and gets an explicit yes before calling `apply_status_change`.
 - [ ] The production `librechat.yaml` change keeps the connector opt-in, lists the host in `allowedDomains`, updates the provider-rule comment, and contains no Formbricks API key.
