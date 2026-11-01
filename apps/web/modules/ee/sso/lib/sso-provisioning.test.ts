@@ -51,6 +51,7 @@ const constantsOverrides = vi.hoisted(() => ({
   SKIP_INVITE_FOR_SSO: false as boolean,
   DEFAULT_TEAM_ID: "team-123" as string | undefined,
   DEFAULT_ORGANIZATION_ID: undefined as string | undefined,
+  SSO_ALLOWED_EMAIL_DOMAINS: [] as string[],
   IS_FORMBRICKS_CLOUD: false as boolean,
   SIGNUP_DOMAIN_CHECK_ON_INVITES: false as boolean,
 }));
@@ -63,6 +64,9 @@ vi.mock("@/lib/constants", async (importOriginal) => {
     },
     get DEFAULT_TEAM_ID() {
       return constantsOverrides.DEFAULT_TEAM_ID;
+    },
+    get SSO_ALLOWED_EMAIL_DOMAINS() {
+      return constantsOverrides.SSO_ALLOWED_EMAIL_DOMAINS;
     },
     get DEFAULT_ORGANIZATION_ID() {
       return constantsOverrides.DEFAULT_ORGANIZATION_ID;
@@ -83,6 +87,7 @@ beforeEach(() => {
   constantsOverrides.SKIP_INVITE_FOR_SSO = false;
   constantsOverrides.DEFAULT_TEAM_ID = "team-123";
   constantsOverrides.DEFAULT_ORGANIZATION_ID = undefined;
+  constantsOverrides.SSO_ALLOWED_EMAIL_DOMAINS = [];
   constantsOverrides.IS_FORMBRICKS_CLOUD = false;
   constantsOverrides.SIGNUP_DOMAIN_CHECK_ON_INVITES = false;
   // Defaults: established single-org instance, access allowed, orgs resolvable.
@@ -120,6 +125,46 @@ describe("gateSsoProvisioning — bypass branches", () => {
       organizationId: null,
       assignToDefaultTeam: false,
       signupSource: "direct",
+    });
+  });
+});
+
+describe("gateSsoProvisioning — SSO email-domain allowlist (ASLA fork)", () => {
+  test("rejects a refused domain even when DEFAULT_ORGANIZATION_ID would otherwise admit everyone", async () => {
+    constantsOverrides.SSO_ALLOWED_EMAIL_DOMAINS = ["asla.org", "aslafund.org"];
+    constantsOverrides.DEFAULT_ORGANIZATION_ID = "default-org";
+    expect(await gateSsoProvisioning({ email: "guest@gmail.com", callbackUrl: "" })).toEqual({
+      action: "reject",
+      reason: "sso_email_domain_not_permitted",
+    });
+  });
+
+  test("rejects a lookalike or subdomain, which a suffix match would have admitted", async () => {
+    constantsOverrides.SSO_ALLOWED_EMAIL_DOMAINS = ["asla.org"];
+    constantsOverrides.DEFAULT_ORGANIZATION_ID = "default-org";
+    for (const email of ["a@evil.asla.org", "a@asla.org.evil.com", "a@notasla.org", "no-at-sign"]) {
+      expect(await gateSsoProvisioning({ email, callbackUrl: "" })).toEqual({
+        action: "reject",
+        reason: "sso_email_domain_not_permitted",
+      });
+    }
+  });
+
+  test("rejects a refused domain on a fresh instance too (no bypass)", async () => {
+    constantsOverrides.SSO_ALLOWED_EMAIL_DOMAINS = ["asla.org"];
+    vi.mocked(getIsFreshInstance).mockResolvedValue(true);
+    expect(await gateSsoProvisioning({ email: "a@other.org", callbackUrl: "" })).toEqual({
+      action: "reject",
+      reason: "sso_email_domain_not_permitted",
+    });
+  });
+
+  test("admits an allowed domain, case-insensitively, into the default organization", async () => {
+    constantsOverrides.SSO_ALLOWED_EMAIL_DOMAINS = ["asla.org"];
+    constantsOverrides.DEFAULT_ORGANIZATION_ID = "default-org";
+    expect(await gateSsoProvisioning({ email: "Jane@ASLA.org", callbackUrl: "" })).toMatchObject({
+      action: "provision",
+      organizationId: "default-org",
     });
   });
 });

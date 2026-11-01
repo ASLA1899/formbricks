@@ -7,11 +7,12 @@ import { BootstrapAdminMarker } from "@formbricks/database/prisma";
 import { logger } from "@formbricks/logger";
 import { SIGNUP_EMAIL_DOMAIN_BLOCKED_ERROR_CODE } from "@formbricks/types/errors";
 import { normalizeUserName } from "@formbricks/types/user";
-import { WEBAPP_URL } from "@/lib/constants";
+import { SSO_ALLOWED_EMAIL_DOMAINS, WEBAPP_URL } from "@/lib/constants";
 import { identifyPostHogPerson } from "@/lib/posthog";
 import { findMatchingLocale } from "@/lib/utils/locale";
 import { getAttributionPropertiesFromCookies } from "@/modules/auth/lib/attribution";
 import { enforceCredentialSignupBackstop } from "@/modules/auth/lib/credential-signup-backstop";
+import { isSsoEmailDomainAllowed } from "@/modules/auth/lib/sso-email-domain";
 import { queueAuditEventBackground } from "@/modules/ee/audit-logs/lib/handler";
 import { UNKNOWN_DATA } from "@/modules/ee/audit-logs/types/audit-log";
 import { getIsSamlSsoEnabled, getIsSsoEnabled } from "@/modules/ee/license-check/lib/utils";
@@ -365,6 +366,10 @@ export const ssoLicenseGateBeforeHandler = async (ctx: AuthHookContext): Promise
   const identityProvider = resolveSsoIdentityProvider(ctx);
   if (!identityProvider) return; // not an SSO callback → no license gate
 
+  // ASLA fork: Microsoft (Entra) sign-in runs without the enterprise license. Only this provider is
+  // exempt; every other SSO provider still needs the `sso` feature (and SAML the `saml` feature).
+  if (identityProvider === "azuread") return;
+
   if (!(await getIsSsoEnabled())) {
     throw new APIError("FORBIDDEN", { message: "SSO is not enabled for this instance." });
   }
@@ -406,6 +411,10 @@ export const ssoRecoveryAfterHandler = async (ctx: AuthHookContext): Promise<voi
 
   const identity = getPendingSsoIdentity();
   if (!identity) return; // identity not captured → fall through to the default error redirect
+
+  // ASLA fork: a refused domain must not reach recovery either, or a magic link would mint a session
+  // for it without passing the sign-in gates. Leave the default account_not_linked redirect in place.
+  if (!isSsoEmailDomainAllowed(identity.email, SSO_ALLOWED_EMAIL_DOMAINS)) return;
 
   const existingUser = await prisma.user.findUnique({
     where: { email: identity.email },

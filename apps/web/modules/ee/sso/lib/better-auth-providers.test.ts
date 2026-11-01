@@ -100,12 +100,25 @@ afterEach(() => {
 
 describe("better-auth SSO providers", () => {
   describe("enterprise license gate", () => {
-    test("registers no providers without an enterprise license", async () => {
+    // ASLA fork: Microsoft (Entra) sign-in is registered without a license; nothing else is.
+    test("registers only Microsoft without an enterprise license", async () => {
       const m = await loadProviders({
         ENTERPRISE_LICENSE_KEY: undefined,
         GITHUB_OAUTH_ENABLED: true,
         GOOGLE_OAUTH_ENABLED: true,
         AZURE_OAUTH_ENABLED: true,
+        OIDC_OAUTH_ENABLED: true,
+        SAML_OAUTH_ENABLED: true,
+      });
+      expect(m.ssoSocialProviders).toEqual({});
+      expect(m.ssoGenericOAuthConfig.map((c) => c.providerId)).toEqual(["azuread"]);
+    });
+
+    test("registers no provider at all without a license when Microsoft is not configured", async () => {
+      const m = await loadProviders({
+        ENTERPRISE_LICENSE_KEY: undefined,
+        GITHUB_OAUTH_ENABLED: true,
+        GOOGLE_OAUTH_ENABLED: true,
         OIDC_OAUTH_ENABLED: true,
         SAML_OAUTH_ENABLED: true,
       });
@@ -439,12 +452,43 @@ describe("better-auth SSO providers", () => {
      */
     test.each([
       ["Azure SSO is disabled", { ENTERPRISE_LICENSE_KEY: "lic", AZURE_OAUTH_ENABLED: false }],
-      ["the instance is unlicensed", { ENTERPRISE_LICENSE_KEY: undefined, AZURE_OAUTH_ENABLED: true }],
+      [
+        "Azure SSO is disabled and the instance is unlicensed",
+        { ENTERPRISE_LICENSE_KEY: undefined, AZURE_OAUTH_ENABLED: false },
+      ],
     ])("Azure does not warn about a template-issuer authority when %s", async (_label, overrides) => {
       const m = await loadProviders({ ...overrides, AZUREAD_TENANT_ID: "common" });
 
       expect(m.ssoGenericOAuthConfig.find((c) => c.providerId === "azuread")).toBeUndefined();
       expect(loggerWarn).not.toHaveBeenCalled();
+    });
+
+    test("Azure still warns about a template-issuer authority when unlicensed, since it is registered", async () => {
+      const m = await loadProviders({
+        ENTERPRISE_LICENSE_KEY: undefined,
+        AZURE_OAUTH_ENABLED: true,
+        AZUREAD_TENANT_ID: "common",
+      });
+
+      expect(m.ssoGenericOAuthConfig.find((c) => c.providerId === "azuread")).toBeDefined();
+      expect(loggerWarn).toHaveBeenCalledTimes(1);
+    });
+
+    test("Azure mapProfileToUser stores Entra's 'Last, First' name as 'First Last' (ASLA fork)", async () => {
+      const m = await loadProviders({ ENTERPRISE_LICENSE_KEY: undefined, AZURE_OAUTH_ENABLED: true });
+      const azure = m.ssoGenericOAuthConfig.find((c) => c.providerId === "azuread");
+
+      expect(
+        callMapper(azure?.mapProfileToUser, { email: "a@az.test", sub: "s", name: "Lovelace, Ada" })
+      ).toMatchObject({ name: "Ada Lovelace" });
+      expect(
+        callMapper(azure?.mapProfileToUser, {
+          email: "a@az.test",
+          sub: "s",
+          given_name: "Ada",
+          family_name: "Lovelace",
+        })
+      ).toMatchObject({ name: "Ada Lovelace" });
     });
 
     test("Azure mapProfileToUser resolves the display name through its fallback chain", async () => {
