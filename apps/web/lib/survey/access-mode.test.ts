@@ -12,7 +12,7 @@ vi.mock("@/lib/authzed/survey", () => ({
 
 const mockTx = (changedRows: number) => {
   const tx = { $executeRaw: vi.fn().mockResolvedValue(changedRows) };
-  vi.mocked(prisma.$transaction).mockImplementation(async (fn: never) => (fn as (t: unknown) => unknown)(tx));
+  vi.mocked(prisma.$transaction).mockImplementation((async (fn: (t: unknown) => unknown) => fn(tx)) as never);
   return tx;
 };
 
