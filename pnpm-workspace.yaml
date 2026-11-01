@@ -303,7 +303,8 @@ overrides:
   # GHSA-r53p-7pc4-xj5r (<6.28.1), so the 6.x pin rises from 6.28.0 to 6.28.1.
   # load-bearing: @redocly resolves the vulnerable 6.x line; apps/web uses the 7.x line directly.
   undici@6: 6.28.1
-  undici@7: 7.29.1
+  # undici >=7.0.0 <7.30.1: 2 high + 2 moderate request-handling advisories (pnpm audit), patched in 7.30.1 (fb-bm6-ud7).
+  undici@7: 7.30.1
   # === Dependabot security batch (ENG-1988..ENG-1999) ===
   # ENG-1999 / ENG-1989 / GHSA-f88m-g3jw-g9cj: sharp <0.35.0 inherits libvips vulnerabilities
   # (CVE-2026-33327/33328/35590/35591). apps/web pins 0.35.0 directly; this override also coerces the
