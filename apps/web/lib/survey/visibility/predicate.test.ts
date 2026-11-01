@@ -43,6 +43,7 @@ describe("buildVisibleSurveyWhere", () => {
           OR: [{ visibilityPending: false }, { visibilityVersion: 0, visibilityProjectedVersion: { lt: 0 } }],
         },
         { ownerId: "u-1" },
+        { accessUsers: { some: { userId: "u-1" } } },
       ],
     });
     expect(buildVisibleResponseWhere(member)).toEqual({
@@ -56,12 +57,13 @@ describe("buildVisibleSurveyWhere", () => {
             ],
           },
           { ownerId: "u-1" },
+          { accessUsers: { some: { userId: "u-1" } } },
         ],
       },
     });
     expect(sqlOf(member)).toEqual({
-      text: '(("s"."visibility" = \'workspace\' AND ("s"."visibilityPending" = false OR ("s"."visibilityVersion" = 0 AND "s"."visibilityProjectedVersion" < 0))) OR "s"."ownerId" = ?)',
-      values: ["u-1"],
+      text: '(("s"."visibility" = \'workspace\' AND ("s"."visibilityPending" = false OR ("s"."visibilityVersion" = 0 AND "s"."visibilityProjectedVersion" < 0))) OR "s"."ownerId" = ? OR EXISTS (SELECT 1 FROM "SurveyAccess" sa WHERE sa."surveyId" = "s"."id" AND sa."userId" = ?))',
+      values: ["u-1", "u-1"],
     });
   });
 
@@ -94,6 +96,7 @@ describe("buildVisibleSurveyWhereAcrossOrganizations", () => {
           OR: [{ visibilityPending: false }, { visibilityVersion: 0, visibilityProjectedVersion: { lt: 0 } }],
         },
         { ownerId: "u1" },
+        { accessUsers: { some: { userId: "u1" } } },
         {
           workspace: {
             organization: { memberships: { some: { userId: "u1", role: { in: ["owner", "manager"] } } } },
@@ -121,6 +124,7 @@ describe("andVisibleSurveys", () => {
 describe("buildHiddenSurveyWhere", () => {
   type TRow = Readonly<{
     ownerId: string | null;
+    sharedWith: string[];
     visibility: "workspace" | "restricted";
     visibilityPending: boolean;
     visibilityProjectedVersion: number;
@@ -133,6 +137,10 @@ describe("buildHiddenSurveyWhere", () => {
       if (key === "AND") return (condition as Record<string, unknown>[]).every((c) => matches(c, row));
       if (key === "OR") return (condition as Record<string, unknown>[]).some((c) => matches(c, row));
       if (key === "NOT") return !matches(condition as Record<string, unknown>, row);
+      if (key === "accessUsers") {
+        const userId = (condition as { some: { userId: string } }).some.userId;
+        return row.sharedWith.includes(userId);
+      }
       const value = row[key as keyof TRow];
       if (condition !== null && typeof condition === "object") {
         const operator = condition as { lt?: number; not?: unknown };
@@ -145,19 +153,22 @@ describe("buildHiddenSurveyWhere", () => {
   const rows: TRow[] = [];
   for (const visibility of ["workspace", "restricted"] as const) {
     for (const ownerId of [null, "u-1", "u-other"]) {
-      for (const [visibilityVersion, visibilityProjectedVersion] of [
-        [0, 0],
-        [0, -1],
-        [1, 0],
-        [2, 2],
-      ]) {
-        rows.push({
-          ownerId,
-          visibility,
-          visibilityPending: visibilityVersion !== visibilityProjectedVersion,
-          visibilityProjectedVersion,
-          visibilityVersion,
-        });
+      for (const sharedWith of [[], ["u-1"]]) {
+        for (const [visibilityVersion, visibilityProjectedVersion] of [
+          [0, 0],
+          [0, -1],
+          [1, 0],
+          [2, 2],
+        ]) {
+          rows.push({
+            ownerId,
+            sharedWith,
+            visibility,
+            visibilityPending: visibilityVersion !== visibilityProjectedVersion,
+            visibilityProjectedVersion,
+            visibilityVersion,
+          });
+        }
       }
     }
   }
@@ -181,7 +192,8 @@ describe("buildHiddenSurveyWhere", () => {
 
     for (const row of rows) {
       const visible =
-        getEffectiveVisibility(row) === "workspace" || (ctx.kind === "user" && row.ownerId === ctx.userId);
+        getEffectiveVisibility(row) === "workspace" ||
+        (ctx.kind === "user" && (row.ownerId === ctx.userId || row.sharedWith.includes(ctx.userId)));
       expect(matches(hidden ?? {}, row)).toBe(!visible);
       expect(matches(buildVisibleSurveyWhere(ctx), row)).toBe(visible);
     }
