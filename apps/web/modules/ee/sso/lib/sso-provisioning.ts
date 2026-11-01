@@ -8,12 +8,19 @@ import type { TUserNotificationSettings } from "@formbricks/types/user";
 import { reconcileOrganizationMembership } from "@/lib/authzed/organization-membership";
 import { runPostCommitProjection } from "@/lib/authzed/projection-boundary";
 import { reconcileTeamWorkspaceRelationships } from "@/lib/authzed/team-workspace";
-import { DEFAULT_ORGANIZATION_ID, DEFAULT_TEAM_ID, SKIP_INVITE_FOR_SSO, WEBAPP_URL } from "@/lib/constants";
+import {
+  DEFAULT_ORGANIZATION_ID,
+  DEFAULT_TEAM_ID,
+  SKIP_INVITE_FOR_SSO,
+  SSO_ALLOWED_EMAIL_DOMAINS,
+  WEBAPP_URL,
+} from "@/lib/constants";
 import { getIsFreshInstance } from "@/lib/instance/service";
 import { createMembership } from "@/lib/membership/service";
 import { capturePostHogEvent, identifyPostHogPerson } from "@/lib/posthog";
 import { createBrevoCustomer } from "@/modules/auth/lib/brevo";
 import { isSignupEmailDomainBlocked } from "@/modules/auth/lib/signup-email-domain";
+import { isSsoEmailDomainAllowed } from "@/modules/auth/lib/sso-email-domain";
 import type { TSsoProvisioningRejectReason } from "@/modules/auth/lib/sso-provisioning-reject-reasons";
 import { updateUser } from "@/modules/auth/lib/user";
 import { resolveInviteMatch } from "@/modules/auth/signup/lib/invite";
@@ -121,6 +128,12 @@ export const gateSsoProvisioning = async ({
   email: string;
   callbackUrl: string;
 }): Promise<TSsoProvisioningDecision> => {
+  // ASLA fork: the SSO email-domain allowlist comes first, above every bypass below (default
+  // organization, fresh instance, multi-org), so no provisioning path can admit a refused domain.
+  if (!isSsoEmailDomainAllowed(email, SSO_ALLOWED_EMAIL_DOMAINS)) {
+    return { action: "reject", reason: "sso_email_domain_not_permitted" };
+  }
+
   // Formbricks Cloud only: block SSO sign-ups from personal/free/disposable email domains, before any
   // org resolution. Placed above the multi-org / fresh-instance bypass below (Cloud is multi-org, so
   // the bypass would otherwise let these through). Invited users — a valid token whose email matches —
