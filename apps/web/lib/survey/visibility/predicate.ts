@@ -22,13 +22,22 @@ export const effectivelyRestrictedWhere: Prisma.SurveyWhereInput = {
 };
 
 /**
+ * ASLA fork (ASL-1880): a per-person share of a private survey. SpiceDB's schema has no per-user survey
+ * relation, so the shares live in `SurveyAccess` and widen this predicate beside it, never around it.
+ */
+const sharedWithUserWhere = (userId: string): Prisma.SurveyWhereInput => ({
+  accessUsers: { some: { userId } },
+});
+
+/**
  * The one visibility predicate (ENG-3282, contract §6). Every list, count, export and response read
  * that can return a survey or its responses applies it in SQL — never as a post-filter, so `limit`,
  * cursors and counts stay exact and a restricted survey is not countable by someone who cannot see it.
  *
  * - enforcement off (readiness marker unset): no restriction, as before ENG-3282;
  * - organization owner/manager: no restriction;
- * - other user: effectively workspace-visible surveys, plus the ones they own;
+ * - other user: effectively workspace-visible surveys, plus the ones they own or that are shared with them
+ *   (ASL-1880);
  * - API key: effectively workspace-visible surveys. Never a restricted one.
  *
  * "Effectively workspace-visible" is `getEffectiveVisibility`: stored `workspace` with nothing pending,
@@ -43,7 +52,7 @@ export const buildVisibleSurveyWhere = (ctx: TSurveyActorContext): Prisma.Survey
   if (ctx.kind === "apiKey") return sharedAndSettled;
   if (ctx.isOrganizationAdmin) return {};
 
-  return { OR: [sharedAndSettled, { ownerId: ctx.userId }] };
+  return { OR: [sharedAndSettled, { ownerId: ctx.userId }, sharedWithUserWhere(ctx.userId)] };
 };
 
 /**
@@ -58,7 +67,11 @@ export const buildHiddenSurveyWhere = (ctx: TSurveyActorContext): Prisma.SurveyW
   if (ctx.isOrganizationAdmin) return null;
 
   return {
-    AND: [effectivelyRestrictedWhere, { OR: [{ ownerId: null }, { ownerId: { not: ctx.userId } }] }],
+    AND: [
+      effectivelyRestrictedWhere,
+      { OR: [{ ownerId: null }, { ownerId: { not: ctx.userId } }] },
+      { NOT: sharedWithUserWhere(ctx.userId) },
+    ],
   };
 };
 
@@ -76,6 +89,7 @@ export const buildVisibleSurveyWhereAcrossOrganizations = (
     OR: [
       effectivelyWorkspaceVisibleWhere,
       { ownerId: userId },
+      sharedWithUserWhere(userId),
       {
         workspace: {
           organization: { memberships: { some: { userId, role: { in: ["owner", "manager"] } } } },
@@ -110,7 +124,8 @@ export const visibleSurveySqlPredicate = (ctx: TSurveyActorContext, alias: strin
   const sharedAndSettled = Prisma.sql`(${table}."visibility" = 'workspace' AND (${table}."visibilityPending" = false OR (${table}."visibilityVersion" = 0 AND ${table}."visibilityProjectedVersion" < 0)))`;
   if (ctx.kind === "apiKey") return sharedAndSettled;
 
-  return Prisma.sql`(${sharedAndSettled} OR ${table}."ownerId" = ${ctx.userId})`;
+  const shared = Prisma.sql`EXISTS (SELECT 1 FROM "SurveyAccess" sa WHERE sa."surveyId" = ${table}."id" AND sa."userId" = ${ctx.userId})`;
+  return Prisma.sql`(${sharedAndSettled} OR ${table}."ownerId" = ${ctx.userId} OR ${shared})`;
 };
 
 /** The list's own `filter[visibility][in]` / `filter[owner][in]` (contract §6). */

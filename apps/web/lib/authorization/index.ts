@@ -1,5 +1,6 @@
 import "server-only";
 import { AuthorizationError } from "@formbricks/types/errors";
+import { SURVEY_SHARE_GRANTED_ACTIONS, getSurveyShareWorkspaceId } from "@/lib/survey/visibility/shares";
 import { recordAuthorizationCheckIssued } from "./context";
 import type { TAuthorizationAction, TAuthorizationActor, TAuthorizationResourceForAction } from "./contract";
 import { authorizationCoordinator } from "./coordinator";
@@ -30,13 +31,32 @@ const evaluator: AuthorizationEvaluator = authorizationCoordinator;
  * are useful; this one answers "how many authorization decisions did this page attempt" and is the
  * number that catches an N+1 regression regardless of whether any individual check fails.
  */
-export const can = <TAction extends TAuthorizationAction>(
+export const can = async <TAction extends TAuthorizationAction>(
   actor: TAuthorizationActor,
   action: TAction,
   resource: TAuthorizationResourceForAction<NoInfer<TAction>>
 ): Promise<boolean> => {
   recordAuthorizationCheckIssued();
-  return evaluator.can(actor, action, resource);
+  if (await evaluator.can(actor, action, resource)) return true;
+  return isGrantedByAslaSurveyShare(actor, action, resource);
+};
+
+/**
+ * ASLA fork (ASL-1880): the per-person shares SpiceDB cannot hold. Consulted only after the evaluator
+ * denied, only for a user, a survey and a read action, and the grantee must still hold `workspace.read`
+ * on the survey's workspace, so a share cannot reach across a tenant boundary.
+ */
+const isGrantedByAslaSurveyShare = async (
+  actor: TAuthorizationActor,
+  action: TAuthorizationAction,
+  resource: Readonly<{ type: string; id?: string }>
+): Promise<boolean> => {
+  if (actor.type !== "user" || resource.type !== "survey" || !resource.id) return false;
+  if (!SURVEY_SHARE_GRANTED_ACTIONS.has(action)) return false;
+
+  const workspaceId = await getSurveyShareWorkspaceId(actor.id, resource.id);
+  if (!workspaceId) return false;
+  return evaluator.can(actor, "workspace.read", { id: workspaceId, type: "workspace" });
 };
 
 /** Assert that `actor` may perform `action` on `resource`, throwing `AuthorizationError` otherwise. */

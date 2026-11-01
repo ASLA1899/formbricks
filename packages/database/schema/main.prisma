@@ -407,6 +407,12 @@ model Survey {
   visibilityChangedAt        DateTime?
   visibilityChangedById      String?
 
+  /// ASLA fork (ASL-1880): the fork's private/public switch, kept in lockstep with `visibility`
+  /// (private = restricted, public = workspace) by `setSurveyAccessMode`. Per-person shares live in
+  /// `SurveyAccess`: SpiceDB's schema has no per-user survey relation.
+  accessMode          SurveyAccessMode        @default(private)
+  accessUsers         SurveyAccess[]
+
   status              SurveyStatus            @default(draft)
   /// [SurveyWelcomeCard]
   welcomeCard         Json                    @default("{\"enabled\": false}")
@@ -787,6 +793,25 @@ enum OrganizationRole {
 /// @property user - The member user
 /// @property accepted - Whether the user has accepted the membership
 /// @property role - User's role within the organization (owner, manager, member, billing)
+/// ASLA fork (ASL-1880): the fork's per-survey access mode. Created by the 4.9 fork migration
+/// `add_survey_acl` as "SurveyVisibility" and renamed by 20261002115900 (ASL-1863).
+enum SurveyAccessMode {
+  private
+  public
+}
+
+/// ASLA fork (ASL-1880): a per-person share of a private survey.
+model SurveyAccess {
+  survey    Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  surveyId  String
+  user      User     @relation("SurveyAccessUser", fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now()) @map(name: "created_at")
+
+  @@id([surveyId, userId])
+  @@index([userId])
+}
+
 model Membership {
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String
@@ -1276,6 +1301,7 @@ model User {
   locale                    String              @default("en-US")
   surveys                   Survey[]            @relation("SurveyCreator")
   ownedSurveys              Survey[]            @relation("SurveyOwner")
+  surveyAccesses            SurveyAccess[]      @relation("SurveyAccessUser")
   charts                    Chart[]             @relation("chartCreatedBy")
   dashboards                Dashboard[]         @relation("dashboardCreatedBy")
   feedbackSources           FeedbackSource[]
