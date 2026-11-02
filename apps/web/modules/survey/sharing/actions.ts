@@ -3,6 +3,8 @@
 import { z } from "zod";
 import { prisma } from "@formbricks/database";
 import { InvalidInputError, ResourceNotFoundError } from "@formbricks/types/errors";
+import { findSurveyOutboundBlockers } from "@/app/api/v3/surveys/visibility/blockers";
+import { planVisibilityTransition } from "@/app/api/v3/surveys/visibility/transition";
 import { assertCan, can } from "@/lib/authorization";
 import { setSurveyAccessMode } from "@/lib/survey/access-mode";
 import { accessModeForVisibility } from "@/lib/survey/visibility/access-mode-map";
@@ -80,7 +82,35 @@ export const setSurveyAccessModeAction = authenticatedActionClient
   .inputSchema(z.object({ accessMode: z.enum(["private", "public"]), surveyId: z.cuid2() }))
   .action(async ({ ctx, parsedInput }) => {
     await authorizeSharing(parsedInput.surveyId, ctx.user.id);
-    return setSurveyAccessMode(parsedInput.surveyId, parsedInput.accessMode, ctx.user.id);
+    if (parsedInput.accessMode === "private") {
+      // Same gate as Collaborate and the v3 endpoint: a restriction is refused while a connection that
+      // would silently stop (webhook, integration, workflow, ...) still references the survey.
+      const survey = await prisma.survey.findUnique({
+        select: {
+          ownerId: true,
+          visibility: true,
+          visibilityProjectedVersion: true,
+          visibilityVersion: true,
+          workspaceId: true,
+        },
+        where: { id: parsedInput.surveyId },
+      });
+      if (!survey) throw new ResourceNotFoundError("Survey", parsedInput.surveyId);
+      const settledRestricted = survey.visibility === "restricted" && getPendingVisibility(survey) === null;
+      const blockers = settledRestricted
+        ? []
+        : await findSurveyOutboundBlockers(parsedInput.surveyId, survey.workspaceId);
+      const plan = planVisibilityTransition({
+        blockerCount: blockers.length,
+        requested: "restricted",
+        row: survey,
+      });
+      if (plan.kind === "reject") {
+        return { status: "blocked" as const, code: plan.code, blockers };
+      }
+    }
+    const result = await setSurveyAccessMode(parsedInput.surveyId, parsedInput.accessMode, ctx.user.id);
+    return { status: "saved" as const, projection: result.projection };
   });
 
 export const addSurveyAccessAction = authenticatedActionClient

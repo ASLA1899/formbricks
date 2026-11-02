@@ -83,6 +83,15 @@ export const SharingPanel = ({ surveyId }: Readonly<SharingPanelProps>) => {
     const result = await setSurveyAccessModeAction({ accessMode: next, surveyId });
     if (!result?.data) {
       toast.error(t("workspace.surveys.edit.survey_sharing_mode_failed"));
+    } else if (result.data.status === "blocked") {
+      // Nothing was stored. Name the connections that would stop, exactly like Collaborate does.
+      toast.error(
+        result.data.code === "visibility_blocked_by_connections"
+          ? `${t("workspace.surveys.visibility.blocked_by_connections")} ${result.data.blockers
+              .map((blocker) => blocker.name)
+              .join(", ")}`
+          : t("workspace.surveys.edit.survey_sharing_mode_failed")
+      );
     } else if (result.data.projection === "failed") {
       // Stored, but the permission graph has not acknowledged it: it finishes on its own, and until it
       // does the refetched state keeps showing the enforced value rather than the stored one.
@@ -119,7 +128,7 @@ export const SharingPanel = ({ surveyId }: Readonly<SharingPanelProps>) => {
       onOpenChange={setOpen}
       className="w-full space-y-2 rounded-lg border border-slate-300 bg-white">
       <Collapsible.CollapsibleTrigger asChild className="h-full w-full cursor-pointer hover:bg-slate-50">
-        <div className="inline-flex p-4">
+        <button type="button" className="inline-flex w-full p-4 text-left">
           <div className="flex items-center pr-5 pl-2">
             <CheckIcon className="h-8 w-8 rounded-full border border-green-300 bg-green-100 p-1 text-green-600" />
           </div>
@@ -129,7 +138,7 @@ export const SharingPanel = ({ surveyId }: Readonly<SharingPanelProps>) => {
               {t("workspace.surveys.edit.survey_sharing_description")}
             </p>
           </div>
-        </div>
+        </button>
       </Collapsible.CollapsibleTrigger>
       <Collapsible.CollapsibleContent className="flex flex-col">
         <hr className="py-1 text-slate-600" />
@@ -162,9 +171,16 @@ export const SharingPanel = ({ surveyId }: Readonly<SharingPanelProps>) => {
             </div>
           </RadioGroup>
           {pendingAccessMode && (
-            <p className="mt-2 text-sm text-slate-500">
-              {t("workspace.surveys.visibility.visibility_update_pending")}
-            </p>
+            <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
+              <p>{t("workspace.surveys.visibility.visibility_update_pending")}</p>
+              {/* The checked radio cannot be clicked, so a queued change needs its own way out: asking for
+                  the enforced value supersedes the pending one (the "cancel" plan). */}
+              {pendingAccessMode !== accessMode && (
+                <Button variant="secondary" size="sm" onClick={() => void onAccessModeChange(accessMode)}>
+                  {t("common.cancel")}
+                </Button>
+              )}
+            </div>
           )}
 
           {accessMode === "private" && (
