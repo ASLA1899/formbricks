@@ -9,9 +9,10 @@ import { TResponse } from "@formbricks/types/responses";
 import { RESERVED_FIELD_ICONS, getReservedFieldLabel } from "@/modules/embedded-data/lib/field-display";
 
 // name/organization are common element ids, so their table values are keyed per element instead of
-// sharing the flat record with the other answers.
+// sharing the flat record with the other answers. The key contains a space, which ZSurveyElementId
+// rejects, so it can never equal a real element id.
 export const getScopedAddressKey = (elementId: string, field: string) =>
-  field === "name" || field === "organization" ? `${elementId}__${field}` : field;
+  field === "name" || field === "organization" ? `${elementId} ${field}` : field;
 
 export const getAddressFieldLabel = (field: string, t: TFunction) => {
   switch (field) {

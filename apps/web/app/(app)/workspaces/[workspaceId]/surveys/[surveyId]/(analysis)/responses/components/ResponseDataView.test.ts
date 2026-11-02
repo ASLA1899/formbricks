@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import type { TResponseWithQuotas } from "@formbricks/types/responses";
-import type { TSurveyAddressElement } from "@formbricks/types/surveys/elements";
+import { type TSurveyAddressElement, ZSurveyElementId } from "@formbricks/types/surveys/elements";
 import type { TSurvey } from "@formbricks/types/surveys/types";
 import { getScopedAddressKey } from "../lib/utils";
 import { extractResponseData, formatAddressData } from "./ResponseDataView";
@@ -97,5 +97,28 @@ describe("extractResponseData", () => {
     expect(data[getScopedAddressKey("addr", "name")]).toBe("Jane");
     expect(data[getScopedAddressKey("addr", "organization")]).toBe("ASLA");
     expect(data.addressLine1).toBe("1 Main St");
+  });
+
+  test("scoped address keys never collide with a valid element id", () => {
+    const survey = {
+      hiddenFields: { enabled: false, fieldIds: [] },
+      blocks: [
+        {
+          id: "b1",
+          name: "B1",
+          elements: [
+            { id: "addr__name", type: "openText", headline: { default: "Name" }, required: false },
+            addressElement(true, true),
+          ],
+        },
+      ],
+    } as unknown as TSurvey;
+    const response = {
+      data: { addr__name: "Project A", addr: ["", "", "", "", "", "", "Jane", "ASLA"] },
+    } as unknown as TResponseWithQuotas;
+    const data = extractResponseData(response, survey);
+    expect(data.addr__name).toBe("Project A");
+    expect(data[getScopedAddressKey("addr", "name")]).toBe("Jane");
+    expect(ZSurveyElementId.safeParse(getScopedAddressKey("addr", "name")).success).toBe(false);
   });
 });
