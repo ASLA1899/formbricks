@@ -54,6 +54,8 @@ export interface TResumedResponse {
   history?: string[];
   /** Variable values before each submit in `history` (same order). Lets Back undo calculations after a resume. */
   variableStack?: { questionId?: string; variables: TResponseVariables }[];
+  /** Questions earlier blocks made required, keyed by the block's first question id. Restores required rules and their Back undo. */
+  requiredByMap?: Record<string, string[]>;
 }
 
 export interface SurveyBaseProps {
@@ -162,7 +164,8 @@ export interface SurveyContainerProps extends Omit<SurveyBaseProps, "onFileUploa
     blockId: string,
     history: string[],
     variableStack: { questionId?: string; variables: TResponseVariables }[],
-    variables: TResponseVariables
+    variables: TResponseVariables,
+    requiredByMap: Record<string, string[]>
   ) => void;
   onOfflineStatusChange?: (status: {
     isOnline: boolean;

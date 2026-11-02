@@ -8,6 +8,8 @@ export interface StoredResume {
   variableStack: StoredVariableEntry[];
   /** Variable values at the saved position (Back rolls these back; the server only has the last forward submit). */
   variables: Record<string, string | number> | null;
+  /** Questions made required by earlier blocks' logic, keyed by the block's first question id. */
+  requiredByMap: Record<string, string[]>;
 }
 
 export interface StoredVariableEntry {
@@ -29,6 +31,12 @@ const isVariableEntry = (entry: unknown): entry is StoredVariableEntry => {
   return isVariableMap(variables);
 };
 
+const isRequiredMap = (value: unknown): value is Record<string, string[]> =>
+  !!value &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  Object.values(value).every((v) => Array.isArray(v) && v.every((id) => typeof id === "string"));
+
 export const readStoredResume = (surveyId: string): StoredResume | null => {
   try {
     const raw = globalThis.localStorage?.getItem(RESUME_STORAGE_PREFIX + surveyId);
@@ -40,6 +48,7 @@ export const readStoredResume = (surveyId: string): StoredResume | null => {
       history?: unknown;
       variableStack?: unknown;
       variables?: unknown;
+      requiredByMap?: unknown;
     };
     if (typeof parsed.responseId !== "string" || !parsed.responseId) return null;
     if (typeof parsed.updatedAt !== "number" || Date.now() - parsed.updatedAt > RESUME_MAX_AGE_MS) {
@@ -57,6 +66,7 @@ export const readStoredResume = (surveyId: string): StoredResume | null => {
           ? parsed.variableStack
           : [],
       variables: isVariableMap(parsed.variables) ? parsed.variables : null,
+      requiredByMap: isRequiredMap(parsed.requiredByMap) ? parsed.requiredByMap : {},
     };
   } catch {
     return null;
@@ -72,7 +82,8 @@ export const writeStoredResumeBlock = (
   blockId: string,
   history: string[] = [],
   variableStack: StoredVariableEntry[] = [],
-  variables?: Record<string, string | number>
+  variables?: Record<string, string | number>,
+  requiredByMap: Record<string, string[]> = {}
 ): void => {
   try {
     const key = RESUME_STORAGE_PREFIX + surveyId;
@@ -81,7 +92,15 @@ export const writeStoredResumeBlock = (
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     globalThis.localStorage?.setItem(
       key,
-      JSON.stringify({ ...parsed, blockId, history, variableStack, variables, updatedAt: Date.now() })
+      JSON.stringify({
+        ...parsed,
+        blockId,
+        history,
+        variableStack,
+        variables,
+        requiredByMap,
+        updatedAt: Date.now(),
+      })
     );
   } catch {
     // ignore
@@ -97,6 +116,7 @@ export const writeStoredResumeId = (
     history: string[];
     variableStack: StoredVariableEntry[];
     variables?: Record<string, string | number>;
+    requiredByMap?: Record<string, string[]>;
   }
 ): void => {
   try {

@@ -227,6 +227,7 @@ export const SurveyClientWrapper = ({
               blockId: stored?.blockId ?? null,
               history: stored?.history ?? [],
               variableStack: stored?.variableStack ?? [],
+              requiredByMap: stored?.blockId ? stored.requiredByMap : {},
             });
             // Keep the language the respondent was answering in. "default" is the survey's default
             // language and must be restored too, or a Spanish ?lang= link would override it. Codes
@@ -259,6 +260,7 @@ export const SurveyClientWrapper = ({
         history: string[];
         variableStack: StoredVariableEntry[];
         variables: Record<string, string | number>;
+        requiredByMap: Record<string, string[]>;
       }
     | undefined
   >(undefined);
@@ -275,10 +277,13 @@ export const SurveyClientWrapper = ({
       blockId: string,
       history: string[],
       variableStack: StoredVariableEntry[],
-      variables: Record<string, string | number>
+      variables: Record<string, string | number>,
+      requiredByMap: Record<string, string[]>
     ) => {
-      latestPositionRef.current = { blockId, history, variableStack, variables };
-      if (isResumeEligible) writeStoredResumeBlock(survey.id, blockId, history, variableStack, variables);
+      latestPositionRef.current = { blockId, history, variableStack, variables, requiredByMap };
+      if (isResumeEligible) {
+        writeStoredResumeBlock(survey.id, blockId, history, variableStack, variables, requiredByMap);
+      }
     },
     [isResumeEligible, survey.id]
   );

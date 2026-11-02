@@ -208,7 +208,33 @@ export function Survey({
 
   const [hasInteracted, setHasInteracted] = useState(false);
 
-  const [localSurvey, setlocalSurvey] = useState<TJsWorkspaceStateSurvey>(survey);
+  // Resume: re-apply the required rules earlier blocks set, without replaying their logic. Only ids
+  // that still exist in the survey count.
+  const [resumedRequiredMap] = useState<Record<string, string[]>>(() => {
+    const saved: Record<string, string[]> = resumedResponse?.requiredByMap ?? {};
+    const known = new Set(getElementsFromSurveyBlocks(survey.blocks).map((element) => element.id));
+    return Object.fromEntries(
+      Object.entries(saved)
+        .filter(([key]) => known.has(key))
+        .map(([key, ids]) => [key, ids.filter((id) => known.has(id))])
+    );
+  });
+  const applyResumedRequired = (base: TJsWorkspaceStateSurvey): TJsWorkspaceStateSurvey => {
+    const ids = new Set(Object.values(resumedRequiredMap).flat());
+    if (ids.size === 0) return base;
+    return {
+      ...base,
+      blocks: base.blocks.map((block) => ({
+        ...block,
+        elements: block.elements.map((element) =>
+          ids.has(element.id) ? { ...element, required: true } : element
+        ),
+      })),
+    };
+  };
+  const [localSurvey, setlocalSurvey] = useState<TJsWorkspaceStateSurvey>(() =>
+    applyResumedRequired(survey)
+  );
   const [currentVariables, setCurrentVariables] = useState<TResponseVariables>({});
 
   const isLinkSurvey = survey.type === "link";
@@ -316,11 +342,12 @@ export function Survey({
   }, [survey.blocks]);
 
   // state to keep track of the questions that were made required by each specific question's logic
-  const questionRequiredByMap = useRef<Record<string, string[]>>({});
+  const questionRequiredByMap = useRef<Record<string, string[]>>({ ...resumedRequiredMap });
 
   // Update localSurvey when the survey prop changes (it changes in case of survey editor)
   useEffect(() => {
-    setlocalSurvey(survey);
+    setlocalSurvey(applyResumedRequired(survey));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resumed rules are read at mount only
   }, [survey]);
 
   // ENG-1837: computed fields are seeded from their definitions in the EmbeddedData tables. Only
@@ -405,7 +432,7 @@ export function Survey({
   // the welcome card and endings are not resume points.
   useEffect(() => {
     if (onResumeBlockChange && localSurvey.blocks.some((block) => block.id === blockId)) {
-      onResumeBlockChange(blockId, history, variableStack, currentVariables);
+      onResumeBlockChange(blockId, history, variableStack, currentVariables, questionRequiredByMap.current);
     }
   }, [blockId, history, variableStack, currentVariables, localSurvey.blocks, onResumeBlockChange]);
   /**

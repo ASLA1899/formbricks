@@ -55,6 +55,7 @@ describe("resume-storage", () => {
       history: ["b1"],
       variableStack: [],
       variables: null,
+      requiredByMap: {},
     });
   });
 
@@ -73,6 +74,7 @@ describe("resume-storage", () => {
       history: ["b1"],
       variableStack: [{ questionId: "q1", variables: { score: 1 } }],
       variables: null,
+      requiredByMap: {},
     });
   });
 
@@ -84,6 +86,7 @@ describe("resume-storage", () => {
       history: [],
       variableStack: [],
       variables: null,
+      requiredByMap: {},
     });
   });
 
@@ -122,5 +125,16 @@ describe("resume-storage", () => {
       { variables: { score: 5 } },
     ]);
     expect(stored?.variables).toEqual({ score: 0 });
+  });
+
+  test("saves the required rules set by earlier blocks and drops a malformed map", () => {
+    writeStoredResumeId("s1", "r1");
+    writeStoredResumeBlock("s1", "b2", ["b1"], [], { score: 0 }, { q1: ["q2"] });
+    expect(readStoredResume("s1")?.requiredByMap).toEqual({ q1: ["q2"] });
+
+    const key = "formbricks-resume-s1";
+    const parsed = JSON.parse(localStorage.getItem(key) as string);
+    localStorage.setItem(key, JSON.stringify({ ...parsed, requiredByMap: { q1: [1] } }));
+    expect(readStoredResume("s1")?.requiredByMap).toEqual({});
   });
 });
