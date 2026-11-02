@@ -600,11 +600,13 @@ function MultiSelect({
   };
 
   // Get selected option labels for dropdown display
-  const selectedLabels = options.filter((opt) => selectedValues.includes(opt.id)).map((opt) => opt.label);
+  const selectedLabels = options
+    .filter((opt) => selectedValues.includes(opt.id))
+    .map((opt) => stripInlineMarkdown(opt.label));
 
-  // Handle "other" option label display
+  // Handle "other" option label display (typed text is shown as entered; only the label is stripped)
   if (hasOtherOption && otherOptionId && selectedValues.includes(otherOptionId)) {
-    const otherLabel = otherValue || otherOptionLabel;
+    const otherLabel = otherValue || stripInlineMarkdown(otherOptionLabel);
     if (!selectedLabels.includes(otherLabel)) {
       selectedLabels.push(otherLabel);
     }
@@ -612,7 +614,7 @@ function MultiSelect({
 
   let displayText = placeholder;
   if (selectedLabels.length > 0) {
-    displayText = selectedLabels.map(stripInlineMarkdown).join(", ");
+    displayText = selectedLabels.join(", ");
   }
 
   const isListVariant = variant === "list";

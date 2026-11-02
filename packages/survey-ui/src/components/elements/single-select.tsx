@@ -359,7 +359,7 @@ const getDropdownDisplayText = ({
   placeholder: string;
 }): string => {
   if (isOtherSelected) {
-    return otherValue || otherOptionLabel;
+    return otherValue || stripInlineMarkdown(otherOptionLabel);
   }
   return selectedOptionLabel ?? placeholder;
 };
