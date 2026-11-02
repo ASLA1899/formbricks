@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "@formbricks/database";
 import { AuthorizationError } from "@formbricks/types/errors";
-import { assertCan } from "@/lib/authorization";
+import { assertCan, can } from "@/lib/authorization";
 import { setSurveyAccessMode } from "@/lib/survey/access-mode";
-import { getOrganizationIdFromSurveyId } from "@/lib/utils/helper";
+import { getOrganizationIdFromSurveyId, getWorkspaceIdFromSurveyId } from "@/lib/utils/helper";
 import {
   addSurveyAccessAction,
   getSurveySharingStateAction,
@@ -21,9 +21,12 @@ vi.mock("server-only", () => ({}));
 vi.mock("@formbricks/database", () => ({
   prisma: { survey: { findUnique: vi.fn() } },
 }));
-vi.mock("@/lib/authorization", () => ({ assertCan: vi.fn() }));
+vi.mock("@/lib/authorization", () => ({ assertCan: vi.fn(), can: vi.fn() }));
 vi.mock("@/lib/survey/access-mode", () => ({ setSurveyAccessMode: vi.fn() }));
-vi.mock("@/lib/utils/helper", () => ({ getOrganizationIdFromSurveyId: vi.fn().mockResolvedValue("org1") }));
+vi.mock("@/lib/utils/helper", () => ({
+  getOrganizationIdFromSurveyId: vi.fn().mockResolvedValue("org1"),
+  getWorkspaceIdFromSurveyId: vi.fn().mockResolvedValue("ws1"),
+}));
 vi.mock("./lib/survey-access", () => ({
   addSurveyAccess: vi.fn(),
   listShareableMembers: vi.fn().mockResolvedValue([{ user: { id: "u2", name: "B", email: "b@x" } }]),
@@ -47,6 +50,8 @@ describe("survey sharing actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getOrganizationIdFromSurveyId).mockResolvedValue("org1");
+    vi.mocked(getWorkspaceIdFromSurveyId).mockResolvedValue("ws1");
+    vi.mocked(can).mockResolvedValue(true);
     vi.mocked(listShareableMembers).mockResolvedValue([
       { user: { id: "u2", name: "B", email: "b@x" } },
     ] as never);
@@ -76,9 +81,51 @@ describe("survey sharing actions", () => {
     expect(removeSurveyAccess).not.toHaveBeenCalled();
   });
 
+  test("state derives the mode from visibility, the enforced value, not the mirrored accessMode", async () => {
+    vi.mocked(assertCan).mockResolvedValue(undefined);
+    vi.mocked(prisma.survey.findUnique).mockResolvedValue({
+      accessMode: "private",
+      visibility: "workspace",
+      workspaceId: "ws1",
+    } as never);
+    await expect(
+      (getSurveySharingStateAction as never as (i: unknown) => Promise<{ accessMode: string }>)({ surveyId })
+    ).resolves.toMatchObject({ accessMode: "public" });
+  });
+
+  test("state offers only members who can read the survey's workspace", async () => {
+    vi.mocked(assertCan).mockResolvedValue(undefined);
+    vi.mocked(prisma.survey.findUnique).mockResolvedValue({
+      visibility: "restricted",
+      workspaceId: "ws1",
+    } as never);
+    vi.mocked(can).mockResolvedValue(false);
+    await expect(
+      (getSurveySharingStateAction as never as (i: unknown) => Promise<{ orgMembers: unknown[] }>)({
+        surveyId,
+      })
+    ).resolves.toMatchObject({ orgMembers: [] });
+    expect(can).toHaveBeenCalledWith({ id: "u2", type: "user" }, "workspace.read", {
+      id: "ws1",
+      type: "workspace",
+    });
+  });
+
+  test("add refuses someone who cannot read the survey's workspace", async () => {
+    vi.mocked(assertCan).mockResolvedValue(undefined);
+    vi.mocked(can).mockResolvedValue(false);
+    await expect(
+      (addSurveyAccessAction as never as (i: unknown) => Promise<unknown>)({ surveyId, userIds: [userId] })
+    ).rejects.toThrow("workspace");
+    expect(addSurveyAccess).not.toHaveBeenCalled();
+  });
+
   test("state returns the mode, the shares and the shareable members", async () => {
     vi.mocked(assertCan).mockResolvedValue(undefined);
-    vi.mocked(prisma.survey.findUnique).mockResolvedValue({ accessMode: "private" } as never);
+    vi.mocked(prisma.survey.findUnique).mockResolvedValue({
+      visibility: "restricted",
+      workspaceId: "ws1",
+    } as never);
     await expect(
       (getSurveySharingStateAction as never as (i: unknown) => Promise<unknown>)({ surveyId })
     ).resolves.toEqual({

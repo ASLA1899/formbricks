@@ -2,11 +2,12 @@
 
 import { z } from "zod";
 import { prisma } from "@formbricks/database";
-import { ResourceNotFoundError } from "@formbricks/types/errors";
-import { assertCan } from "@/lib/authorization";
+import { InvalidInputError, ResourceNotFoundError } from "@formbricks/types/errors";
+import { assertCan, can } from "@/lib/authorization";
 import { setSurveyAccessMode } from "@/lib/survey/access-mode";
+import { accessModeForVisibility } from "@/lib/survey/visibility/access-mode-map";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
-import { getOrganizationIdFromSurveyId } from "@/lib/utils/helper";
+import { getOrganizationIdFromSurveyId, getWorkspaceIdFromSurveyId } from "@/lib/utils/helper";
 import {
   addSurveyAccess,
   listShareableMembers,
@@ -25,6 +26,19 @@ const authorizeSharing = async (surveyId: string, userId: string): Promise<strin
   return organizationId;
 };
 
+/** A share only works for someone who can still read the survey's workspace. */
+const filterWorkspaceReaders = async <T extends { id: string }>(
+  workspaceId: string,
+  users: T[]
+): Promise<T[]> => {
+  const flags = await Promise.all(
+    users.map((user) =>
+      can({ id: user.id, type: "user" }, "workspace.read", { id: workspaceId, type: "workspace" })
+    )
+  );
+  return users.filter((_, index) => flags[index]);
+};
+
 const ZSurveyId = z.object({ surveyId: z.cuid2() });
 
 export const getSurveySharingStateAction = authenticatedActionClient
@@ -32,7 +46,7 @@ export const getSurveySharingStateAction = authenticatedActionClient
   .action(async ({ ctx, parsedInput }) => {
     const organizationId = await authorizeSharing(parsedInput.surveyId, ctx.user.id);
     const survey = await prisma.survey.findUnique({
-      select: { accessMode: true },
+      select: { visibility: true, workspaceId: true },
       where: { id: parsedInput.surveyId },
     });
     if (!survey) throw new ResourceNotFoundError("Survey", parsedInput.surveyId);
@@ -40,10 +54,16 @@ export const getSurveySharingStateAction = authenticatedActionClient
       listSurveyAccess(parsedInput.surveyId),
       listShareableMembers(organizationId),
     ]);
+    // `visibility` is the authoritative state (it is what authorization enforces and what every other
+    // control writes), so the panel derives its mode from it, not from the mirrored `accessMode` column.
+    const orgMembers = await filterWorkspaceReaders(
+      survey.workspaceId,
+      members.map((member) => member.user)
+    );
     return {
-      accessMode: survey.accessMode,
+      accessMode: accessModeForVisibility(survey.visibility),
       access: access.map((row) => row.user),
-      orgMembers: members.map((member) => member.user),
+      orgMembers,
     };
   });
 
@@ -58,6 +78,14 @@ export const addSurveyAccessAction = authenticatedActionClient
   .inputSchema(z.object({ surveyId: z.cuid2(), userIds: z.array(z.cuid2()).min(1).max(200) }))
   .action(async ({ ctx, parsedInput }) => {
     const organizationId = await authorizeSharing(parsedInput.surveyId, ctx.user.id);
+    const workspaceId = await getWorkspaceIdFromSurveyId(parsedInput.surveyId);
+    const readers = await filterWorkspaceReaders(
+      workspaceId,
+      [...new Set(parsedInput.userIds)].map((id) => ({ id }))
+    );
+    if (readers.length !== new Set(parsedInput.userIds).size) {
+      throw new InvalidInputError("Surveys can only be shared with people who have access to the workspace.");
+    }
     await addSurveyAccess(parsedInput.surveyId, organizationId, parsedInput.userIds);
     return { ok: true };
   });

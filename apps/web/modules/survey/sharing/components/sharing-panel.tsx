@@ -201,6 +201,9 @@ export const SharingPanel = ({ surveyId }: Readonly<SharingPanelProps>) => {
                       {t("common.add")}
                     </Button>
                   </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {t("workspace.surveys.edit.survey_sharing_picker_hint")}
+                  </p>
                 </>
               ) : (
                 <p className="text-sm text-slate-400">{t("common.loading")}</p>

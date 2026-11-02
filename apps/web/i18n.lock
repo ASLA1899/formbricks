@@ -3810,18 +3810,19 @@ checksums:
     workspace/surveys/edit/survey_preview: 33644451073149383d3ace08be930739
     workspace/surveys/edit/survey_sharing_add_a_person: 35ca98db1b3d7ab6e775834e9104c252
     workspace/surveys/edit/survey_sharing_add_failed: eb3666aad706d48b1db01591396bfc1e
-    workspace/surveys/edit/survey_sharing_description: 33f8f0e1d80be8ba98fcc8bbf6fc8931
+    workspace/surveys/edit/survey_sharing_description: eefc2fb68fe3e031893701f19623d046
     workspace/surveys/edit/survey_sharing_load_failed: 71c3a79e5c85dd655344f981324d3ed5
     workspace/surveys/edit/survey_sharing_mode_failed: 1f3c8028158afc9407bc0737d3f25669
-    workspace/surveys/edit/survey_sharing_mode_updated: 6abc542acbd51823ac3550157aad602e
-    workspace/surveys/edit/survey_sharing_nobody_else: b82e1147b3b6879359c79e4cb2b27405
+    workspace/surveys/edit/survey_sharing_mode_updated: a2bd8e197ccbb3b8c6b2551140a6230b
+    workspace/surveys/edit/survey_sharing_nobody_else: 33d3ac1d3851f9b2119047530235425e
     workspace/surveys/edit/survey_sharing_people_with_access: 01179c5a0ad74746d4487f5daa062db0
+    workspace/surveys/edit/survey_sharing_picker_hint: 8c6623680896ac5cf629addd56110a36
     workspace/surveys/edit/survey_sharing_private: d740d0660e68c61db1853489356030ae
-    workspace/surveys/edit/survey_sharing_private_description: 83fb2b07f6c3304e1d24ac0f211b5daf
+    workspace/surveys/edit/survey_sharing_private_description: fb6948e51c078a414f27a098228b62db
     workspace/surveys/edit/survey_sharing_public: c834f11dab0881632aded3f01d4f8fa9
     workspace/surveys/edit/survey_sharing_public_description: 309b54dec13dd54c5e3ce8a296156eba
-    workspace/surveys/edit/survey_sharing_remove_failed: b90d661353c4c5c62309f540a0b5d631
-    workspace/surveys/edit/survey_sharing_remove_person: a583d8f150410806c2eed3ffcbb99ad8
+    workspace/surveys/edit/survey_sharing_remove_failed: e79d8fe02d35e62e77156a24773ca927
+    workspace/surveys/edit/survey_sharing_remove_person: 81297280b097492c608bba2e290a3752
     workspace/surveys/edit/survey_sharing_title: b0799797a387dab52f2eb553884f27c7
     workspace/surveys/edit/survey_styling: 7f96d6563e934e65687b74374a33b1dc
     workspace/surveys/edit/survey_trigger: f0c7014a684ca566698b87074fad5579
