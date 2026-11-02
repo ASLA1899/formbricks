@@ -6,10 +6,11 @@ interface ResumeBlock {
 }
 
 /**
- * Where a respondent picking up a saved, unfinished response lands: the first block with an
- * unanswered element. Branching logic is not replayed, so a skipped block can show briefly; the
- * runtime routes correctly on the next submit. Everything answered goes to the first ending.
- * Returns undefined when there is nothing to jump to, so the caller keeps its normal start.
+ * Where a respondent picking up a saved, unfinished response lands: the block after the last one
+ * with an answer. That keeps branches the respondent skipped, and optional questions they passed
+ * over, behind them. Branching logic is not replayed, so a jump past the next block can still show
+ * it once; the runtime routes correctly on the next submit. Past the last block goes to the first
+ * ending. Returns undefined when nothing is answered, so the caller keeps its normal start.
  */
 export const getResumeBlockId = (
   blocks: ResumeBlock[],
@@ -17,7 +18,9 @@ export const getResumeBlockId = (
   answered: TResponseData
 ): string | undefined => {
   const answeredIds = new Set(Object.keys(answered));
-  const next = blocks.find((block) => block.elements.some((element) => !answeredIds.has(element.id)));
-  if (next) return next.id;
-  return endings[0]?.id;
+  const lastAnswered = blocks.findLastIndex((block) =>
+    block.elements.some((element) => answeredIds.has(element.id))
+  );
+  if (lastAnswered === -1) return undefined;
+  return blocks[lastAnswered + 1]?.id ?? endings[0]?.id;
 };

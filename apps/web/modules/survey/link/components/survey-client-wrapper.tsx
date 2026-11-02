@@ -191,6 +191,7 @@ export const SurveyClientWrapper = ({
     isResumeEligible ? "loading" : "ready"
   );
   const [resumedResponse, setResumedResponse] = useState<TResumedResponse | undefined>(undefined);
+  const [resumedLanguage, setResumedLanguage] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!isResumeEligible) return;
@@ -216,7 +217,13 @@ export const SurveyClientWrapper = ({
               data: body.data.data ?? {},
               ttc: body.data.ttc ?? {},
               variables: body.data.variables ?? {},
+              language: body.data.language ?? null,
             });
+            // Keep the language the respondent was answering in; "default" means the survey default.
+            if (body.data.language && body.data.language !== "default") {
+              setCurrentLanguageCode(body.data.language);
+              setResumedLanguage(body.data.language);
+            }
           } else {
             clearStoredResumeId(survey.id);
           }
@@ -343,7 +350,7 @@ export const SurveyClientWrapper = ({
           survey={jsSurvey}
           styling={styling}
           customCss={customCss}
-          languageCode={languageCode}
+          languageCode={resumedLanguage ?? languageCode}
           onLanguageChange={setCurrentLanguageCode}
           onPageChange={handlePageChange}
           isBrandingEnabled={workspace.linkSurveyBranding}

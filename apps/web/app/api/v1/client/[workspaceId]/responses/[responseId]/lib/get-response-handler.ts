@@ -10,6 +10,9 @@ import { VERIFIED_EMAIL_RESPONSE_KEY } from "@/modules/survey/link/lib/verify-em
 
 export const PIN_TOKEN_HEADER = "x-pin-auth-token";
 
+/** Server-side resume window. Matches the browser's retention so an old id stops working for good. */
+export const RESUME_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 type TGetRouteParams = { params: Promise<{ workspaceId: string; responseId: string }> };
 
 /**
@@ -42,6 +45,8 @@ export const getResponseHandler = async ({
     if (!response || response.surveyId !== surveyId || response.finished) return notFound;
     // Contact and single-use responses are tracked server-side; the client never resumes them.
     if (response.contact?.id || response.singleUseId) return notFound;
+    // The window runs from the last write, so an answer saved today keeps the response resumable.
+    if (Date.now() - new Date(response.updatedAt).getTime() > RESUME_MAX_AGE_MS) return notFound;
 
     const survey = await getSurvey(surveyId);
     if (!survey || survey.workspaceId !== resolved.workspaceId || survey.status !== "inProgress") {
@@ -49,6 +54,8 @@ export const getResponseHandler = async ({
     }
     // Email-verified surveys resume only through their own gate, so a stored id cannot skip it.
     if (survey.type !== "link" || survey.isVerifyEmailEnabled) return notFound;
+    // Single-use may have been switched on after this anonymous response was created.
+    if (survey.singleUse?.enabled) return notFound;
     if (survey.pin && !verifyLinkSurveyPinToken(req.headers.get(PIN_TOKEN_HEADER), survey.id)) {
       return notFound;
     }

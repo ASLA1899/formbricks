@@ -47,6 +47,7 @@ export interface TResumedResponse {
   data: TResponseData;
   ttc: TResponseTtc;
   variables: TResponseVariables;
+  language?: string | null;
 }
 
 export interface SurveyBaseProps {

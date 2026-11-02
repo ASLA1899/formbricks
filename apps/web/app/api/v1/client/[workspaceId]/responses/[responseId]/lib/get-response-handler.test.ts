@@ -31,6 +31,7 @@ const partial = {
   ttc: { q1: 3 },
   variables: {},
   language: "en",
+  updatedAt: new Date(),
 };
 
 describe("getResponseHandler", () => {
@@ -57,6 +58,22 @@ describe("getResponseHandler", () => {
     ["finished response", () => mocks.getResponse.mockResolvedValue({ ...partial, finished: true })],
     ["missing response", () => mocks.getResponse.mockResolvedValue(null)],
     ["surveyId mismatch", () => mocks.getResponse.mockResolvedValue({ ...partial, surveyId: "other" })],
+    [
+      "stale response",
+      () =>
+        mocks.getResponse.mockResolvedValue({ ...partial, updatedAt: new Date(Date.now() - 8 * 86400000) }),
+    ],
+    [
+      "single-use enabled later",
+      () =>
+        mocks.getSurvey.mockResolvedValue({
+          id: "s1",
+          workspaceId: "w1",
+          status: "inProgress",
+          type: "link",
+          singleUse: { enabled: true },
+        }),
+    ],
     ["contact response", () => mocks.getResponse.mockResolvedValue({ ...partial, contact: { id: "c1" } })],
     ["single-use response", () => mocks.getResponse.mockResolvedValue({ ...partial, singleUseId: "su" })],
     [
