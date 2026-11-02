@@ -46,6 +46,10 @@ const translations: Record<TranslationKey, TranslationValue> = {
   "emails.invite_accepted_email_subject": "You've got a new organization member!",
   "emails.invite_accepted_email_text":
     "Just letting you know that {inviteeName} accepted your invitation. Have fun collaborating!",
+  "emails.invitation_button_label": "Take the survey",
+  "emails.invitation_eyebrow": "You’re invited",
+  "emails.invitation_fallback_link": "If the button doesn’t work, paste this link into your browser:",
+  "emails.invitation_heading": "We’d value your input.",
   "emails.invite_email_button_label": "Join organization",
   "emails.invite_email_heading": "Hey {inviteeName}",
   "emails.invite_email_text":
