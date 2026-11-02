@@ -117,6 +117,7 @@
     "csv-parse": "7.0.2",
     "date-fns": "catalog:",
     "disposable-email-domains": "1.0.62",
+    "docx": "9.6.1",
     "dompurify": "3.4.16",
     "framer-motion": "12.35.2",
     "googleapis": "171.4.0",
