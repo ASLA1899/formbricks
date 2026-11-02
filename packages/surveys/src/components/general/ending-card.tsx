@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { isSafeLinkUrl } from "@formbricks/survey-ui";
 import { type TJsWorkspaceStateSurvey } from "@formbricks/types/js";
 import { type TResponseData, type TResponseVariables } from "@formbricks/types/responses";
+import type { TCardSize } from "@formbricks/types/styling";
 import { type TSurveyEndScreenCard, type TSurveyRedirectUrlCard } from "@formbricks/types/surveys/types";
 import { SubmitButton } from "@/components/buttons/submit-button";
 import { ElementMedia } from "@/components/general/element-media";
@@ -33,6 +34,7 @@ interface EndingCardProps {
   onOpenExternalURL?: (url: string) => void | Promise<void>;
   isPreviewMode: boolean;
   fullSizeCards: boolean;
+  cardSize?: TCardSize;
   isCardless?: boolean;
   isOfflineWithPending?: boolean;
 }
@@ -50,6 +52,7 @@ export function EndingCard({
   onOpenExternalURL,
   isPreviewMode,
   fullSizeCards,
+  cardSize,
   isCardless = false,
   isOfflineWithPending = false,
 }: Readonly<EndingCardProps>) {
@@ -162,7 +165,7 @@ export function EndingCard({
   ]);
 
   return (
-    <ScrollableContainer fullSizeCards={fullSizeCards} disableInternalScroll={isCardless}>
+    <ScrollableContainer fullSizeCards={fullSizeCards} cardSize={cardSize} disableInternalScroll={isCardless}>
       <div ref={containerRef} tabIndex={-1} className="text-center outline-none">
         {isResponseSendingFinished ? (
           <>

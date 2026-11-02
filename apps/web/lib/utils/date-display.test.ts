@@ -30,6 +30,11 @@ describe("date display utils", () => {
     expect(parsedDate?.getDate()).toBe(6);
   });
 
+  test("formats month & year only values without a day", () => {
+    expect(formatStoredDateForDisplay("2025-05", "y-M-d", "en-US")).toBe("May 2025");
+    expect(formatStoredDateForDisplay("2025-05", undefined, "de-DE")).toBe("Mai 2025");
+  });
+
   test("formats stored dates using the selected locale", () => {
     const date = new Date(2025, 4, 6);
 

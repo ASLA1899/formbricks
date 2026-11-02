@@ -16,6 +16,8 @@ import {
 describe("utils", () => {
   const mockT = vi.fn((key: string) => {
     const translations: Record<string, string> = {
+      "common.name": "Name",
+      "common.organization": "Organization",
       "workspace.surveys.responses.address_line_1": "Address Line 1",
       "workspace.surveys.responses.address_line_2": "Address Line 2",
       "workspace.surveys.responses.city": "City",
@@ -52,6 +54,11 @@ describe("utils", () => {
   }) as unknown as TFunction;
 
   describe("getAddressFieldLabel", () => {
+    test("returns correct label for name and organization", () => {
+      expect(getAddressFieldLabel("name", mockT)).toBe("Name");
+      expect(getAddressFieldLabel("organization", mockT)).toBe("Organization");
+    });
+
     test("returns correct label for addressLine1", () => {
       const result = getAddressFieldLabel("addressLine1", mockT);
       expect(result).toBe("Address Line 1");

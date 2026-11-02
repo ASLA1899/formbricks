@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next";
 import type { TResponseData, TResponseDataValue } from "@formbricks/types/responses";
+import { ADDRESS_FIELDS } from "@formbricks/types/surveys/address-fields";
 import type { TSurveyElement } from "@formbricks/types/surveys/elements";
 import { TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import type {
@@ -409,18 +410,22 @@ const getFieldValue = (
   }
 
   if (element.type === TSurveyElementTypeEnum.Address && Array.isArray(elementValue)) {
-    const addressFieldOrder: TAddressField[] = [
-      "addressLine1",
-      "addressLine2",
-      "city",
-      "state",
-      "zip",
-      "country",
-    ];
-    const fieldIndex = addressFieldOrder.indexOf(rule.field as TAddressField);
+    // Storage order: name/organization sit at the end so older 6-element responses keep their meaning.
+    const addressFieldOrder: readonly string[] = ADDRESS_FIELDS;
+    const fieldIndex = addressFieldOrder.indexOf(rule.field);
     if (fieldIndex >= 0 && fieldIndex < elementValue.length) {
       return elementValue[fieldIndex] ?? "";
     }
+  }
+
+  if (
+    element.type === TSurveyElementTypeEnum.ContactInfo &&
+    elementValue &&
+    typeof elementValue === "object" &&
+    !Array.isArray(elementValue)
+  ) {
+    const fieldValue = (elementValue as Record<string, string>)[rule.field];
+    return fieldValue ?? "";
   }
 
   if (element.type === TSurveyElementTypeEnum.ContactInfo && Array.isArray(elementValue)) {

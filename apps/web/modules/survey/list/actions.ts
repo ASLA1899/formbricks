@@ -1,8 +1,9 @@
 "use server";
 
 import { z } from "zod";
-import { OperationNotAllowedError } from "@formbricks/types/errors";
+import { OperationNotAllowedError, ResourceNotFoundError } from "@formbricks/types/errors";
 import { assertCan } from "@/lib/authorization";
+import { getSurvey } from "@/lib/survey/service";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
 import { getOrganizationIdFromWorkspaceId, getWorkspaceIdFromSurveyId } from "@/lib/utils/helper";
 import {
@@ -64,6 +65,30 @@ export const copySurveyToOtherWorkspaceAction = authenticatedActionClient
       return result;
     })
   );
+
+const ZGetSurveyForExportAction = z.object({
+  surveyId: z.cuid2(),
+});
+
+/**
+ * Returns the full survey definition (blocks, logic, endings) for the PDF, DOCX and HTML export. The list
+ * rows are a lightweight shape without it. Needs the same right as reading the survey itself, so a
+ * restricted survey stays hidden from people who cannot open it. Responses are not part of the result.
+ */
+export const getSurveyForExportAction = authenticatedActionClient
+  .inputSchema(ZGetSurveyForExportAction)
+  .action(async ({ ctx, parsedInput }) => {
+    await assertCan({ type: "user", id: ctx.user.id }, "survey.read", {
+      type: "survey",
+      id: parsedInput.surveyId,
+    });
+
+    const survey = await getSurvey(parsedInput.surveyId);
+    if (!survey) {
+      throw new ResourceNotFoundError("survey", parsedInput.surveyId);
+    }
+    return survey;
+  });
 
 const ZGenerateSingleUseIdAction = z
   .object({

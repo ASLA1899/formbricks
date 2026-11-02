@@ -334,6 +334,70 @@ export const ZSurveyMetadata = z
 
 export type TSurveyMetadata = z.infer<typeof ZSurveyMetadata>;
 
+// ----- Survey invitation & reminder configuration (ASLA fork) -----
+
+export const ZInvitationAudience = z.discriminatedUnion("source", [
+  z.object({
+    source: z.literal("segment"),
+    segmentId: z.cuid2(),
+  }),
+  z.object({
+    source: z.literal("snowflake"),
+    queryId: z.string(),
+    emailColumn: z.string(),
+    nameColumn: z.string().optional(),
+  }),
+  // Ad-hoc list of recipients typed/pasted into the editor. Unlike segments,
+  // this doesn't require the Formbricks EE Contacts license. Unlike Snowflake,
+  // it works without any data-warehouse integration. First/last name are
+  // optional per recipient — available as merge fields in email templates.
+  z.object({
+    source: z.literal("manualList"),
+    recipients: z
+      .array(
+        z.object({
+          email: z.email(),
+          firstName: z.string().optional(),
+          lastName: z.string().optional(),
+        })
+      )
+      .min(1),
+  }),
+]);
+
+export type TInvitationAudience = z.infer<typeof ZInvitationAudience>;
+
+export const ZReminderSchedule = z.object({
+  enabled: z.boolean(),
+  daysAfterInvite: z.array(z.number().int().min(0).max(365)),
+  maxReminders: z.number().int().min(0).max(20),
+});
+
+export type TReminderSchedule = z.infer<typeof ZReminderSchedule>;
+
+export const ZInvitationEmailTemplate = z.object({
+  subject: z.string().min(1).max(500),
+  body: z.string(),
+  buttonLabel: z.string().max(100).optional(),
+  headingText: z.string().max(200).optional(),
+});
+
+export const ZInvitationEmailTemplates = z.object({
+  invitation: ZInvitationEmailTemplate,
+  reminder: ZInvitationEmailTemplate,
+});
+
+export type TInvitationEmailTemplates = z.infer<typeof ZInvitationEmailTemplates>;
+
+export const ZSurveyInvitationConfig = z.object({
+  audience: ZInvitationAudience,
+  reminderSchedule: ZReminderSchedule,
+  emailTemplates: ZInvitationEmailTemplates,
+  fromName: z.string().max(100).optional(),
+});
+
+export type TSurveyInvitationConfig = z.infer<typeof ZSurveyInvitationConfig>;
+
 export const ZSurveyQuestionChoice = z.object({
   id: z.string(),
   label: ZI18nString,
@@ -619,6 +683,7 @@ export const ZSurveyDateQuestion = ZSurveyQuestionBase.extend({
   type: z.literal(TSurveyQuestionTypeEnum.Date),
   html: ZI18nString.optional(),
   format: z.enum(["M-d-y", "d-M-y", "y-M-d"]),
+  dateKind: z.enum(["full", "monthYear"]).optional().default("full"),
 });
 
 /**
@@ -713,6 +778,8 @@ export type TInputFieldConfig = z.infer<typeof ZToggleInputConfig>;
  */
 export const ZSurveyAddressQuestion = ZSurveyQuestionBase.extend({
   type: z.literal(TSurveyQuestionTypeEnum.Address),
+  name: ZToggleInputConfig.optional(),
+  organization: ZToggleInputConfig.optional(),
   addressLine1: ZToggleInputConfig,
   addressLine2: ZToggleInputConfig,
   city: ZToggleInputConfig,
@@ -1447,8 +1514,10 @@ export const surveyRefinement = (rawSurvey: z.infer<typeof ZSurveyBase>, ctx: z.
       }
 
       if (question.type === TSurveyQuestionTypeEnum.Address) {
-        const { addressLine1, addressLine2, city, state, zip, country } = question;
+        const { name, organization, addressLine1, addressLine2, city, state, zip, country } = question;
         const fields = [
+          ...(name ? [{ ...name, label: "Name" }] : []),
+          ...(organization ? [{ ...organization, label: "Organization" }] : []),
           { ...addressLine1, label: "Address Line 1" },
           { ...addressLine2, label: "Address Line 2" },
           { ...city, label: "City" },
@@ -1836,7 +1905,9 @@ export const surveyRefinement = (rawSurvey: z.infer<typeof ZSurveyBase>, ctx: z.
             { ...phone, label: "Phone" },
           ];
 
-          if (fields.every((field) => !field.show)) {
+          const customFieldsVisible = element.customFields.some((cf) => cf.show);
+
+          if (fields.every((field) => !field.show) && !customFieldsVisible) {
             ctx.addIssue({
               code: "custom",
               message: `At least one field must be shown in the Contact Info question ${String(elementIndex + 1)} in block ${String(blockIndex + 1)}`,
@@ -1867,11 +1938,32 @@ export const surveyRefinement = (rawSurvey: z.infer<typeof ZSurveyBase>, ctx: z.
               });
             }
           });
+
+          // Validate custom field placeholders (placeholder is optional, so skip if empty)
+          element.customFields.forEach((cf, customFieldIndex) => {
+            if (cf.show && cf.placeholder.default.trim()) {
+              const multiLangIssue = validateElementLabels(
+                `Label for custom field ${cf.label}`,
+                cf.placeholder,
+                languages,
+                blockIndex,
+                elementIndex
+              );
+              if (multiLangIssue) {
+                ctx.addIssue({
+                  ...multiLangIssue,
+                  path: ["blocks", blockIndex, "elements", elementIndex, "customFields", customFieldIndex],
+                });
+              }
+            }
+          });
         }
 
         if (element.type === TSurveyElementTypeEnum.Address) {
-          const { addressLine1, addressLine2, city, state, zip, country } = element;
+          const { name, organization, addressLine1, addressLine2, city, state, zip, country } = element;
           const fields = [
+            ...(name ? [{ ...name, label: "Name" }] : []),
+            ...(organization ? [{ ...organization, label: "Organization" }] : []),
             { ...addressLine1, label: "Address Line 1" },
             { ...addressLine2, label: "Address Line 2" },
             { ...city, label: "City" },

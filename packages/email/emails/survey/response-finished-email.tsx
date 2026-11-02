@@ -1,5 +1,5 @@
 import { FileDigitIcon, FileType2Icon } from "lucide-react";
-import { Column, Container, Heading, Hr, Link, Row, Section, Text } from "react-email";
+import { Column, Heading, Hr, Link, Row, Section, Text } from "react-email";
 import { labelEmbeddedFields } from "@formbricks/types/embedded-data-label";
 import {
   getComputedEmbeddedFields,
@@ -64,7 +64,7 @@ export function ResponseFinishedEmail({
 }: ResponseFinishedEmailProps): React.JSX.Element {
   return (
     <EmailTemplate logoUrl={logoUrl} t={t} {...legalProps}>
-      <Container>
+      <>
         <Row>
           <Column>
             <Heading> {t("emails.survey_response_finished_email_hey")}</Heading>
@@ -167,7 +167,7 @@ export function ResponseFinishedEmail({
             </Section>
           </Column>
         </Row>
-      </Container>
+      </>
     </EmailTemplate>
   );
 }

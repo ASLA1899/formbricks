@@ -1,6 +1,12 @@
 import type { TRendererCustomCss } from "./custom-css";
 import type { TJsFileUploadParams, TJsWorkspaceStateSurvey } from "./js";
-import type { TResponseData, TResponseHiddenFieldValue, TResponseUpdate } from "./responses";
+import type {
+  TResponseData,
+  TResponseHiddenFieldValue,
+  TResponseTtc,
+  TResponseUpdate,
+  TResponseVariables,
+} from "./responses";
 import type { TUploadFileConfig } from "./storage";
 import type { TSurveyStyling } from "./surveys/types";
 import type { TWorkspaceStyling } from "./workspace";
@@ -33,6 +39,23 @@ export interface TSurveyCardRect {
   y: number;
   width: number;
   height: number;
+}
+
+/** An unfinished response a link-survey respondent is picking up again (ASLA localStorage resume). */
+export interface TResumedResponse {
+  id: string;
+  data: TResponseData;
+  ttc: TResponseTtc;
+  variables: TResponseVariables;
+  language?: string | null;
+  /** Block the respondent was on when they left, kept in their browser. Optional. */
+  blockId?: string | null;
+  /** Blocks the respondent came through to reach `blockId`, oldest first. Lets Back work after a resume. */
+  history?: string[];
+  /** Variable values before each submit in `history` (same order). Lets Back undo calculations after a resume. */
+  variableStack?: { questionId?: string; variables: TResponseVariables }[];
+  /** Questions earlier blocks made required, keyed by the block's first question id. Restores required rules and their Back undo. */
+  requiredByMap?: Record<string, string[]>;
 }
 
 export interface SurveyBaseProps {
@@ -135,6 +158,15 @@ export interface SurveyContainerProps extends Omit<SurveyBaseProps, "onFileUploa
   recaptchaSiteKey?: string;
   getRecaptchaToken?: () => Promise<string | null>;
   offlineSupport?: boolean;
+  resumedResponse?: TResumedResponse;
+  onResponseIdReceived?: (responseId: string) => void;
+  onResumeBlockChange?: (
+    blockId: string,
+    history: string[],
+    variableStack: { questionId?: string; variables: TResponseVariables }[],
+    variables: TResponseVariables,
+    requiredByMap: Record<string, string[]>
+  ) => void;
   onOfflineStatusChange?: (status: {
     isOnline: boolean;
     isSyncing: boolean;

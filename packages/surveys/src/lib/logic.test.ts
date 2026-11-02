@@ -84,6 +84,7 @@ describe("Survey Logic", () => {
             subheader: { default: "Select a date" },
             required: true,
             format: "d-M-y",
+            dateKind: "full",
           },
           {
             id: "q6",
@@ -1317,6 +1318,7 @@ describe("Survey Logic", () => {
                 headline: { default: "Date Question 1" },
                 required: true,
                 format: "d-M-y",
+                dateKind: "full",
               },
               {
                 id: "dateQ2",
@@ -1324,6 +1326,7 @@ describe("Survey Logic", () => {
                 headline: { default: "Date Question 2" },
                 required: true,
                 format: "d-M-y",
+                dateKind: "full",
               },
             ],
           },

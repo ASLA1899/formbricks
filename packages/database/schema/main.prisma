@@ -140,6 +140,7 @@ model Contact {
   responses   Response[]
   attributes  ContactAttribute[]
   displays    Display[]
+  invitations SurveyInvitation[]
 
   @@index([workspaceId])
 }
@@ -191,6 +192,7 @@ model Response {
   display           Display?                 @relation(fields: [displayId], references: [id])
   workflowRuns      WorkflowRun[]
   followUpFileLinks SurveyFollowUpFileLink[]
+  invitation        SurveyInvitation?
 
   @@unique([surveyId, singleUseId])
   // `id` is the keyset tie-breaker for `GET /api/v3/responses`. It has to be in the index for the
@@ -477,6 +479,10 @@ model Survey {
   /// [SurveyLinkMetadata]
   metadata                    Json                              @default("{}")
   feedbackSourceMappings      FeedbackSourceFormbricksMapping[]
+  invitations                 SurveyInvitation[]
+  /// [SurveyInvitationConfig] Per-survey invitation and reminder settings (ASLA fork). Written only by the
+  /// invitation send and remind actions, never by the survey editor save.
+  invitationConfig            Json?
 
   slug String? @unique
 
@@ -585,6 +591,38 @@ model SurveyFollowUpFileLink {
 
   @@index([followUpId, createdAt])
   @@index([responseId])
+}
+
+/// Tracks a single recipient invited to take a survey, plus response and reminder state (ASLA fork).
+/// An invitation is created with sentAt=null when the audience is resolved; sentAt is claimed before the
+/// email goes out. respondedAt and responseId are set when the recipient finishes the survey. Reminders
+/// advance sentOffsetDays (the offset is claimed before the email goes out). linkToken is an opaque token
+/// for /c/<token>.
+model SurveyInvitation {
+  id                 String    @id @default(cuid())
+  createdAt          DateTime  @default(now()) @map(name: "created_at")
+  updatedAt          DateTime  @updatedAt @map(name: "updated_at")
+  survey             Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  surveyId           String
+  contact            Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  contactId          String?
+  recipientEmail     String
+  recipientName      String?
+  recipientFirstName String?
+  recipientLastName  String?
+  linkToken          String    @unique
+  sentAt             DateTime?
+  respondedAt        DateTime?
+  responseId         String?   @unique
+  response           Response? @relation(fields: [responseId], references: [id], onDelete: SetNull)
+  lastReminderAt     DateTime?
+  reminderCount      Int       @default(0)
+  // Which scheduled-reminder offsets have already been claimed for this invitation
+  sentOffsetDays     Int[]     @default([])
+
+  @@unique([surveyId, recipientEmail])
+  @@index([surveyId, respondedAt])
+  @@index([surveyId, contactId])
 }
 
 enum ActionType {
@@ -719,6 +757,7 @@ model Workspace {
   /// [Logo]
   logo                        Json?
   workspaceTeams              WorkspaceTeam[]
+  optionLists                 OptionList[]
   appSetupCompleted           Boolean                      @default(false)
   customHeadScripts           String? // Custom HTML scripts for link surveys (self-hosted only)
   /// [CustomCssStored] Workspace custom CSS (ENG-2949), written only by the shared save service.
@@ -1387,6 +1426,25 @@ model Language {
   surveyLanguages SurveyLanguage[]
 
   @@unique([workspaceId, code])
+}
+
+/// ASLA fork (ASL-1866, Formbricks upgrade 1.2-01). Saved lists of choice options, reused across
+/// multiple-choice questions in a workspace (for example chapters, states, countries).
+///
+/// @property name - Display name, unique within the workspace
+/// @property options - The option labels, in order
+/// @property workspace - The owning workspace
+model OptionList {
+  id          String    @id @default(cuid())
+  createdAt   DateTime  @default(now()) @map(name: "created_at")
+  updatedAt   DateTime  @updatedAt @map(name: "updated_at")
+  name        String
+  options     String[]
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
 }
 
 /// Links surveys to their supported languages.

@@ -14,6 +14,7 @@ import {
   TResponseTtc,
   ZResponseFilterCriteria,
 } from "@formbricks/types/responses";
+import { normalizeContactInfoResponse } from "@formbricks/types/surveys/contact-info-response";
 import { TSurveyElement, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import {
   TSurvey,
@@ -795,7 +796,10 @@ export const getElementSummary = async (
         break;
       }
       case TSurveyElementTypeEnum.Matrix: {
-        const rows = element.rows.map((row) => getLocalizedValue(row.label, "default"));
+        // Filter out "other" row from regular rows
+        const regularMatrixRows = element.rows.filter((row) => row.id !== "other");
+        const hasOtherRow = element.rows.some((row) => row.id === "other");
+        const rows = regularMatrixRows.map((row) => getLocalizedValue(row.label, "default"));
         const columns = element.columns.map((column) => getLocalizedValue(column.label, "default"));
         let totalResponseCount = 0;
 
@@ -814,12 +818,21 @@ export const getElementSummary = async (
           {} as Record<string, Record<string, number>>
         );
 
+        // Initialize "Other" row count map
+        const otherCountMap: Record<string, number> = columns.reduce(
+          (acc: Record<string, number>, col) => {
+            acc[col] = 0;
+            return acc;
+          },
+          {} as Record<string, number>
+        );
+
         responses.forEach((response) => {
           const selectedResponses = response.data[element.id] as Record<string, string>;
           const responseLanguageCode = getLanguageCode(survey.languages, response.language);
           if (selectedResponses) {
             totalResponseCount++;
-            element.rows.forEach((row) => {
+            regularMatrixRows.forEach((row) => {
               const localizedRow = getLocalizedValue(row.label, responseLanguageCode);
               const colValue = element.columns.find((column) => {
                 return (
@@ -831,6 +844,25 @@ export const getElementSummary = async (
                 countMap[getLocalizedValue(row.label, "default")][colValueInDefaultLanguage] += 1;
               }
             });
+
+            // Collect "other" responses: any key that is not a regular row label in the language the
+            // respondent saw (a label from another language is Other text, as the renderer treats it)
+            if (hasOtherRow) {
+              const knownRowLabels = new Set(
+                regularMatrixRows.map((row) => getLocalizedValue(row.label, responseLanguageCode))
+              );
+              Object.entries(selectedResponses).forEach(([rowLabel, colLabel]) => {
+                if (!knownRowLabels.has(rowLabel) && colLabel) {
+                  const colValue = element.columns.find((column) => {
+                    return getLocalizedValue(column.label, responseLanguageCode) === colLabel;
+                  });
+                  const colDefault = getLocalizedValue(colValue?.label, "default");
+                  if (colDefault && columns.includes(colDefault)) {
+                    otherCountMap[colDefault] += 1;
+                  }
+                }
+              });
+            }
           }
         });
 
@@ -852,6 +884,32 @@ export const getElementSummary = async (
 
           return { rowLabel: row, columnPercentages, totalResponsesForRow };
         });
+
+        // Append "Other" row summary if present
+        if (hasOtherRow) {
+          let totalOtherResponses = 0;
+          columns.forEach((col) => {
+            totalOtherResponses += otherCountMap[col];
+          });
+
+          if (totalOtherResponses > 0) {
+            const otherColumnPercentages = columns.map((col) => {
+              const count = otherCountMap[col];
+              const percentage =
+                totalOtherResponses > 0 ? ((count / totalOtherResponses) * 100).toFixed(2) : "0.00";
+              return {
+                column: col,
+                percentage: Number(percentage),
+              };
+            });
+
+            matrixSummary.push({
+              rowLabel: getLocalizedValue(element.rows.find((r) => r.id === "other")?.label, "default"),
+              columnPercentages: otherColumnPercentages,
+              totalResponsesForRow: totalOtherResponses,
+            });
+          }
+        }
 
         summary.push({
           type: element.type,
@@ -890,11 +948,16 @@ export const getElementSummary = async (
         let values: TSurveyElementSummaryContactInfo["samples"] = [];
         responses.forEach((response) => {
           const answer = response.data[element.id];
-          if (Array.isArray(answer) && answer.length > 0) {
+          // Legacy responses are positional arrays; new responses are objects keyed by field ID
+          // (built-in and custom fields). Keep the legacy array shape as is.
+          const sampleValue = Array.isArray(answer)
+            ? answer
+            : Object.values(normalizeContactInfoResponse(answer) ?? {}).filter((v) => Boolean(v));
+          if (sampleValue.length > 0) {
             values.push({
               id: response.id,
               updatedAt: response.updatedAt,
-              value: answer,
+              value: sampleValue,
               contact: response.contact,
               contactAttributes: response.contactAttributes,
             });

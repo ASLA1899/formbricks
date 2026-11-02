@@ -14,6 +14,7 @@ import {
   renderEmbedSurveyPreviewEmail,
   renderFollowUpEmail,
   renderForgotPasswordEmail,
+  renderInvitationEmail,
   renderInviteAcceptedEmail,
   renderInviteEmail,
   renderLinkSurveyEmail,
@@ -36,6 +37,12 @@ const responseFinishedElements = [
     type: TSurveyElementTypeEnum.OpenText,
   },
 ];
+
+const invitationProps = {
+  subject: "Please take our survey",
+  body: "Hi Jane,\n\nThank you!",
+  surveyLink: "https://surveys.example.org/c/abc",
+};
 
 // Render every email with the legal props supplied. The imprint/privacy footer is a
 // conditional branch of the shared chrome, so leaving them out would hide anything that
@@ -102,6 +109,7 @@ const renderers: [string, () => Promise<string>][] = [
       renderEmailCustomizationPreviewEmail({ ...exampleData.emailCustomizationPreviewEmail, ...legal, t }),
   ],
   ["renderFollowUpEmail", () => renderFollowUpEmail({ ...exampleData.followUpEmail, ...legal, t })],
+  ["renderInvitationEmail", () => renderInvitationEmail({ ...invitationProps, ...legal, t })],
 ];
 
 describe.each(renderers)("%s", (_name, renderEmail) => {
@@ -121,12 +129,20 @@ describe.each(renderers)("%s", (_name, renderEmail) => {
   test("inlines Tailwind utilities as styles rather than shipping class names", async () => {
     const html = await renderEmail();
 
-    // Mail clients ignore stylesheets, so `<Tailwind>` has to inline the utilities.
-    // Assert the shape, not the design tokens: `justify-center` on the shared body has
-    // no react-email default equivalent, so seeing it inline proves the Tailwind pass
-    // ran, and re-tuning the chrome's spacing or sizing cannot churn this test.
-    expect(html).toContain("justify-content:center");
+    // Mail clients ignore stylesheets, so `<Tailwind>` has to inline the utilities. The shared
+    // body and content section use `m-0`, `h-full` and `text-start`; none may survive as class
+    // names, and the compiled `text-align:start` proves the Tailwind pass ran.
+    expect(html).not.toMatch(/class="[^"]*\b(?:m-0|h-full|text-start)\b/);
+    expect(html).toContain("text-align:start");
     expect(html).not.toMatch(/class="[^"]*\bmax-w-[a-z0-9]/);
+  });
+
+  test("keeps body copy on the masthead/footer gutter (no inner 37.5em Container cap)", async () => {
+    // The embed preview deliberately renders a survey snippet whose elements use their own Container.
+    if (_name === "renderEmbedSurveyPreviewEmail") return;
+    const html = await renderEmail();
+
+    expect(html).not.toContain("max-width:37.5em");
   });
 });
 
@@ -241,58 +257,64 @@ describe("custom branding", () => {
   });
 });
 
-describe("logo centering (ENG-2438)", () => {
-  // Outlook's Word rendering engine implements neither `margin: auto` nor `rem` units, so the
-  // logo's own `mx-auto` / `w-60` classes buy it nothing there: it lands left-aligned at its
-  // natural size. Centering has to come from the wrapping cell's `align` attribute, and the
-  // width from the image's `width` attribute, both of which Word does honor. These assert the
-  // rendered markup rather than the classes, because the classes were already "correct".
-  const logoCell = (html: string, testId: string): string => {
-    const cell = new RegExp(
-      `<td\\b[^>]*>(?:\\s*<a\\b[^>]*>)?\\s*<img\\b[^>]*data-testid="${testId}"[^>]*>`,
-      "u"
-    ).exec(html);
-    if (!cell) throw new Error(`no <td> directly wrapping [data-testid="${testId}"]`);
-    return cell[0];
+describe("logo masthead", () => {
+  // Outlook's Word rendering engine ignores CSS sizing on images, so the masthead logo carries a
+  // pixel `width` attribute. The ASLA wordmark also keeps a `height`; custom logos get width only,
+  // because a fixed height stretches them in Outlook.
+  const logoTag = (html: string, testId: string): string => {
+    const tag = new RegExp(`<img\\b[^>]*data-testid="${testId}"[^>]*>`, "u").exec(html);
+    if (!tag) throw new Error(`no <img> with data-testid="${testId}"`);
+    return tag[0];
   };
 
-  test("the default logo sits in a center-aligned cell and carries a pixel width", async () => {
+  test("the default ASLA wordmark carries pixel width and height on a teal masthead", async () => {
     const html = await renderEmailCustomizationPreviewEmail({
       ...exampleData.emailCustomizationPreviewEmail,
       logoUrl: undefined,
       ...legal,
       t,
     });
-    const cell = logoCell(html, "default-logo-image");
+    const tag = logoTag(html, "default-logo-image");
 
-    expect(cell).toContain('align="center"');
-    expect(cell).toContain('width="240"');
-    // The attribute mirrors `w-60`; if the class moves and the constant does not, Outlook
-    // silently goes back to rendering the logo at its natural size.
-    expect(cell).toContain("width:15rem");
-    // The modern-client centering path must survive alongside it.
-    expect(cell).toContain("margin-left:auto");
+    expect(tag).toContain('width="220"');
+    expect(tag).toContain('height="56"');
+    expect(html).toContain("background-color:#003A49");
   });
 
-  test("a custom logo sits in a center-aligned cell and carries a pixel width", async () => {
+  test("an empty logoUrl falls back to the ASLA wordmark instead of rendering an empty src", async () => {
+    const html = await renderEmailCustomizationPreviewEmail({
+      ...exampleData.emailCustomizationPreviewEmail,
+      logoUrl: "",
+      ...legal,
+      t,
+    });
+    const tag = logoTag(html, "default-logo-image");
+
+    expect(tag).toContain("asla-logo-email.png");
+    expect(tag).not.toContain('src=""');
+  });
+
+  test("a custom logo carries a pixel width only and sits on a white band", async () => {
     const html = await renderEmailCustomizationPreviewEmail({
       ...exampleData.emailCustomizationPreviewEmail,
       logoUrl: "https://example.com/custom-logo.png",
       ...legal,
       t,
     });
-    const cell = logoCell(html, "logo-image");
+    const tag = logoTag(html, "logo-image");
 
-    expect(cell).toContain('align="center"');
-    expect(cell).toContain('width="320"');
-    expect(cell).toContain("width:20rem"); // mirrors `w-80`, see above
-    expect(cell).toContain("margin-left:auto");
+    expect(tag).toContain('width="180"');
+    expect(tag).not.toContain('height="');
+    expect(tag).toContain("width:auto");
+    expect(tag).toContain("max-width:180px");
+    expect(tag).toContain("max-height:80px");
+    expect(html).toContain("background-color:#FFFFFF");
   });
 
-  test("the centered logo cell is part of the shared chrome, not one email", async () => {
+  test("the masthead is part of the shared chrome, not one email", async () => {
     const html = await renderInviteEmail({ ...exampleData.inviteEmail, ...legal, t });
 
-    expect(logoCell(html, "default-logo-image")).toContain('align="center"');
+    expect(logoTag(html, "default-logo-image")).toContain('width="220"');
   });
 });
 
@@ -393,5 +415,38 @@ describe("Tailwind render engine", () => {
 
     expect(html).toContain("text-shadow:");
     expect(html).toContain("box-shadow:inset");
+  });
+});
+
+describe("renderInvitationEmail", () => {
+  test("shows the body, the link button and a plain-text fallback link", async () => {
+    const html = await renderInvitationEmail({ ...invitationProps, t });
+
+    expect(html).toContain("Hi Jane,");
+    expect(html).toContain("Take the survey");
+    expect(html.match(/https:\/\/surveys\.example\.org\/c\/abc/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("an undefined heading shows the default, text overrides it, and empty text removes it", async () => {
+    expect(await renderInvitationEmail({ ...invitationProps, t })).toContain("We’d value your input.");
+    expect(await renderInvitationEmail({ ...invitationProps, heading: "Custom heading", t })).toContain(
+      "Custom heading"
+    );
+    const none = await renderInvitationEmail({ ...invitationProps, heading: "  ", t });
+    expect(none).not.toContain("We’d value your input.");
+    expect(none).not.toContain("<h1");
+  });
+
+  test("uses the button label when given", async () => {
+    const html = await renderInvitationEmail({ ...invitationProps, buttonLabel: "Start now", t });
+
+    expect(html).toContain("Start now");
+    expect(html).not.toContain("Take the survey");
+  });
+
+  test("does not render the body as HTML", async () => {
+    const html = await renderInvitationEmail({ ...invitationProps, body: "<script>alert(1)</script>", t });
+
+    expect(html).not.toContain("<script>alert(1)</script>");
   });
 });

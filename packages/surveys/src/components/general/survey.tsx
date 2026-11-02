@@ -57,6 +57,7 @@ import {
 } from "@/lib/offline-storage";
 import { parseRecallInformation, replaceRecallInfo } from "@/lib/recall";
 import { ResponseQueue } from "@/lib/response-queue";
+import { resolveResumeBlockId } from "@/lib/resume";
 import { getPreviousBlockId, getRestorableHistory, isFinishedBlockId } from "@/lib/survey-navigation";
 import { SURVEY_INSTRUCTIONS_ID, getSurveyPagePosition, hasSurveyInstructions } from "@/lib/survey-page";
 import { SurveyState } from "@/lib/survey-state";
@@ -89,7 +90,7 @@ const restoreSurveyStateFromSnapshot = (
 };
 
 interface VariableStackEntry {
-  questionId: string;
+  questionId?: string;
   variables: TResponseVariables;
 }
 
@@ -146,6 +147,9 @@ export function Survey({
   onPageChange,
   placement,
   offlineSupport = false,
+  resumedResponse,
+  onResponseIdReceived,
+  onResumeBlockChange,
   onOfflineStatusChange,
   showCardlessPreviewLogoSlot = false,
 }: Readonly<SurveyContainerProps>) {
@@ -162,13 +166,32 @@ export function Survey({
 
   const surveyState = useMemo(() => {
     if (appUrl && workspaceId) {
-      if (mode === "inline") {
-        return new SurveyState(survey.id, singleUseId, singleUseResponseId, userId, contactId, pinAuthToken);
+      // A resumed response seeds the state with its id so the next queue write is an update, not a new
+      // response (ASLA link-survey resume). It is captured at mount only.
+      const resumedId = resumedResponse?.id ?? null;
+      const state =
+        mode === "inline"
+          ? new SurveyState(
+              survey.id,
+              singleUseId,
+              resumedId ?? singleUseResponseId,
+              userId,
+              contactId,
+              pinAuthToken
+            )
+          : new SurveyState(survey.id, null, resumedId, userId, contactId, pinAuthToken);
+      if (resumedResponse) {
+        state.responseAcc = {
+          finished: false,
+          data: resumedResponse.data,
+          ttc: resumedResponse.ttc,
+          variables: resumedResponse.variables,
+        };
       }
-
-      return new SurveyState(survey.id, null, null, userId, contactId, pinAuthToken);
+      return state;
     }
     return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resumedResponse is read at mount only
   }, [
     appUrl,
     workspaceId,
@@ -185,7 +208,33 @@ export function Survey({
 
   const [hasInteracted, setHasInteracted] = useState(false);
 
-  const [localSurvey, setlocalSurvey] = useState<TJsWorkspaceStateSurvey>(survey);
+  // Resume: re-apply the required rules earlier blocks set, without replaying their logic. Only ids
+  // that still exist in the survey count.
+  const [resumedRequiredMap] = useState<Record<string, string[]>>(() => {
+    const saved: Record<string, string[]> = resumedResponse?.requiredByMap ?? {};
+    const known = new Set(getElementsFromSurveyBlocks(survey.blocks).map((element) => element.id));
+    return Object.fromEntries(
+      Object.entries(saved)
+        .filter(([key]) => known.has(key))
+        .map(([key, ids]) => [key, ids.filter((id) => known.has(id))])
+    );
+  });
+  const applyResumedRequired = (base: TJsWorkspaceStateSurvey): TJsWorkspaceStateSurvey => {
+    const ids = new Set(Object.values(resumedRequiredMap).flat());
+    if (ids.size === 0) return base;
+    return {
+      ...base,
+      blocks: base.blocks.map((block) => ({
+        ...block,
+        elements: block.elements.map((element) =>
+          ids.has(element.id) ? { ...element, required: true } : element
+        ),
+      })),
+    };
+  };
+  const [localSurvey, setlocalSurvey] = useState<TJsWorkspaceStateSurvey>(() =>
+    applyResumedRequired(survey)
+  );
   const [currentVariables, setCurrentVariables] = useState<TResponseVariables>({});
 
   const isLinkSurvey = survey.type === "link";
@@ -252,6 +301,7 @@ export function Survey({
           },
           onResponseCreated: (responseId) => {
             void persistSurveyStateSnapshot({ responseId });
+            if (responseId) onResponseIdReceived?.(responseId);
             try {
               triggerResponseCreatedOnce(responseId);
             } catch (error) {
@@ -277,13 +327,15 @@ export function Survey({
     offlinePersistEnabled,
     persistSurveyStateSnapshot,
     triggerResponseCreatedOnce,
+    onResponseIdReceived,
     survey.id,
   ]);
 
   const questions = useMemo(() => getElementsFromSurveyBlocks(localSurvey.blocks), [localSurvey.blocks]);
 
   const originalQuestionRequiredStates = useMemo(() => {
-    return questions.reduce<Record<string, boolean>>((acc, question) => {
+    // Read from the unmodified survey definition: localSurvey may already carry resumed required rules.
+    return getElementsFromSurveyBlocks(survey.blocks).reduce<Record<string, boolean>>((acc, question) => {
       acc[question.id] = question.required;
       return acc;
     }, {});
@@ -291,30 +343,30 @@ export function Survey({
   }, [survey.blocks]);
 
   // state to keep track of the questions that were made required by each specific question's logic
-  const questionRequiredByMap = useRef<Record<string, string[]>>({});
+  const questionRequiredByMap = useRef<Record<string, string[]>>({ ...resumedRequiredMap });
 
   // Update localSurvey when the survey prop changes (it changes in case of survey editor)
   useEffect(() => {
-    setlocalSurvey(survey);
+    setlocalSurvey(applyResumedRequired(survey));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resumed rules are read at mount only
   }, [survey]);
 
   // ENG-1837: computed fields are seeded from their definitions in the EmbeddedData tables. Only
   // `embeddedFields` is passed (and depended on), since nothing else can change this map.
   useEffect(() => {
-    setCurrentVariables(
-      getComputedEmbeddedFields({ embeddedFields: survey.embeddedFields }).reduce<TResponseVariables>(
-        (acc, { field, link }) => {
-          // Provably the variable's declared value for every field derived from the legacy shape:
-          // ZSurveyVariable pins a number variable to a number and a text one to a string, and both
-          // are pass-throughs here (see the seeding test in embedded-data-mapping.test.ts). Booleans
-          // and dates have no slot in TResponseVariables and no computed field can carry one.
-          const seed = coerceToEmbeddedDataType(field.defaultValue, field.dataType);
-          if (typeof seed === "string" || typeof seed === "number") acc[link.storageKey] = seed;
-          return acc;
-        },
-        {}
-      )
-    );
+    const seeded = getComputedEmbeddedFields({
+      embeddedFields: survey.embeddedFields,
+    }).reduce<TResponseVariables>((acc, { field, link }) => {
+      // Provably the variable's declared value for every field derived from the legacy shape:
+      // ZSurveyVariable pins a number variable to a number and a text one to a string, and both
+      // are pass-throughs here (see the seeding test in embedded-data-mapping.test.ts). Booleans
+      // and dates have no slot in TResponseVariables and no computed field can carry one.
+      const seed = coerceToEmbeddedDataType(field.defaultValue, field.dataType);
+      if (typeof seed === "string" || typeof seed === "number") acc[link.storageKey] = seed;
+      return acc;
+    }, {});
+    setCurrentVariables({ ...seeded, ...(resumedResponse?.variables ?? {}) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resumedResponse is read at mount only
   }, [survey.embeddedFields]);
 
   const autoFocusEnabled = autoFocus ?? window.self === window.top;
@@ -325,7 +377,19 @@ export function Survey({
       // If starting at a specific question, find its parent block
       const startBlock = findBlockByElementId(localSurvey.blocks, startAtQuestionId);
       return startBlock?.id || localSurvey.blocks[0]?.id;
-    } else if (localSurvey.welcomeCard.enabled) {
+    }
+
+    if (resumedResponse) {
+      const resumeId = resolveResumeBlockId(
+        localSurvey.blocks,
+        localSurvey.endings,
+        resumedResponse.data,
+        resumedResponse.blockId
+      );
+      if (resumeId) return resumeId;
+    }
+
+    if (localSurvey.welcomeCard.enabled) {
       return "start";
     }
 
@@ -346,8 +410,32 @@ export function Survey({
   const [isSurveyFinished, setIsSurveyFinished] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState(languageCode);
   const [loadingElement, setLoadingElement] = useState(false);
-  const [history, setHistory] = useState<string[]>([]);
+  // Resuming at the saved block: restore the path that led there so Back returns to it, not to
+  // the previous block in array order (which a jump may have skipped). The variable stack is kept
+  // in step with it, so Back also undoes the calculations of the blocks it steps over.
+  const [resumedPath] = useState(() => {
+    if (!resumedResponse?.blockId || resumedResponse.blockId !== blockId) {
+      return { history: [] as string[], stack: [] as VariableStackEntry[] };
+    }
+    const saved = resumedResponse.history ?? [];
+    const savedStack = resumedResponse.variableStack ?? [];
+    const history = getRestorableHistory(localSurvey, saved);
+    if (savedStack.length !== saved.length) return { history, stack: [] as VariableStackEntry[] };
+    const restorable = new Set(getRestorableHistory(localSurvey, saved));
+    const stack = savedStack.filter((_, index) => restorable.has(saved[index]));
+    return { history, stack: stack.length === history.length ? stack : [] };
+  });
+  const [history, setHistory] = useState<string[]>(resumedPath.history);
+  const [variableStack, setVariableStack] = useState<VariableStackEntry[]>(resumedPath.stack);
   const isNavigatingBackRef = useRef(false);
+
+  // Link-survey resume keeps the exact block in the respondent's browser. Only real blocks count:
+  // the welcome card and endings are not resume points.
+  useEffect(() => {
+    if (onResumeBlockChange && localSurvey.blocks.some((block) => block.id === blockId)) {
+      onResumeBlockChange(blockId, history, variableStack, currentVariables, questionRequiredByMap.current);
+    }
+  }, [blockId, history, variableStack, currentVariables, localSurvey.blocks, onResumeBlockChange]);
   /**
    * The Embedded Data ingest contract (ENG-1845) applied to whatever the host handed us — URL params
    * for a link survey, `track({ hiddenFields })` or `setEmbeddedData` for an app one. Every caller
@@ -391,10 +479,12 @@ export function Survey({
       })
     );
   });
-  const [responseData, setResponseData] = useState<TResponseData>(ingestedFieldsRecord);
-  const [_variableStack, setVariableStack] = useState<VariableStackEntry[]>([]);
+  const [responseData, setResponseData] = useState<TResponseData>({
+    ...ingestedFieldsRecord,
+    ...(resumedResponse?.data ?? {}),
+  });
 
-  const [ttc, setTtc] = useState<TResponseTtc>({});
+  const [ttc, setTtc] = useState<TResponseTtc>(resumedResponse?.ttc ?? {});
   const isOnline = useOnlineStatus();
   const [isSyncing, setIsSyncing] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
@@ -412,6 +502,7 @@ export function Survey({
     return styling.cardArrangement?.appSurveys ?? "straight";
   }, [localSurvey.type, styling.cardArrangement?.linkSurveys, styling.cardArrangement?.appSurveys]);
   const isCardless = cardArrangement === "cardless";
+  const cardSize = styling.cardSize ?? "normal";
   const linkSurveyCardMaxWidth =
     localSurvey.type === "link" ? getLinkSurveyCardMaxWidth(styling.linkSurveyCardWidth) : undefined;
 
@@ -854,7 +945,7 @@ export function Survey({
     }
   };
 
-  const pushVariableState = (currentQuestionId: string) => {
+  const pushVariableState = (currentQuestionId: string | undefined) => {
     setVariableStack((prevStack) => [
       ...prevStack,
       { questionId: currentQuestionId, variables: { ...currentVariables } },
@@ -1296,6 +1387,7 @@ export function Survey({
             variablesData={currentVariables}
             isPreviewMode={isPreviewMode}
             fullSizeCards={fullSizeCards}
+            cardSize={cardSize}
             isCardless={isCardless}
           />
         );
@@ -1318,6 +1410,7 @@ export function Survey({
               onOpenExternalURL={onOpenExternalURL}
               isPreviewMode={isPreviewMode}
               fullSizeCards={fullSizeCards}
+              cardSize={cardSize}
               isCardless={isCardless}
               isOfflineWithPending={offlinePersistEnabled && !isOnline && isSurveyFinished}
             />
@@ -1356,6 +1449,7 @@ export function Survey({
               onOpenExternalURL={onOpenExternalURL}
               dir={dir}
               fullSizeCards={fullSizeCards}
+              cardSize={cardSize}
               isCardless={isCardless}
             />
           )

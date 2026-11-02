@@ -12,6 +12,7 @@ import { ElementFormInput } from "@/modules/survey/components/element-form-input
 import { ValidationRulesEditor } from "@/modules/survey/editor/components/validation-rules-editor";
 import { Button } from "@/modules/ui/components/button";
 import { ElementToggleTable } from "@/modules/ui/components/element-toggle-table";
+import { CustomFieldsSection } from "./custom-fields-section";
 
 interface ContactInfoElementFormProps {
   localSurvey: TSurvey;
@@ -67,7 +68,7 @@ export const ContactInfoElementForm = ({
   ];
 
   useEffect(() => {
-    const allFieldsAreOptional = [
+    const builtInAllOptional = [
       element.firstName,
       element.lastName,
       element.email,
@@ -77,9 +78,18 @@ export const ContactInfoElementForm = ({
       .filter((field) => field.show)
       .every((field) => !field.required);
 
-    updateElement(elementIdx, { required: !allFieldsAreOptional });
+    const customHasRequired = (element.customFields ?? []).some((cf) => cf.show && cf.required);
+
+    updateElement(elementIdx, { required: !builtInAllOptional || customHasRequired });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sync-only effect; adding updateElement/elementIdx would loop as it writes back into the survey
-  }, [element.firstName, element.lastName, element.email, element.phone, element.company]);
+  }, [
+    element.firstName,
+    element.lastName,
+    element.email,
+    element.phone,
+    element.company,
+    element.customFields,
+  ]);
 
   const [parent] = useAutoAnimate();
 
@@ -142,6 +152,16 @@ export const ContactInfoElementForm = ({
           elementIdx={elementIdx}
           isInvalid={isInvalid}
           updateElement={updateElement}
+          locale={locale}
+          isStorageConfigured={isStorageConfigured}
+        />
+
+        <CustomFieldsSection
+          localSurvey={localSurvey}
+          element={element}
+          elementIdx={elementIdx}
+          updateElement={updateElement}
+          isInvalid={isInvalid}
           locale={locale}
           isStorageConfigured={isStorageConfigured}
         />

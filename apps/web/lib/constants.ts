@@ -104,6 +104,15 @@ export const SMTP_AUTHENTICATED = env.SMTP_AUTHENTICATED !== "0";
 export const SMTP_REJECT_UNAUTHORIZED_TLS = env.SMTP_REJECT_UNAUTHORIZED_TLS !== "0";
 export const MAIL_FROM = env.MAIL_FROM;
 export const MAIL_FROM_NAME = env.MAIL_FROM_NAME;
+// Throttle between SMTP sends to stay under provider rate limits.
+// Resend is 2 req/s default, 10 req/s on paid plans. Default 250ms = 4 req/s.
+export const EMAIL_SEND_THROTTLE_MS = env.EMAIL_SEND_THROTTLE_MS
+  ? Number.parseInt(env.EMAIL_SEND_THROTTLE_MS, 10)
+  : 250;
+// Per-tick cap on the invitation drainer so one cron invocation stays bounded.
+export const EMAIL_SEND_CHUNK_SIZE = env.EMAIL_SEND_CHUNK_SIZE
+  ? Number.parseInt(env.EMAIL_SEND_CHUNK_SIZE, 10)
+  : 500;
 
 /**
  * Auth secret and base URL, resolved once for the whole app.

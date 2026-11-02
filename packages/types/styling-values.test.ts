@@ -307,3 +307,20 @@ const TYPICAL_STYLING = {
   background: { bg: "#f1f5f9", bgType: "color" as const, brightness: 100 },
   logo: { url: "https://example.com/logo.png", bgColor: "#ffffff" },
 };
+
+describe("ZBaseStyling cardSize", () => {
+  test("accepts normal, tall, null and absent", () => {
+    expect(ZBaseStyling.safeParse({ cardSize: "normal" }).success).toBe(true);
+    expect(ZBaseStyling.safeParse({ cardSize: "tall" }).success).toBe(true);
+    expect(ZBaseStyling.safeParse({ cardSize: null }).success).toBe(true);
+    expect(ZBaseStyling.safeParse({}).success).toBe(true);
+  });
+
+  test("rejects other values", () => {
+    expect(ZBaseStyling.safeParse({ cardSize: "huge" }).success).toBe(false);
+  });
+
+  test("survives theme sanitizing", () => {
+    expect(sanitizeThemeStyling({ cardSize: "tall" })).toMatchObject({ cardSize: "tall" });
+  });
+});

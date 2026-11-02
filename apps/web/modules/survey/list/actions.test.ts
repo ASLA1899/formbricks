@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { AuthorizationError } from "@formbricks/types/errors";
+import { AuthorizationError, ResourceNotFoundError } from "@formbricks/types/errors";
 import { assertCan } from "@/lib/authorization";
+import { getSurvey } from "@/lib/survey/service";
 import { getOrganizationIdFromWorkspaceId, getWorkspaceIdFromSurveyId } from "@/lib/utils/helper";
 import { generateSurveySingleUseLinkParamsList } from "@/lib/utils/single-use-surveys";
 import { copySurveyToOtherWorkspace } from "@/modules/survey/list/lib/survey";
-import { copySurveyToOtherWorkspaceAction, generateSingleUseIdsAction } from "./actions";
+import {
+  copySurveyToOtherWorkspaceAction,
+  generateSingleUseIdsAction,
+  getSurveyForExportAction,
+} from "./actions";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/utils/action-client", () => ({
@@ -14,6 +19,7 @@ vi.mock("@/modules/ee/audit-logs/lib/handler", () => ({
   withAuditLogging: vi.fn((_action, _target, fn) => fn),
 }));
 vi.mock("@/lib/authorization", () => ({ assertCan: vi.fn() }));
+vi.mock("@/lib/survey/service", () => ({ getSurvey: vi.fn() }));
 vi.mock("@/lib/utils/helper", () => ({
   getOrganizationIdFromWorkspaceId: vi.fn(),
   getWorkspaceIdFromSurveyId: vi.fn(),
@@ -91,5 +97,32 @@ describe("generateSingleUseIdsAction (ENG-3282)", () => {
 
     await generate();
     expect(generateSurveySingleUseLinkParamsList).toHaveBeenCalledWith(2, "survey_1", false);
+  });
+});
+
+describe("getSurveyForExportAction", () => {
+  const load = () =>
+    (getSurveyForExportAction as unknown as THandler)({ ctx, parsedInput: { surveyId: "survey_1" } });
+
+  test("returns nothing for a survey the caller cannot read", async () => {
+    actAs(false);
+
+    await expect(load()).rejects.toBeInstanceOf(AuthorizationError);
+    expect(assertCan).toHaveBeenCalledWith(user, "survey.read", { type: "survey", id: "survey_1" });
+    expect(getSurvey).not.toHaveBeenCalled();
+  });
+
+  test("returns the full survey for a caller who can read it", async () => {
+    actAs(true);
+    vi.mocked(getSurvey).mockResolvedValue({ id: "survey_1", blocks: [] } as never);
+
+    await expect(load()).resolves.toEqual({ id: "survey_1", blocks: [] });
+  });
+
+  test("reports a missing survey", async () => {
+    actAs(true);
+    vi.mocked(getSurvey).mockResolvedValue(null);
+
+    await expect(load()).rejects.toBeInstanceOf(ResourceNotFoundError);
   });
 });
