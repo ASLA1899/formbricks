@@ -8,6 +8,10 @@
  *   ... --preimage                  # read only: records roles and survey owners before --apply
  *   ... --rollback preimage.json [--apply]   # puts them back
  *
+ * Rollback restores the roles exactly as recorded. Use it right after a bad apply, with a fresh pre-image.
+ * A stale pre-image would undo role changes made since (for example, re-promote someone to owner). Run the
+ * dry run first and read the summary.
+ *
  * Run the output with psql on the target database, for example on nan01:
  *   ... | ssh <vm> 'docker exec -i formbricks-staging-postgres psql -U <user> -d formbricks -X -At'
  * See scripts/asla/team-grants.example.json for the file format. Keep real mapping files out of git.
