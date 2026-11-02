@@ -28,6 +28,7 @@ import {
   type TSurveyEnding,
   type TSurveyHiddenFields,
   type TSurveyInlineTriggers,
+  type TSurveyInvitationConfig,
   type TSurveyMetadata,
   type TSurveyQuestions,
   type TSurveyRecaptcha,
@@ -87,6 +88,7 @@ declare global {
     export type SurveyFollowUpAction = TSurveyFollowUpAction;
     export type OrganizationAccess = TOrganizationAccess;
     export type SurveyMetadata = TSurveyMetadata;
+    export type SurveyInvitationConfig = TSurveyInvitationConfig;
     export type SurveyQuotaLogic = TSurveyQuotaLogic;
     export type EmbeddedDataDefaultValue = TEmbeddedDataDefaultValue;
     export type ChartQuery = TChartQuery;

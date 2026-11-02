@@ -1881,7 +1881,7 @@ describe("Address and ContactInfo question types", () => {
       },
       {
         id: "response-2",
-        data: { "contact-q1": { name: "John" } }, // Object instead of array
+        data: { "contact-q1": {} }, // Empty object has no values
         updatedAt: new Date(),
         contact: null,
         contactAttributes: {},
@@ -2037,6 +2037,61 @@ describe("Address and ContactInfo question types", () => {
 });
 
 describe("Matrix question type tests", () => {
+  test("getQuestionSummary adds an Other row from free-text row keys", async () => {
+    const question = {
+      id: "matrix-other",
+      type: TSurveyElementTypeEnum.Matrix,
+      headline: { default: "Rate these aspects" },
+      required: false,
+      rows: [
+        { id: "row-1", label: { default: "Speed" } },
+        { id: "other", label: { default: "Other" } },
+      ],
+      columns: [
+        { id: "col-1", label: { default: "Poor" } },
+        { id: "col-2", label: { default: "Good" } },
+      ],
+    };
+    const survey = {
+      id: "survey-1",
+      blocks: [{ id: "block1", name: "Block 1", elements: [question] }],
+      questions: [],
+      languages: [],
+      welcomeCard: { enabled: false },
+    } as unknown as TSurvey;
+    const baseResponse = {
+      updatedAt: new Date(),
+      contact: null,
+      contactAttributes: {},
+      language: null,
+      ttc: {},
+      finished: true,
+    };
+    const responses = [
+      { ...baseResponse, id: "r1", data: { "matrix-other": { Speed: "Good", Comfort: "Good" } } },
+      { ...baseResponse, id: "r2", data: { "matrix-other": { Speed: "Poor", Warmth: "Poor" } } },
+    ] as any;
+    const dropOff = [
+      { elementId: "matrix-other", impressions: 2, dropOffCount: 0, dropOffPercentage: 0 },
+    ] as unknown as TSurveySummary["dropOff"];
+
+    const summary: any = await getElementSummary(
+      survey,
+      getElementsFromBlocks(survey.blocks),
+      responses,
+      dropOff
+    );
+
+    const rowLabels = summary[0].data.map((row: { rowLabel: string }) => row.rowLabel);
+    expect(rowLabels).toEqual(["Speed", "Other"]);
+    const otherRow = summary[0].data[1];
+    expect(otherRow.totalResponsesForRow).toBe(2);
+    expect(otherRow.columnPercentages).toEqual([
+      { column: "Poor", percentage: 50 },
+      { column: "Good", percentage: 50 },
+    ]);
+  });
+
   test("getQuestionSummary correctly processes Matrix question with valid responses", async () => {
     const question = {
       id: "matrix-q1",
@@ -5390,5 +5445,37 @@ describe("CES question type tests", () => {
     expect(summary[0].responseCount).toBe(0);
     expect(summary[0].average).toBe(0);
     expect(summary[0].choices.every((c: any) => c.count === 0)).toBe(true);
+  });
+});
+
+describe("ContactInfo summary with custom fields (object-format responses)", () => {
+  test("counts object-format responses and drops empty values", async () => {
+    const question = {
+      id: "contact-q2",
+      type: TSurveyElementTypeEnum.ContactInfo,
+      headline: { default: "Your contact information" },
+      required: true,
+      customFields: [{ id: "cf_title", label: "Title", type: "dropdown", show: true, required: false }],
+    };
+    const survey = {
+      id: "survey-1",
+      blocks: [{ id: "block1", name: "Block 1", elements: [question] }],
+      questions: [],
+      languages: [],
+      welcomeCard: { enabled: false },
+    } as unknown as TSurvey;
+    const base = { updatedAt: new Date(), contact: null, contactAttributes: {}, language: null, ttc: {} };
+    const responses = [
+      { ...base, id: "r1", data: { "contact-q2": { firstName: "Ada", email: "", cf_title: "Dr." } } },
+      { ...base, id: "r2", data: { "contact-q2": { firstName: "", cf_title: "" } } },
+    ] as any;
+    const dropOff = [
+      { elementId: "contact-q2", impressions: 2, dropOffCount: 0, dropOffPercentage: 0 },
+    ] as unknown as TSurveySummary["dropOff"];
+
+    const summary = await getElementSummary(survey, getElementsFromBlocks(survey.blocks), responses, dropOff);
+
+    expect((summary[0] as any).responseCount).toBe(1);
+    expect((summary[0] as any).samples[0].value).toEqual(["Ada", "Dr."]);
   });
 });

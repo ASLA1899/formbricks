@@ -35,6 +35,13 @@ import { buildWhereClause } from "@/modules/survey/lib/utils";
 import { doesWorkspaceExist, getWorkspaceWithLanguages } from "@/modules/survey/list/lib/workspace";
 import type { TWorkspaceWithLanguages } from "@/modules/survey/list/types/surveys";
 
+const withoutFollowUpAttachment = (action: unknown): Prisma.InputJsonValue => {
+  const value = action as { properties?: { attachment?: unknown } } | null;
+  if (!value?.properties || !("attachment" in value.properties)) return value as Prisma.InputJsonValue;
+  const { attachment: _attachment, ...properties } = value.properties;
+  return { ...value, properties } as Prisma.InputJsonValue;
+};
+
 const getExistingSurvey = async (surveyId: string) => {
   return await prisma.survey.findUnique({
     where: {
@@ -483,7 +490,8 @@ export const copySurveyToOtherWorkspace = async (
           data: existingSurvey.followUps.map((followUp) => ({
             name: followUp.name,
             trigger: followUp.trigger,
-            action: followUp.action,
+            // Follow-up files live in the source workspace's private storage, so they are not carried over.
+            action: isSameWorkspace ? followUp.action : withoutFollowUpAttachment(followUp.action),
           })),
         },
       },

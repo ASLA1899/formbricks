@@ -75,10 +75,12 @@ const handleI18nCheckForMatrixLabels = (
   element: TSurveyMatrixElement,
   languages: TSurveyLanguage[]
 ): boolean => {
-  const rowsAndColumns = [...element.rows, ...element.columns];
+  // Filter out "other" row — its label is system-generated and doesn't need i18n validation
+  const regularRows = element.rows.filter((row) => row.id !== "other");
+  const rowsAndColumns = [...regularRows, ...element.columns];
 
   const invalidRowsLangCodes = findLanguageCodesForDuplicateLabels(
-    element.rows.map((row) => row.label),
+    regularRows.map((row) => row.label),
     languages
   );
   const invalidColumnsLangCodes = findLanguageCodesForDuplicateLabels(
@@ -102,15 +104,32 @@ const handleI18nCheckForContactAndAddressFields = (
     const { firstName, lastName, phone, email, company } = element;
     fields = [firstName, lastName, phone, email, company];
   } else if (element.type === "address") {
-    const { addressLine1, addressLine2, city, state, zip, country } = element;
-    fields = [addressLine1, addressLine2, city, state, zip, country];
+    const { name, organization, addressLine1, addressLine2, city, state, zip, country } = element;
+    // name/organization are absent on surveys created before they existed
+    fields = [name, organization, addressLine1, addressLine2, city, state, zip, country].filter(
+      (field): field is TInputFieldConfig => field !== undefined
+    );
   }
-  return fields.every((field) => {
+
+  const builtInValid = fields.every((field) => {
     if (field.show) {
       return isLabelValidForAllLanguages(field.placeholder, languages);
     }
     return true;
   });
+
+  // Also validate custom field placeholders for contact info (placeholder is optional — skip if empty)
+  if (element.type === "contactInfo") {
+    const customFieldsValid = (element.customFields ?? []).every((cf) => {
+      if (cf.show && cf.placeholder?.["default"]?.trim()) {
+        return isLabelValidForAllLanguages(cf.placeholder, languages);
+      }
+      return true;
+    });
+    return builtInValid && customFieldsValid;
+  }
+
+  return builtInValid;
 };
 
 // Validation rules

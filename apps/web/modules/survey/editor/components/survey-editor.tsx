@@ -100,6 +100,8 @@ interface SurveyEditorProps {
   surveyAccess: TSurveyAccess | null;
   ownerName: string | null;
   customCssEditor: TSurveyCustomCssEditorConfig;
+  /** ASLA fork (ASL-1881): whether the user may open the per-person sharing panel. */
+  canManageSharing: boolean;
 }
 
 export const SurveyEditor = ({
@@ -137,6 +139,7 @@ export const SurveyEditor = ({
   surveyAccess,
   ownerName,
   customCssEditor,
+  canManageSharing,
 }: Readonly<SurveyEditorProps>) => {
   const isFollowUpsTabVisible = shouldShowFollowUpsTab({
     followUpCount: survey.followUps.length,
@@ -437,6 +440,7 @@ export const SurveyEditor = ({
               appSetupCompleted={localWorkspace.appSetupCompleted}
               enterpriseLicenseRequestFormUrl={enterpriseLicenseRequestFormUrl}
               hasTriggerError={hasTriggerError}
+              canManageSharing={canManageSharing}
             />
           )}
 

@@ -482,7 +482,9 @@ export const getResponseDownloadFile = async (
     const headers = [
       "No.",
       "Response ID",
-      "Timestamp",
+      "Started At",
+      "Completed At",
+      "Duration",
       "Finished",
       ...(isQuotasAllowed ? ["Quotas"] : []),
       "Survey ID",

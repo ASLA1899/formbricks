@@ -14,6 +14,7 @@ import {
   sendResponseFinishedEmail,
   sendSsoRecoveryFactorsRemovedEmail,
   sendSsoSignInHintEmail,
+  sendSurveyInvitationEmail,
   sendVerificationEmail,
   sendVerificationLinkEmail,
   sendVerificationNewEmail,
@@ -39,6 +40,7 @@ vi.mock("@formbricks/email", () => ({
   renderEmailCustomizationPreviewEmail: async () => "html",
   renderEmbedSurveyPreviewEmail: async () => "html",
   renderForgotPasswordEmail: async () => "html",
+  renderInvitationEmail: async () => "html",
   renderInviteAcceptedEmail: async () => "html",
   renderInviteEmail: async () => "html",
   renderLinkSurveyEmail: async () => "html",
@@ -95,6 +97,11 @@ const senders: [string, () => Promise<unknown>][] = [
     "verified_survey_link",
     () => sendLinkSurveyToVerifiedEmail({ email, locale, surveyId: "survey", surveyName: "Survey" }),
   ],
+  [
+    "survey_invitation",
+    () =>
+      sendSurveyInvitationEmail({ to: email, subject: "Subject", body: "Body", surveyLink: "https://x/c/t" }),
+  ],
 ];
 
 describe("email source attribution", () => {
@@ -114,6 +121,22 @@ describe("email source attribution", () => {
   ] as const)("distinguishes the %s verification purpose", async (purpose, emailType) => {
     await sendVerificationEmail({ id: "user", email, locale, purpose });
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ emailType }));
+  });
+
+  describe("survey invitation sender", () => {
+    const base = { to: email, subject: "Subject", body: "Body", surveyLink: "https://x/c/t" };
+
+    test("uses the default sender when no from name is set", async () => {
+      await sendSurveyInvitationEmail(base);
+      expect(sendEmail.mock.calls[0][0]).not.toHaveProperty("from");
+    });
+
+    test("quotes the from name and strips characters that could break out of it", async () => {
+      await sendSurveyInvitationEmail({ ...base, fromName: ' ASLA "Surveys"\r\nBcc: x@y.z ' });
+      const { from } = sendEmail.mock.calls[0][0] as { from: string };
+      expect(from).toMatch(/^"ASLA SurveysBcc: x@y\.z" <.+@.+>$/);
+      expect(from).not.toMatch(/[\r\n]/);
+    });
   });
 
   test("classifies legacy survey follow-ups separately from workflow emails", async () => {

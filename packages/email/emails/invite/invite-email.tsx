@@ -1,4 +1,4 @@
-import { Container, Heading, Text } from "react-email";
+import { Heading, Text } from "react-email";
 import { EmailButton } from "../../src/components/email-button";
 import { EmailFooter } from "../../src/components/email-footer";
 import { EmailTemplate } from "../../src/components/email-template";
@@ -23,12 +23,12 @@ export function InviteEmail({
 }: InviteEmailProps): React.JSX.Element {
   return (
     <EmailTemplate t={t} {...legalProps}>
-      <Container>
+      <>
         <Heading>{t("emails.invite_email_heading", { inviteeName })}</Heading>
         <Text className="text-sm">{t("emails.invite_email_text", { inviterName })}</Text>
         <EmailButton href={verifyLink} label={t("emails.invite_email_button_label")} />
         <EmailFooter t={t} />
-      </Container>
+      </>
     </EmailTemplate>
   );
 }

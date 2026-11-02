@@ -135,6 +135,12 @@ export const rateLimitConfigs = {
     }, // 120 per minute per organization/workspace — shared guard for authenticated settings writes
   },
 
+  // Public follow-up file links (/f/<token>), limited per client IP
+  followUpFile: {
+    view: { interval: 60, allowedPerInterval: 60, namespace: "followup-file:view" }, // 60 per minute
+    download: { interval: 60, allowedPerInterval: 20, namespace: "followup-file:download" }, // 20 per minute
+  },
+
   storage: {
     upload: { interval: 60, allowedPerInterval: 5, namespace: "storage:upload" }, // 5 per minute
     uploadPerWorkspace: {

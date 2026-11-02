@@ -23,6 +23,7 @@ const {
   mockGetFinishedResponseCountBySurveyId,
   mockGetResponseCountBySurveyId,
   mockHandleIntegrations,
+  mockLinkResponseToInvitation,
   mockLoggerError,
   mockLoggerWarn,
   mockPrismaOrganizationFindFirst,
@@ -48,6 +49,7 @@ const {
     mockGetFinishedResponseCountBySurveyId: vi.fn(),
     mockGetResponseCountBySurveyId: vi.fn(),
     mockHandleIntegrations: vi.fn(),
+    mockLinkResponseToInvitation: vi.fn(),
     mockLoggerError: vi.fn(),
     mockLoggerWarn: vi.fn(),
     mockPrismaOrganizationFindFirst: vi.fn(),
@@ -138,6 +140,10 @@ vi.mock("@/modules/email", () => ({
 
 const { mockSyncResponseToSnowflake } = vi.hoisted(() => ({ mockSyncResponseToSnowflake: vi.fn() }));
 vi.mock("@/lib/snowflake/sync", () => ({ syncResponseToSnowflake: mockSyncResponseToSnowflake }));
+
+vi.mock("@/modules/survey/invitations/lib/invitations", () => ({
+  linkResponseToInvitation: mockLinkResponseToInvitation,
+}));
 
 vi.mock("@/modules/survey/follow-ups/lib/follow-ups", () => ({
   sendFollowUpsForResponse: mockSendFollowUpsForResponse,
@@ -255,6 +261,57 @@ describe("processResponsePipelineJob", () => {
     mockEnqueueResponseCompletedWorkflowRuns.mockResolvedValue(undefined);
     mockSendTelemetryEvents.mockResolvedValue(undefined);
     mockPrismaSurveyUpdate.mockResolvedValue(undefined);
+    mockLinkResponseToInvitation.mockResolvedValue(undefined);
+  });
+
+  describe("invitation linking (ASLA fork)", () => {
+    const invitationConfig = { audience: { source: "manualList" } };
+
+    test("links a finished response to its invitation so reminders stop", async () => {
+      mockPrismaSurveyFindUnique.mockResolvedValue({ ...survey, invitationConfig });
+
+      await processResponsePipelineJob({ ...baseData, event: "responseFinished" }, baseContext);
+
+      expect(mockLinkResponseToInvitation).toHaveBeenCalledTimes(1);
+      expect(mockLinkResponseToInvitation).toHaveBeenCalledWith("response_123");
+    });
+
+    test("links even when the survey is restricted and nothing may leave the app", async () => {
+      mockPrismaSurveyFindUnique.mockResolvedValue({ ...survey, visibility: "restricted", invitationConfig });
+
+      await processResponsePipelineJob({ ...baseData, event: "responseFinished" }, baseContext);
+
+      expect(mockLinkResponseToInvitation).toHaveBeenCalledWith("response_123");
+      expect(mockSendFollowUpsForResponse).not.toHaveBeenCalled();
+    });
+
+    test("skips the lookup for a survey with no invitation config", async () => {
+      mockPrismaSurveyFindUnique.mockResolvedValue({ ...survey, invitationConfig: null });
+
+      await processResponsePipelineJob({ ...baseData, event: "responseFinished" }, baseContext);
+
+      expect(mockLinkResponseToInvitation).not.toHaveBeenCalled();
+    });
+
+    test("does not link on responseCreated", async () => {
+      mockPrismaSurveyFindUnique.mockResolvedValue({ ...survey, invitationConfig });
+
+      await processResponsePipelineJob({ ...baseData, event: "responseCreated" }, baseContext);
+
+      expect(mockLinkResponseToInvitation).not.toHaveBeenCalled();
+    });
+
+    test("a linking failure is logged and does not block the other responseFinished work", async () => {
+      mockPrismaSurveyFindUnique.mockResolvedValue({ ...survey, invitationConfig });
+      mockLinkResponseToInvitation.mockRejectedValue(new Error("db blip"));
+
+      await expect(
+        processResponsePipelineJob({ ...baseData, event: "responseFinished" }, baseContext)
+      ).resolves.toBeUndefined();
+
+      expect(mockLoggerError).toHaveBeenCalled();
+      expect(mockEnqueueResponseCompletedWorkflowRuns).toHaveBeenCalled();
+    });
   });
 
   test("invokes the workflow runner on responseFinished", async () => {

@@ -1,4 +1,4 @@
-import { Container, Heading, Section, Text } from "react-email";
+import { Heading, Section, Text } from "react-email";
 import { EmailButton } from "../../src/components/email-button";
 import { EmailFooter } from "../../src/components/email-footer";
 import { EmailTemplate } from "../../src/components/email-template";
@@ -36,7 +36,7 @@ export function SsoSignInHintEmail({
 }: Readonly<SsoSignInHintEmailProps>): React.JSX.Element {
   return (
     <EmailTemplate t={t} {...legalProps}>
-      <Container>
+      <>
         <Heading>{t("emails.sso_sign_in_hint_email_heading")}</Heading>
         {providerNames.length > 0 ? (
           <>
@@ -56,7 +56,7 @@ export function SsoSignInHintEmail({
         )}
         <Text className="mb-0 text-sm">{t("emails.sso_sign_in_hint_email_did_not_request")}</Text>
         <EmailFooter t={t} />
-      </Container>
+      </>
     </EmailTemplate>
   );
 }

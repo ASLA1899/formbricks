@@ -140,6 +140,7 @@ model Contact {
   responses   Response[]
   attributes  ContactAttribute[]
   displays    Display[]
+  invitations SurveyInvitation[]
 
   @@index([workspaceId])
 }
@@ -156,30 +157,30 @@ model Contact {
 /// @property ttc - Time to completion metrics
 /// @property meta - Additional metadata about the response
 model Response {
-  id                String              @id @default(cuid())
-  createdAt         DateTime            @default(now()) @map(name: "created_at")
-  updatedAt         DateTime            @default(now()) @updatedAt @map(name: "updated_at")
-  finished          Boolean             @default(false)
-  survey            Survey              @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  id                String                   @id @default(cuid())
+  createdAt         DateTime                 @default(now()) @map(name: "created_at")
+  updatedAt         DateTime                 @default(now()) @updatedAt @map(name: "updated_at")
+  finished          Boolean                  @default(false)
+  survey            Survey                   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   surveyId          String
-  contact           Contact?            @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contact           Contact?                 @relation(fields: [contactId], references: [id], onDelete: Cascade)
   contactId         String?
   endingId          String?
   /// [ResponseData]
-  data              Json                @default("{}")
+  data              Json                     @default("{}")
   /// [ResponseVariables]
-  variables         Json                @default("{}")
+  variables         Json                     @default("{}")
   /// [ResponseTtc]
-  ttc               Json                @default("{}")
+  ttc               Json                     @default("{}")
   /// [ResponseMeta]
-  meta              Json                @default("{}")
+  meta              Json                     @default("{}")
   /// Why a value in `data` will not read back as its declared Embedded Data type — a failed coercion
   /// or a truncated oversize value (ENG-1845). Server-computed on every ingest and never accepted
   /// from the client. Null means no ingest boundary has written it, which is not the same claim as
   /// an empty list: without this column a wrong-typed value is indistinguishable from an absent one,
   /// and surfacing that in the UI (v2) would have nothing to read.
   /// [ResponseIngestFlags]
-  ingestFlags       Json?               @map(name: "ingest_flags")
+  ingestFlags       Json?                    @map(name: "ingest_flags")
   tags              TagsOnResponses[]
   quotaLinks        ResponseQuotaLink[]
   /// [ResponseContactAttributes]
@@ -187,9 +188,11 @@ model Response {
   // singleUseId, used to prevent multiple responses
   singleUseId       String?
   language          String?
-  displayId         String?             @unique
-  display           Display?            @relation(fields: [displayId], references: [id])
+  displayId         String?                  @unique
+  display           Display?                 @relation(fields: [displayId], references: [id])
   workflowRuns      WorkflowRun[]
+  followUpFileLinks SurveyFollowUpFileLink[]
+  invitation        SurveyInvitation?
 
   @@unique([surveyId, singleUseId])
   // `id` is the keyset tie-breaker for `GET /api/v3/responses`. It has to be in the index for the
@@ -371,23 +374,23 @@ enum SurveyScriptMode {
 /// @property customHeadScriptsMode - "add" (merge with workspace) or "replace" (override workspace)
 model Survey {
   /// [SurveyHiddenFields]
-  hiddenFields         Json       @default("{\"enabled\": false}")
+  hiddenFields             Json       @default("{\"enabled\": false}")
   /// [SurveyVariables]
-  variables            Json       @default("[]")
+  variables                Json       @default("[]")
   // False identifies surveys written by 6.0 during the online upgrade.
-  ownershipInitialized Boolean    @default(false)
+  ownershipInitialized     Boolean    @default(false)
   // Recovery copy for deferred legacy-only field salvage; never an application read source.
-  legacyEmbeddedDataBackup Json? @ignore
-  id                   String     @id @default(cuid())
-  createdAt            DateTime   @default(now()) @map(name: "created_at")
-  updatedAt            DateTime   @updatedAt @map(name: "updated_at")
-  name                 String
-  redirectUrl          String?
-  type                 SurveyType @default(app)
-  workspace            Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  workspaceId          String
-  creator              User?      @relation("SurveyCreator", fields: [createdBy], references: [id])
-  createdBy            String?
+  legacyEmbeddedDataBackup Json?      @ignore
+  id                       String     @id @default(cuid())
+  createdAt                DateTime   @default(now()) @map(name: "created_at")
+  updatedAt                DateTime   @updatedAt @map(name: "updated_at")
+  name                     String
+  redirectUrl              String?
+  type                     SurveyType @default(app)
+  workspace                Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId              String
+  creator                  User?      @relation("SurveyCreator", fields: [createdBy], references: [id])
+  createdBy                String?
 
   /// ENG-3282: authorization facts, projected into SpiceDB by the survey outbox trigger. `ownerId` is
   /// the durable ownership source; `createdBy` stays pure attribution and is never rewritten.
@@ -410,8 +413,8 @@ model Survey {
   /// ASLA fork (ASL-1880): the fork's private/public switch, kept in lockstep with `visibility`
   /// (private = restricted, public = workspace) by `setSurveyAccessMode`. Per-person shares live in
   /// `SurveyAccess`: SpiceDB's schema has no per-user survey relation.
-  accessMode          SurveyAccessMode        @default(private)
-  accessUsers         SurveyAccess[]
+  accessMode  SurveyAccessMode @default(private)
+  accessUsers SurveyAccess[]
 
   status              SurveyStatus            @default(draft)
   /// [SurveyWelcomeCard]
@@ -477,6 +480,10 @@ model Survey {
   /// [SurveyLinkMetadata]
   metadata                    Json                              @default("{}")
   feedbackSourceMappings      FeedbackSourceFormbricksMapping[]
+  invitations                 SurveyInvitation[]
+  /// [SurveyInvitationConfig] Per-survey invitation and reminder settings (ASLA fork). Written only by the
+  /// invitation send and remind actions, never by the survey editor save.
+  invitationConfig            Json?
 
   slug String? @unique
 
@@ -550,16 +557,73 @@ model ResponseQuotaLink {
 /// @property trigger - Conditions that activate the follow-up
 /// @property action - Actions to take when triggered
 model SurveyFollowUp {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now()) @map(name: "created_at")
-  updatedAt DateTime @updatedAt @map(name: "updated_at")
-  survey    Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  id        String                   @id @default(cuid())
+  createdAt DateTime                 @default(now()) @map(name: "created_at")
+  updatedAt DateTime                 @updatedAt @map(name: "updated_at")
+  survey    Survey                   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   surveyId  String
   name      String
   /// [SurveyFollowUpTrigger]
   trigger   Json
   /// [SurveyFollowUpAction]
   action    Json
+  fileLinks SurveyFollowUpFileLink[]
+}
+
+/// One tracked download link per follow-up email sent with a file. The token is the public
+/// identifier used at /f/<token>; downloads are counted only when the recipient confirms (POST).
+model SurveyFollowUpFileLink {
+  id                String         @id @default(cuid())
+  createdAt         DateTime       @default(now()) @map(name: "created_at")
+  token             String         @unique
+  followUp          SurveyFollowUp @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  followUpId        String
+  response          Response       @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  responseId        String
+  recipientEmail    String
+  /// Snapshot of the file at send time, so links already sent keep serving the file that was emailed.
+  storageKey        String
+  fileName          String
+  contentType       String
+  fileSize          Int            @map(name: "file_size")
+  firstDownloadedAt DateTime?      @map(name: "first_downloaded_at")
+  lastDownloadedAt  DateTime?      @map(name: "last_downloaded_at")
+  downloadCount     Int            @default(0) @map(name: "download_count")
+
+  @@index([followUpId, createdAt])
+  @@index([responseId])
+}
+
+/// Tracks a single recipient invited to take a survey, plus response and reminder state (ASLA fork).
+/// An invitation is created with sentAt=null when the audience is resolved; sentAt is claimed before the
+/// email goes out. respondedAt and responseId are set when the recipient finishes the survey. Reminders
+/// advance sentOffsetDays (the offset is claimed before the email goes out). linkToken is an opaque token
+/// for /c/<token>.
+model SurveyInvitation {
+  id                 String    @id @default(cuid())
+  createdAt          DateTime  @default(now()) @map(name: "created_at")
+  updatedAt          DateTime  @updatedAt @map(name: "updated_at")
+  survey             Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  surveyId           String
+  contact            Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  contactId          String?
+  recipientEmail     String
+  recipientName      String?
+  recipientFirstName String?
+  recipientLastName  String?
+  linkToken          String    @unique
+  sentAt             DateTime?
+  respondedAt        DateTime?
+  responseId         String?   @unique
+  response           Response? @relation(fields: [responseId], references: [id], onDelete: SetNull)
+  lastReminderAt     DateTime?
+  reminderCount      Int       @default(0)
+  // Which scheduled-reminder offsets have already been claimed for this invitation
+  sentOffsetDays     Int[]     @default([])
+
+  @@unique([surveyId, recipientEmail])
+  @@index([surveyId, respondedAt])
+  @@index([surveyId, contactId])
 }
 
 enum ActionType {
@@ -694,6 +758,7 @@ model Workspace {
   /// [Logo]
   logo                        Json?
   workspaceTeams              WorkspaceTeam[]
+  optionLists                 OptionList[]
   appSetupCompleted           Boolean                      @default(false)
   customHeadScripts           String? // Custom HTML scripts for link surveys (self-hosted only)
   /// [CustomCssStored] Workspace custom CSS (ENG-2949), written only by the shared save service.
@@ -1362,6 +1427,25 @@ model Language {
   surveyLanguages SurveyLanguage[]
 
   @@unique([workspaceId, code])
+}
+
+/// ASLA fork (ASL-1866, Formbricks upgrade 1.2-01). Saved lists of choice options, reused across
+/// multiple-choice questions in a workspace (for example chapters, states, countries).
+///
+/// @property name - Display name, unique within the workspace
+/// @property options - The option labels, in order
+/// @property workspace - The owning workspace
+model OptionList {
+  id          String    @id @default(cuid())
+  createdAt   DateTime  @default(now()) @map(name: "created_at")
+  updatedAt   DateTime  @updatedAt @map(name: "updated_at")
+  name        String
+  options     String[]
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
 }
 
 /// Links surveys to their supported languages.

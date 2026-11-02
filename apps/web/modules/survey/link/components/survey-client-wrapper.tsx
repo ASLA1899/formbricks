@@ -5,9 +5,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Workspace } from "@formbricks/database/prisma-browser";
 import type { TRendererCustomCss } from "@formbricks/types/custom-css";
 import { getIngestedStorageKeys } from "@formbricks/types/embedded-data-resolver";
+import type { TResumedResponse } from "@formbricks/types/formbricks-surveys";
 import { TResponseData } from "@formbricks/types/responses";
 import { TSurvey, TSurveyStyling } from "@formbricks/types/surveys/types";
 import { TWorkspaceStyling } from "@formbricks/types/workspace";
+import { getEnabledLanguages, getLanguageCode } from "@/lib/i18n/utils";
 import { toJsWorkspaceStateSurvey } from "@/lib/survey/client-utils";
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
 import { CustomScriptsInjector } from "@/modules/survey/link/components/custom-scripts-injector";
@@ -20,6 +22,13 @@ import {
   warnOnMissingEmbeddedDataJoin,
 } from "@/modules/survey/link/lib/hidden-fields";
 import { getPrefillValue } from "@/modules/survey/link/lib/prefill";
+import {
+  type StoredVariableEntry,
+  clearStoredResumeId,
+  readStoredResume,
+  writeStoredResumeBlock,
+  writeStoredResumeId,
+} from "@/modules/survey/link/lib/resume-storage";
 import { getUserIdFromSearchParams } from "@/modules/survey/link/lib/user-id";
 import { getSurveyLanguageTag, getWebAppLocale, isRTLLanguage } from "@/modules/survey/link/lib/utils";
 import { SurveyInline } from "@/modules/ui/components/survey";
@@ -175,6 +184,114 @@ export const SurveyClientWrapper = ({
     []
   );
 
+  // Resume for shared-URL link surveys: the response id is kept in localStorage after the first
+  // submit and the unfinished response is fetched on revisit. Skipped for previews, contact surveys
+  // and single-use links (the server already tracks those), and when upstream offline support
+  // (IndexedDB) is on, which restores its own progress.
+  const isResumeEligible =
+    !isPreview && !contactId && !singleUseId && !offlineSupport && !survey.isVerifyEmailEnabled;
+  const [resumeStatus, setResumeStatus] = useState<"loading" | "ready">(
+    isResumeEligible ? "loading" : "ready"
+  );
+  const [resumedResponse, setResumedResponse] = useState<TResumedResponse | undefined>(undefined);
+  const [resumedLanguage, setResumedLanguage] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!isResumeEligible) return;
+    const stored = readStoredResume(survey.id);
+    const storedId = stored?.responseId;
+    if (!storedId) {
+      setResumeStatus("ready");
+      return;
+    }
+    let cancelled = false;
+    const url = `/api/v2/client/${survey.workspaceId}/responses/${encodeURIComponent(storedId)}?surveyId=${encodeURIComponent(survey.id)}`;
+    fetch(url, { headers: pinAuthToken ? { "x-pin-auth-token": pinAuthToken } : undefined })
+      .then(async (res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          // Gone or finished: start fresh. Other errors keep the id so a later visit can retry.
+          if (res.status === 404) clearStoredResumeId(survey.id);
+        } else {
+          const body = (await res.json()) as { data?: TResumedResponse & { data?: TResponseData } };
+          if (cancelled) return;
+          if (body.data?.id) {
+            setResumedResponse({
+              id: body.data.id,
+              data: body.data.data ?? {},
+              ttc: body.data.ttc ?? {},
+              // The browser's copy matches the saved block (Back may have rolled it back since the
+              // last submit); the server copy is the fallback.
+              variables: (stored?.blockId ? stored.variables : null) ?? body.data.variables ?? {},
+              language: body.data.language ?? null,
+              blockId: stored?.blockId ?? null,
+              history: stored?.history ?? [],
+              variableStack: stored?.variableStack ?? [],
+              requiredByMap: stored?.blockId ? stored.requiredByMap : {},
+            });
+            // Keep the language the respondent was answering in. "default" is the survey's default
+            // language and must be restored too, or a Spanish ?lang= link would override it. Codes
+            // that are no longer enabled fall back to the default.
+            if (body.data.language) {
+              const restored = getLanguageCode(getEnabledLanguages(survey.languages), body.data.language);
+              setCurrentLanguageCode(restored);
+              setResumedLanguage(restored);
+            }
+          } else {
+            clearStoredResumeId(survey.id);
+          }
+        }
+        setResumeStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setResumeStatus("ready");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isResumeEligible, survey.id, survey.workspaceId, pinAuthToken]);
+
+  // The first response acknowledgment can arrive after the respondent has already moved on, when no
+  // stored record exists yet to take the position. Keep the latest position and save it together
+  // with the id.
+  const latestPositionRef = useRef<
+    | {
+        blockId: string;
+        history: string[];
+        variableStack: StoredVariableEntry[];
+        variables: Record<string, string | number>;
+        requiredByMap: Record<string, string[]>;
+      }
+    | undefined
+  >(undefined);
+
+  const handleResponseIdReceived = useCallback(
+    (responseId: string) => {
+      if (isResumeEligible) writeStoredResumeId(survey.id, responseId, latestPositionRef.current);
+    },
+    [isResumeEligible, survey.id]
+  );
+
+  const handleResumeBlockChange = useCallback(
+    (
+      blockId: string,
+      history: string[],
+      variableStack: StoredVariableEntry[],
+      variables: Record<string, string | number>,
+      requiredByMap: Record<string, string[]>
+    ) => {
+      latestPositionRef.current = { blockId, history, variableStack, variables, requiredByMap };
+      if (isResumeEligible) {
+        writeStoredResumeBlock(survey.id, blockId, history, variableStack, variables, requiredByMap);
+      }
+    },
+    [isResumeEligible, survey.id]
+  );
+
+  const handleFinished = useCallback(() => {
+    clearStoredResumeId(survey.id);
+  }, [survey.id]);
+
   const handleResetSurvey = () => {
     if (survey.welcomeCard.enabled) {
       setBlockId("start");
@@ -182,6 +299,7 @@ export const SurveyClientWrapper = ({
       setBlockId(survey.blocks[0].id);
     }
     setResponseData({});
+    clearStoredResumeId(survey.id);
   };
   const jsSurvey = useMemo(() => toJsWorkspaceStateSurvey(survey), [survey]);
   const isCardless = styling.cardArrangement?.linkSurveys === "cardless";
@@ -238,6 +356,9 @@ export const SurveyClientWrapper = ({
     document.title = buildSurveyDocumentTitle(baseTitleRef.current, pageLabel);
   }, [pageLabel]);
 
+  // Hold the survey back until the resume decision is made, or the runtime starts with empty state.
+  if (resumeStatus === "loading") return null;
+
   return (
     <>
       {/* Inject custom scripts for tracking/analytics (self-hosted only) */}
@@ -272,7 +393,7 @@ export const SurveyClientWrapper = ({
           survey={jsSurvey}
           styling={styling}
           customCss={customCss}
-          languageCode={languageCode}
+          languageCode={resumedLanguage ?? languageCode}
           onLanguageChange={setCurrentLanguageCode}
           onPageChange={handlePageChange}
           isBrandingEnabled={workspace.linkSurveyBranding}
@@ -302,6 +423,10 @@ export const SurveyClientWrapper = ({
           recaptchaSiteKey={recaptchaSiteKey}
           isSpamProtectionEnabled={isSpamProtectionEnabled}
           offlineSupport={offlineSupport}
+          resumedResponse={resumedResponse}
+          onResponseIdReceived={handleResponseIdReceived}
+          onResumeBlockChange={handleResumeBlockChange}
+          onFinished={handleFinished}
           onOfflineStatusChange={offlineSupport ? handleOfflineStatusChange : undefined}
           showCardlessPreviewLogoSlot={isCardless && hasLogo}
         />

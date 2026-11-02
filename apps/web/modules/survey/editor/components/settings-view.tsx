@@ -15,6 +15,7 @@ import { SurveyPlacementCard } from "@/modules/survey/editor/components/survey-p
 import { TargetingLockedCard } from "@/modules/survey/editor/components/targeting-locked-card";
 import { WhenToSendCard } from "@/modules/survey/editor/components/when-to-send-card";
 import { type TSurveySchedulingConfig } from "@/modules/survey/scheduling/lib/config";
+import { SharingPanel } from "@/modules/survey/sharing/components/sharing-panel";
 
 interface SettingsViewProps {
   localSurvey: TSurvey;
@@ -37,6 +38,8 @@ interface SettingsViewProps {
   enterpriseLicenseRequestFormUrl: string;
   /** A save or publish was blocked because the survey has no trigger (ENG-2581). */
   hasTriggerError?: boolean;
+  /** ASLA fork (ASL-1881): show the per-person sharing panel. */
+  canManageSharing?: boolean;
 }
 
 export const SettingsView = ({
@@ -59,6 +62,7 @@ export const SettingsView = ({
   appSetupCompleted,
   enterpriseLicenseRequestFormUrl,
   hasTriggerError = false,
+  canManageSharing = false,
 }: Readonly<SettingsViewProps>) => {
   const isAppSurvey = localSurvey.type === "app";
 
@@ -120,6 +124,8 @@ export const SettingsView = ({
         surveySchedulingConfig={surveySchedulingConfig}
         locale={locale}
       />
+
+      {canManageSharing ? <SharingPanel surveyId={localSurvey.id} /> : null}
 
       <RecontactOptionsCard localSurvey={localSurvey} setLocalSurvey={setLocalSurvey} />
 

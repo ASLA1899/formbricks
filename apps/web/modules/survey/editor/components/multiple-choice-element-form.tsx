@@ -10,6 +10,7 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { getLanguageLabel } from "@formbricks/i18n-utils/utils";
 import {
+  TMultipleChoiceColumns,
   TMultipleChoiceOptionDisplayType,
   TSurveyElement,
   TSurveyElementChoice,
@@ -97,6 +98,11 @@ export const MultipleChoiceElementForm = ({
   const multipleChoiceOptionDisplayTypeOptions = [
     { value: "list", label: t("workspace.surveys.edit.list") },
     { value: "dropdown", label: t("workspace.surveys.edit.dropdown") },
+  ];
+
+  const multipleChoiceColumnsOptions = [
+    { value: "1", label: t("workspace.surveys.edit.one_column") },
+    { value: "2", label: t("workspace.surveys.edit.two_columns") },
   ];
 
   const updateChoice = (choiceIdx: number, updatedAttributes: Partial<TSurveyElementChoice>) => {
@@ -411,6 +417,21 @@ export const MultipleChoiceElementForm = ({
         </div>
       </div>
 
+      {(element.displayType ?? "list") === "list" && (
+        <div className="mt-3">
+          <Label>{t("workspace.surveys.edit.columns")}</Label>
+          <div className="mt-2">
+            <OptionsSwitch
+              options={multipleChoiceColumnsOptions}
+              currentOption={element.columns ?? "1"}
+              handleOptionChange={(value: string) =>
+                updateElement(elementIdx, { columns: value as TMultipleChoiceColumns })
+              }
+            />
+          </div>
+        </div>
+      )}
+
       <BulkEditOptionsModal
         isOpen={isBulkEditOpen}
         onClose={() => setIsBulkEditOpen(false)}
@@ -426,6 +447,7 @@ export const MultipleChoiceElementForm = ({
         localSurvey={localSurvey}
         surveyLanguageCodes={surveyLanguageCodes}
         locale={locale}
+        workspaceId={localSurvey.workspaceId}
       />
 
       {element.type === TSurveyElementTypeEnum.MultipleChoiceMulti && (

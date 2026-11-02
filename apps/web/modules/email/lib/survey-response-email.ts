@@ -160,6 +160,7 @@ export const buildSurveyResponseEmailHtml = async ({
   attachResponseData,
   includeVariables = false,
   includeHiddenFields = false,
+  fileLink,
   logoUrl,
   locale,
 }: {
@@ -169,6 +170,8 @@ export const buildSurveyResponseEmailHtml = async ({
   attachResponseData: boolean;
   includeVariables?: boolean;
   includeHiddenFields?: boolean;
+  /** Tracked download link for a follow-up file; rendered as a button in the email. */
+  fileLink?: { url: string; fileName: string };
   logoUrl?: string;
   locale?: TUserLocale;
 }): Promise<string> => {
@@ -181,6 +184,7 @@ export const buildSurveyResponseEmailHtml = async ({
     responseData: buildResponseData(survey, response, attachResponseData),
     variables: buildVariables(survey, response, attachResponseData, includeVariables),
     hiddenFields: buildHiddenFields(survey, response, attachResponseData, includeHiddenFields),
+    fileLink,
     // The whitelabel logo is stored as a relative `/storage/...` path, which an email client cannot
     // resolve — it has no origin to resolve against, so the `<img>` renders broken. Resolve it to an
     // absolute URL here, exactly like every other email sender does (see `@/modules/email`).
@@ -201,7 +205,8 @@ export type ResolveRecipientResult = { ok: true; email: string } | { ok: false; 
  *  - if `to` is itself a valid email, use it directly (teammate/user address);
  *  - otherwise treat `to` as a question / hidden-field id and read `response.data[to]`:
  *      - a string is parsed as an email,
- *      - an array (contact-info element) uses index `[2]` as the email,
+ *      - an array (legacy contact-info answer) uses index `[2]` as the email,
+ *      - an object (contact-info answer with custom fields) uses its `email` key,
  *  - anything missing/invalid returns `{ ok: false }` with a clear reason.
  */
 export const resolveResponseRecipient = (to: string, response: TResponse): ResolveRecipientResult => {
@@ -226,6 +231,18 @@ export const resolveResponseRecipient = (to: string, response: TResponse): Resol
   if (Array.isArray(toValueFromResponse)) {
     const emailAddress = toValueFromResponse[2];
     if (!emailAddress) {
+      return { ok: false, error: "Email address not found in response data" };
+    }
+    const parsedResult = z.email().safeParse(emailAddress);
+    if (parsedResult.success) {
+      return { ok: true, email: parsedResult.data };
+    }
+    return { ok: false, error: "Resolved email recipient is not a valid address" };
+  }
+
+  if (typeof toValueFromResponse === "object") {
+    const emailAddress = (toValueFromResponse as Record<string, unknown>).email;
+    if (typeof emailAddress !== "string" || !emailAddress) {
       return { ok: false, error: "Email address not found in response data" };
     }
     const parsedResult = z.email().safeParse(emailAddress);

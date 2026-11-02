@@ -169,6 +169,10 @@ export const ZStoredShuffleOptionWithDefault = z
 export const ZMultipleChoiceOptionDisplayType = z.enum(["list", "dropdown"]);
 export type TMultipleChoiceOptionDisplayType = z.infer<typeof ZMultipleChoiceOptionDisplayType>;
 
+// ASLA fork (ASL-1866): column count for the list layout. The dropdown layout ignores it.
+export const ZMultipleChoiceColumns = z.enum(["1", "2"]);
+export type TMultipleChoiceColumns = z.infer<typeof ZMultipleChoiceColumns>;
+
 // Multiple Choice Single Element
 export const ZSurveyMultipleChoiceSingleElement = ZSurveyElementBase.extend({
   type: z.literal(TSurveyElementTypeEnum.MultipleChoiceSingle),
@@ -178,6 +182,7 @@ export const ZSurveyMultipleChoiceSingleElement = ZSurveyElementBase.extend({
   shuffleOption: ZStoredShuffleOption,
   otherOptionPlaceholder: ZI18nString.optional(),
   displayType: ZMultipleChoiceOptionDisplayType.optional(),
+  columns: ZMultipleChoiceColumns.optional(),
 });
 
 // Multiple Choice Multi Element
@@ -190,6 +195,7 @@ export const ZSurveyMultipleChoiceMultiElement = ZSurveyElementBase.extend({
   otherOptionPlaceholder: ZI18nString.optional(),
   validation: ZValidation.optional(),
   displayType: ZMultipleChoiceOptionDisplayType.optional(),
+  columns: ZMultipleChoiceColumns.optional(),
 });
 
 // Union type for Multiple Choice Elements
@@ -287,6 +293,7 @@ export const ZSurveyDateElement = ZSurveyElementBase.extend({
   html: ZI18nString.optional(),
   format: z.enum(["M-d-y", "d-M-y", "y-M-d"]),
   validation: ZValidation.optional(),
+  dateKind: z.enum(["full", "monthYear"]).optional().default("full"),
 });
 
 export type TSurveyDateElement = z.infer<typeof ZSurveyDateElement>;
@@ -327,6 +334,7 @@ export const ZSurveyMatrixElement = ZSurveyElementBase.extend({
   columns: z.array(ZSurveyMatrixElementChoice),
   shuffleOption: ZStoredShuffleOptionWithDefault,
   validation: ZValidation.optional(),
+  otherOptionPlaceholder: ZI18nString.optional(),
 });
 
 export type TSurveyMatrixElement = z.infer<typeof ZSurveyMatrixElement>;
@@ -340,8 +348,39 @@ const ZToggleInputConfig = z.object({
 
 export type TInputFieldConfig = z.infer<typeof ZToggleInputConfig>;
 
+// Custom field option (for dropdown type)
+export const ZCustomFieldOption = z.object({
+  id: z.string(),
+  label: ZI18nString,
+});
+
+export type TCustomFieldOption = z.infer<typeof ZCustomFieldOption>;
+
+// Custom field type enum
+export const ZCustomFieldType = z.enum(["text", "number", "date", "email", "phone", "url", "dropdown"]);
+
+export type TCustomFieldType = z.infer<typeof ZCustomFieldType>;
+
+// Custom field definition
+export const ZCustomField = z.object({
+  id: z.string(),
+  label: z.string().min(1),
+  type: ZCustomFieldType,
+  show: z.boolean(),
+  required: z.boolean(),
+  placeholder: ZI18nString,
+  prefillFrom: z.string().optional(),
+  options: z.array(ZCustomFieldOption).optional(),
+  presetId: z.string().optional(),
+});
+
+export type TCustomField = z.infer<typeof ZCustomField>;
+
 export const ZSurveyAddressElement = ZSurveyElementBase.extend({
   type: z.literal(TSurveyElementTypeEnum.Address),
+  // Optional for backward compatibility: surveys created before these lines existed omit them (treated as hidden).
+  name: ZToggleInputConfig.optional(),
+  organization: ZToggleInputConfig.optional(),
   addressLine1: ZToggleInputConfig,
   addressLine2: ZToggleInputConfig,
   city: ZToggleInputConfig,
@@ -380,6 +419,8 @@ export const ZSurveyContactInfoElement = ZSurveyElementBase.extend({
   phone: ZToggleInputConfig,
   company: ZToggleInputConfig,
   validation: ZValidation.optional(),
+  customFields: z.array(ZCustomField).max(10).default([]),
+  fieldOrder: z.array(z.string()).optional(),
 });
 
 export type TSurveyContactInfoElement = z.infer<typeof ZSurveyContactInfoElement>;

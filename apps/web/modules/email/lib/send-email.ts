@@ -36,6 +36,7 @@ export type TEmailType =
   | "customization_preview"
   | "verified_survey_link"
   | "survey_follow_up"
+  | "survey_invitation"
   | "workflow_email";
 
 interface SendEmailDataProps {
@@ -48,6 +49,7 @@ interface SendEmailDataProps {
   html: string;
   /** Optional RFC 5322 Message-ID; nodemailer emits it as the `Message-ID` header. */
   messageId?: string;
+  attachments?: { filename: string; content: Buffer; contentType?: string }[];
 }
 
 const MAX_ADDRESS_LENGTH = 320;

@@ -23,9 +23,10 @@ const translations: Record<TranslationKey, TranslationValue> = {
   "emails.email_customization_preview_email_subject": "Formbricks Email Customization Preview",
   "emails.email_customization_preview_email_text":
     "This is an email preview to show you which logo will be rendered in the emails.",
-  "emails.email_footer_text_1": "Have a great day!",
-  "emails.email_footer_text_2": "The Formbricks Team",
-  "emails.email_template_text_1": "This email was sent via Formbricks.",
+  "emails.follow_up_file_download": "Download file",
+  "emails.email_footer_text_1": "Thank you,",
+  "emails.email_footer_text_2": "ASLA",
+  "emails.email_template_text_1": "American Society of Landscape Architects",
   "emails.embed_survey_preview_email_didnt_request": "Didn't request this?",
   "emails.embed_survey_preview_email_workspace_id": "Workspace ID",
   "emails.embed_survey_preview_email_fight_spam":
@@ -46,6 +47,10 @@ const translations: Record<TranslationKey, TranslationValue> = {
   "emails.invite_accepted_email_subject": "You've got a new organization member!",
   "emails.invite_accepted_email_text":
     "Just letting you know that {inviteeName} accepted your invitation. Have fun collaborating!",
+  "emails.invitation_button_label": "Take the survey",
+  "emails.invitation_eyebrow": "You’re invited",
+  "emails.invitation_fallback_link": "If the button doesn’t work, paste this link into your browser:",
+  "emails.invitation_heading": "We’d value your input.",
   "emails.invite_email_button_label": "Join organization",
   "emails.invite_email_heading": "Hey {inviteeName}",
   "emails.invite_email_text":

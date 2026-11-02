@@ -600,6 +600,9 @@ describe("copySurveyToOtherWorkspace", () => {
       "visibilityPending",
       "visibilityChangedAt",
       "visibilityChangedById",
+      // ASLA fork (ASL-1876): the invitation config names a segment of the source workspace and drives
+      // reminders for the source survey's recipients. The copy has no invitations, so it starts without one.
+      "invitationConfig",
     ]);
 
     await copySurveyToOtherWorkspace(sourceWorkspaceId, surveyId, sourceWorkspaceId, userId);

@@ -1,4 +1,4 @@
-import { Container, Heading, Text } from "react-email";
+import { Heading, Text } from "react-email";
 import { EmailTemplate } from "../../src/components/email-template";
 import { exampleData } from "../../src/lib/example-data";
 import { t as mockT } from "../../src/lib/mock-translate";
@@ -21,7 +21,7 @@ export function EmbedSurveyPreviewEmail({
 }: EmbedSurveyPreviewEmailProps): React.JSX.Element {
   return (
     <EmailTemplate forceLightMode logoUrl={logoUrl} t={t} {...legalProps}>
-      <Container>
+      <>
         <Heading>{t("emails.embed_survey_preview_email_heading")}</Heading>
         <Text className="text-sm">{t("emails.embed_survey_preview_email_text")}</Text>
         <Text className="text-sm">
@@ -32,7 +32,7 @@ export function EmbedSurveyPreviewEmail({
         <Text className="text-center text-sm text-slate-700">
           {t("emails.embed_survey_preview_email_workspace_id")}: {workspaceId}
         </Text>
-      </Container>
+      </>
     </EmailTemplate>
   );
 }
