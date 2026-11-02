@@ -2,6 +2,7 @@ import { CheckCheckIcon, MousePointerClickIcon, PhoneIcon } from "lucide-react";
 import React from "react";
 import { TResponseDataValue } from "@formbricks/types/responses";
 import { getAddressValuesInDisplayOrder } from "@formbricks/types/surveys/address-fields";
+import { normalizeContactInfoResponse } from "@formbricks/types/surveys/contact-info-response";
 import { TSurveyElement, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { TUserLocale } from "@formbricks/types/user";
@@ -128,8 +129,12 @@ export const RenderResponse: React.FC<RenderResponseProps> = ({
       }
       break;
     case TSurveyElementTypeEnum.ContactInfo:
-      if (Array.isArray(responseData)) {
-        return <ArrayResponse value={responseData} />;
+      if (Array.isArray(responseData) || (typeof responseData === "object" && responseData !== null)) {
+        const normalized = normalizeContactInfoResponse(responseData);
+        if (normalized) {
+          const displayValues = Object.values(normalized).filter((v) => v);
+          return <ArrayResponse value={displayValues} />;
+        }
       }
       break;
 

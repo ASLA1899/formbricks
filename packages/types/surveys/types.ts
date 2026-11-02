@@ -1905,7 +1905,9 @@ export const surveyRefinement = (rawSurvey: z.infer<typeof ZSurveyBase>, ctx: z.
             { ...phone, label: "Phone" },
           ];
 
-          if (fields.every((field) => !field.show)) {
+          const customFieldsVisible = element.customFields.some((cf) => cf.show);
+
+          if (fields.every((field) => !field.show) && !customFieldsVisible) {
             ctx.addIssue({
               code: "custom",
               message: `At least one field must be shown in the Contact Info question ${String(elementIndex + 1)} in block ${String(blockIndex + 1)}`,
@@ -1934,6 +1936,25 @@ export const surveyRefinement = (rawSurvey: z.infer<typeof ZSurveyBase>, ctx: z.
                   field.label.toLowerCase().replace(" ", ""),
                 ],
               });
+            }
+          });
+
+          // Validate custom field placeholders (placeholder is optional, so skip if empty)
+          element.customFields.forEach((cf, customFieldIndex) => {
+            if (cf.show && cf.placeholder.default.trim()) {
+              const multiLangIssue = validateElementLabels(
+                `Label for custom field ${cf.label}`,
+                cf.placeholder,
+                languages,
+                blockIndex,
+                elementIndex
+              );
+              if (multiLangIssue) {
+                ctx.addIssue({
+                  ...multiLangIssue,
+                  path: ["blocks", blockIndex, "elements", elementIndex, "customFields", customFieldIndex],
+                });
+              }
             }
           });
         }

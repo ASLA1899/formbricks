@@ -670,6 +670,26 @@ describe("validateElementResponse", () => {
       expect(result.errors.some((e) => e.ruleId === "__implicit_phone_field__")).toBe(true);
     });
 
+    test("validates object-format contact-info answers the same as arrays", () => {
+      const element: TSurveyElement = {
+        id: "contact1",
+        type: TSurveyElementTypeEnum.ContactInfo,
+        headline: { default: "Contact Info" },
+        firstName: { show: true, required: false, placeholder: { default: "First Name" } },
+        lastName: { show: false, required: false, placeholder: { default: "Last Name" } },
+        email: { show: true, required: false, placeholder: { default: "Email" } },
+        phone: { show: false, required: false, placeholder: { default: "Phone" } },
+        company: { show: false, required: false, placeholder: { default: "Company" } },
+        required: false,
+      } as unknown as TSurveyContactInfoElement;
+
+      const bad = validateElementResponse(element, { firstName: "John", email: "invalid-email" }, "en");
+      expect(bad.valid).toBe(false);
+      expect(bad.errors.some((e) => e.ruleId === "__implicit_email_field__")).toBe(true);
+      const good = validateElementResponse(element, { firstName: "John", email: "a@b.co" }, "en");
+      expect(good.valid).toBe(true);
+    });
+
     test("should not add implicit rule if explicit rule exists", () => {
       const element: TSurveyElement = {
         id: "contact1",

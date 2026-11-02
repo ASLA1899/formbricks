@@ -90,6 +90,24 @@ describe("resolveResponseRecipient", () => {
     });
   });
 
+  test("resolves a contact-info object answer using its email key", () => {
+    const contactResponse = {
+      ...response,
+      data: { contact: { firstName: "Jane", email: "jane@example.com", customFields: {} } },
+    } as unknown as TResponse;
+    expect(resolveResponseRecipient("contact", contactResponse)).toEqual({
+      ok: true,
+      email: "jane@example.com",
+    });
+  });
+
+  test("fails when a contact-info object answer has no email or an invalid one", () => {
+    const noEmail = { ...response, data: { contact: { firstName: "Jane" } } } as unknown as TResponse;
+    const badEmail = { ...response, data: { contact: { email: "nope" } } } as unknown as TResponse;
+    expect(resolveResponseRecipient("contact", noEmail).ok).toBe(false);
+    expect(resolveResponseRecipient("contact", badEmail).ok).toBe(false);
+  });
+
   test("fails when the id is missing from the response data", () => {
     const result = resolveResponseRecipient("missing", response);
     expect(result.ok).toBe(false);

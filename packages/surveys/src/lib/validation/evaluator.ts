@@ -418,6 +418,16 @@ const getFieldValue = (
     }
   }
 
+  if (
+    element.type === TSurveyElementTypeEnum.ContactInfo &&
+    elementValue &&
+    typeof elementValue === "object" &&
+    !Array.isArray(elementValue)
+  ) {
+    const fieldValue = (elementValue as Record<string, string>)[rule.field];
+    return fieldValue ?? "";
+  }
+
   if (element.type === TSurveyElementTypeEnum.ContactInfo && Array.isArray(elementValue)) {
     const contactFieldOrder: TContactInfoField[] = ["firstName", "lastName", "email", "phone", "company"];
     const fieldIndex = contactFieldOrder.indexOf(rule.field as TContactInfoField);
