@@ -1466,9 +1466,13 @@ describe("Response Utils", () => {
       expect(result[0]["person.email"]).toBe("test@example.com");
     });
 
-    test("matrix export maps regular rows by any language label and keeps Other separate", () => {
+    describe("matrix export row classification follows the response language", () => {
       const matrixSurvey = asRead({
         ...mockSurvey,
+        languages: [
+          { default: true, enabled: true, language: { id: "l1", code: "en" } },
+          { default: false, enabled: true, language: { id: "l2", code: "de" } },
+        ],
         blocks: [
           {
             id: "block1",
@@ -1491,21 +1495,30 @@ describe("Response Utils", () => {
             ],
           },
         ],
+      }) as TSurvey;
+      const headers = [["1. Rate - Speed", "1. Rate - Comfort", "1. Rate - Other"]];
+      const exportRow = (language: string | null, data: Record<string, string>) =>
+        getResponsesJson(
+          matrixSurvey,
+          [{ ...mockResponses[0], language, data: { m1: data } }] as unknown as TResponse[],
+          headers,
+          [],
+          false
+        )[0];
+
+      test("maps regular rows by the response language label and keeps Other separate", () => {
+        const row = exportRow("de", { Tempo: "Gut", Komfort: "Gut", Portability: "Gut" });
+        expect(row["1. Rate - Speed"]).toBe("Gut");
+        expect(row["1. Rate - Comfort"]).toBe("Gut");
+        expect(row["1. Rate - Other"]).toBe("Portability: Gut");
       });
-      const response = {
-        ...mockResponses[0],
-        data: { m1: { Tempo: "Gut", Komfort: "Gut", Portability: "Gut" } },
-      };
-      const result = getResponsesJson(
-        matrixSurvey as TSurvey,
-        [response] as TResponse[],
-        [["1. Rate - Speed", "1. Rate - Comfort", "1. Rate - Other"]],
-        [],
-        false
-      );
-      expect(result[0]["1. Rate - Speed"]).toBe("Gut");
-      expect(result[0]["1. Rate - Comfort"]).toBe("Gut");
-      expect(result[0]["1. Rate - Other"]).toBe("Portability: Gut");
+
+      test("Other text equal to another language's row label stays in Other", () => {
+        const row = exportRow(null, { Speed: "Good", Tempo: "Good" });
+        expect(row["1. Rate - Speed"]).toBe("Good");
+        expect(row["1. Rate - Comfort"]).toBe("");
+        expect(row["1. Rate - Other"]).toBe("Tempo: Good");
+      });
     });
 
     test("a computed field named `__proto__` keeps its value, and reaches both writers", async () => {

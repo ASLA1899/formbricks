@@ -125,8 +125,13 @@ const parseNumericValue = (value: TResponseDataValue): number | null => {
  * Date rules compare the span so the picker (which enables a month when any day in it is allowed)
  * and the validators agree.
  */
-const dateSpan = (value: string): { first: string; last: string } =>
-  /^\d{4}-\d{2}$/.test(value) ? { first: `${value}-01`, last: `${value}-31` } : { first: value, last: value };
+const dateSpan = (value: string): { first: string; last: string } => {
+  if (!/^\d{4}-\d{2}$/.test(value)) return { first: value, last: value };
+  const [year, month] = value.split("-").map(Number);
+  // Day 0 of the next month is the last day of this one (handles 28/29/30/31-day months)
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return { first: `${value}-01`, last: `${value}-${String(lastDay).padStart(2, "0")}` };
+};
 
 export const validators: Record<TValidationRuleType, TValidator> = {
   minLength: {

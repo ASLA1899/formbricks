@@ -802,14 +802,6 @@ export const getElementSummary = async (
         const columns = element.columns.map((column) => getLocalizedValue(column.label, "default"));
         let totalResponseCount = 0;
 
-        // Build set of known row labels across all languages for "other" detection
-        const knownRowLabels = new Set<string>();
-        regularMatrixRows.forEach((row) => {
-          Object.values(row.label ?? {}).forEach((label) => {
-            if (typeof label === "string" && label) knownRowLabels.add(label);
-          });
-        });
-
         // Initialize count object
         const countMap: Record<string, Record<string, number>> = rows.reduce(
           (acc: Record<string, Record<string, number>>, row) => {
@@ -852,8 +844,12 @@ export const getElementSummary = async (
               }
             });
 
-            // Collect "other" responses: any key not matching a known row label
+            // Collect "other" responses: any key that is not a regular row label in the language the
+            // respondent saw (a label from another language is Other text, as the renderer treats it)
             if (hasOtherRow) {
+              const knownRowLabels = new Set(
+                regularMatrixRows.map((row) => getLocalizedValue(row.label, responseLanguageCode))
+              );
               Object.entries(selectedResponses).forEach(([rowLabel, colLabel]) => {
                 if (!knownRowLabels.has(rowLabel) && colLabel) {
                   const colValue = element.columns.find((column) => {

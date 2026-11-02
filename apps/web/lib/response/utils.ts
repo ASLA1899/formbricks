@@ -437,11 +437,14 @@ export const getResponsesJson = (
         const matrixAnswer = answer as Record<string, string> | undefined;
         const regularRows = element.rows.filter((row) => row.id !== "other");
         const hasOtherRow = element.rows.some((row) => row.id === "other");
-        const rowLabelsFor = (row: (typeof regularRows)[number]) =>
-          Object.values(row.label).filter(
-            (label): label is string => typeof label === "string" && label !== ""
-          );
-        const knownRowLabels = new Set(regularRows.flatMap(rowLabelsFor));
+        // Classify rows in the language the respondent saw, the same way the renderer does: a key that
+        // is another language's label for a row is Other text here, not that row's answer.
+        const surveyLanguage = survey.languages?.find((l) => l.language.code === response.language);
+        const responseLanguageCode =
+          !response.language || surveyLanguage?.default ? "default" : response.language;
+        const rowLabelFor = (row: (typeof regularRows)[number]) =>
+          getLocalizedValue(row.label, responseLanguageCode);
+        const knownRowLabels = new Set(regularRows.map(rowLabelFor).filter((label) => label !== ""));
 
         elementHeadline.forEach((headline, index) => {
           if (answer) {
@@ -451,10 +454,8 @@ export const getResponsesJson = (
               jsonData[idx][headline] = otherEntry ? `${otherEntry[0]}: ${otherEntry[1]}` : "";
             } else {
               const row = regularRows[index];
-              const answerKey = row
-                ? rowLabelsFor(row).find((label) => matrixAnswer?.[label] !== undefined)
-                : undefined;
-              if (answerKey !== undefined && matrixAnswer) {
+              const answerKey = row ? rowLabelFor(row) : "";
+              if (answerKey !== "" && matrixAnswer?.[answerKey] !== undefined) {
                 jsonData[idx][headline] = matrixAnswer[answerKey];
               } else {
                 jsonData[idx][headline] = "";
