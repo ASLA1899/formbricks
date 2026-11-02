@@ -53,7 +53,7 @@ export interface TResumedResponse {
   /** Blocks the respondent came through to reach `blockId`, oldest first. Lets Back work after a resume. */
   history?: string[];
   /** Variable values before each submit in `history` (same order). Lets Back undo calculations after a resume. */
-  variableStack?: { questionId: string; variables: TResponseVariables }[];
+  variableStack?: { questionId?: string; variables: TResponseVariables }[];
 }
 
 export interface SurveyBaseProps {
@@ -161,7 +161,8 @@ export interface SurveyContainerProps extends Omit<SurveyBaseProps, "onFileUploa
   onResumeBlockChange?: (
     blockId: string,
     history: string[],
-    variableStack: { questionId: string; variables: TResponseVariables }[]
+    variableStack: { questionId?: string; variables: TResponseVariables }[],
+    variables: TResponseVariables
   ) => void;
   onOfflineStatusChange?: (status: {
     isOnline: boolean;

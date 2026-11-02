@@ -90,7 +90,7 @@ const restoreSurveyStateFromSnapshot = (
 };
 
 interface VariableStackEntry {
-  questionId: string;
+  questionId?: string;
   variables: TResponseVariables;
 }
 
@@ -405,9 +405,9 @@ export function Survey({
   // the welcome card and endings are not resume points.
   useEffect(() => {
     if (onResumeBlockChange && localSurvey.blocks.some((block) => block.id === blockId)) {
-      onResumeBlockChange(blockId, history, variableStack);
+      onResumeBlockChange(blockId, history, variableStack, currentVariables);
     }
-  }, [blockId, history, variableStack, localSurvey.blocks, onResumeBlockChange]);
+  }, [blockId, history, variableStack, currentVariables, localSurvey.blocks, onResumeBlockChange]);
   /**
    * The Embedded Data ingest contract (ENG-1845) applied to whatever the host handed us — URL params
    * for a link survey, `track({ hiddenFields })` or `setEmbeddedData` for an app one. Every caller
@@ -916,7 +916,7 @@ export function Survey({
     }
   };
 
-  const pushVariableState = (currentQuestionId: string) => {
+  const pushVariableState = (currentQuestionId: string | undefined) => {
     setVariableStack((prevStack) => [
       ...prevStack,
       { questionId: currentQuestionId, variables: { ...currentVariables } },

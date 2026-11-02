@@ -54,6 +54,7 @@ describe("resume-storage", () => {
       blockId: "b3",
       history: ["b1"],
       variableStack: [],
+      variables: null,
     });
   });
 
@@ -71,6 +72,7 @@ describe("resume-storage", () => {
       blockId: "b3",
       history: ["b1"],
       variableStack: [{ questionId: "q1", variables: { score: 1 } }],
+      variables: null,
     });
   });
 
@@ -81,6 +83,7 @@ describe("resume-storage", () => {
       blockId: null,
       history: [],
       variableStack: [],
+      variables: null,
     });
   });
 
@@ -100,6 +103,24 @@ describe("resume-storage", () => {
         ],
       })
     );
-    expect(readStoredResume("s1")?.variableStack).toEqual([{ questionId: "q2", variables: { a: "b" } }]);
+    // One bad entry voids the stack: it lines up with the history by index.
+    expect(readStoredResume("s1")?.variableStack).toEqual([]);
+  });
+
+  test("keeps snapshots of blocks submitted empty and the current variables", () => {
+    writeStoredResumeId("s1", "r1");
+    writeStoredResumeBlock(
+      "s1",
+      "b3",
+      ["b1", "b2"],
+      [{ questionId: "q1", variables: { score: 0 } }, { variables: { score: 5 } }],
+      { score: 0 }
+    );
+    const stored = readStoredResume("s1");
+    expect(stored?.variableStack).toEqual([
+      { questionId: "q1", variables: { score: 0 } },
+      { variables: { score: 5 } },
+    ]);
+    expect(stored?.variables).toEqual({ score: 0 });
   });
 });

@@ -6,18 +6,27 @@ export interface StoredResume {
   blockId: string | null;
   history: string[];
   variableStack: StoredVariableEntry[];
+  /** Variable values at the saved position (Back rolls these back; the server only has the last forward submit). */
+  variables: Record<string, string | number> | null;
 }
 
 export interface StoredVariableEntry {
-  questionId: string;
+  /** Undefined when the block was submitted with no answers (an untouched optional block). */
+  questionId?: string;
   variables: Record<string, string | number>;
 }
+
+const isVariableMap = (value: unknown): value is Record<string, string | number> =>
+  !!value &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  Object.values(value).every((v) => typeof v === "string" || typeof v === "number");
 
 const isVariableEntry = (entry: unknown): entry is StoredVariableEntry => {
   if (!entry || typeof entry !== "object") return false;
   const { questionId, variables } = entry as Record<string, unknown>;
-  if (typeof questionId !== "string" || !variables || typeof variables !== "object") return false;
-  return Object.values(variables).every((v) => typeof v === "string" || typeof v === "number");
+  if (questionId !== undefined && typeof questionId !== "string") return false;
+  return isVariableMap(variables);
 };
 
 export const readStoredResume = (surveyId: string): StoredResume | null => {
@@ -30,6 +39,7 @@ export const readStoredResume = (surveyId: string): StoredResume | null => {
       blockId?: unknown;
       history?: unknown;
       variableStack?: unknown;
+      variables?: unknown;
     };
     if (typeof parsed.responseId !== "string" || !parsed.responseId) return null;
     if (typeof parsed.updatedAt !== "number" || Date.now() - parsed.updatedAt > RESUME_MAX_AGE_MS) {
@@ -41,7 +51,12 @@ export const readStoredResume = (surveyId: string): StoredResume | null => {
       history: Array.isArray(parsed.history)
         ? parsed.history.filter((entry): entry is string => typeof entry === "string")
         : [],
-      variableStack: Array.isArray(parsed.variableStack) ? parsed.variableStack.filter(isVariableEntry) : [],
+      // All or nothing: the stack lines up with the history by index, so a bad entry voids it.
+      variableStack:
+        Array.isArray(parsed.variableStack) && parsed.variableStack.every(isVariableEntry)
+          ? parsed.variableStack
+          : [],
+      variables: isVariableMap(parsed.variables) ? parsed.variables : null,
     };
   } catch {
     return null;
@@ -56,7 +71,8 @@ export const writeStoredResumeBlock = (
   surveyId: string,
   blockId: string,
   history: string[] = [],
-  variableStack: StoredVariableEntry[] = []
+  variableStack: StoredVariableEntry[] = [],
+  variables?: Record<string, string | number>
 ): void => {
   try {
     const key = RESUME_STORAGE_PREFIX + surveyId;
@@ -65,7 +81,7 @@ export const writeStoredResumeBlock = (
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     globalThis.localStorage?.setItem(
       key,
-      JSON.stringify({ ...parsed, blockId, history, variableStack, updatedAt: Date.now() })
+      JSON.stringify({ ...parsed, blockId, history, variableStack, variables, updatedAt: Date.now() })
     );
   } catch {
     // ignore
@@ -76,7 +92,12 @@ export const writeStoredResumeBlock = (
 export const writeStoredResumeId = (
   surveyId: string,
   responseId: string,
-  position?: { blockId: string; history: string[]; variableStack: StoredVariableEntry[] }
+  position?: {
+    blockId: string;
+    history: string[];
+    variableStack: StoredVariableEntry[];
+    variables?: Record<string, string | number>;
+  }
 ): void => {
   try {
     globalThis.localStorage?.setItem(

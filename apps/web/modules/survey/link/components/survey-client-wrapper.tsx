@@ -220,7 +220,9 @@ export const SurveyClientWrapper = ({
               id: body.data.id,
               data: body.data.data ?? {},
               ttc: body.data.ttc ?? {},
-              variables: body.data.variables ?? {},
+              // The browser's copy matches the saved block (Back may have rolled it back since the
+              // last submit); the server copy is the fallback.
+              variables: (stored?.blockId ? stored.variables : null) ?? body.data.variables ?? {},
               language: body.data.language ?? null,
               blockId: stored?.blockId ?? null,
               history: stored?.history ?? [],
@@ -252,7 +254,13 @@ export const SurveyClientWrapper = ({
   // stored record exists yet to take the position. Keep the latest position and save it together
   // with the id.
   const latestPositionRef = useRef<
-    { blockId: string; history: string[]; variableStack: StoredVariableEntry[] } | undefined
+    | {
+        blockId: string;
+        history: string[];
+        variableStack: StoredVariableEntry[];
+        variables: Record<string, string | number>;
+      }
+    | undefined
   >(undefined);
 
   const handleResponseIdReceived = useCallback(
@@ -263,9 +271,14 @@ export const SurveyClientWrapper = ({
   );
 
   const handleResumeBlockChange = useCallback(
-    (blockId: string, history: string[], variableStack: StoredVariableEntry[]) => {
-      latestPositionRef.current = { blockId, history, variableStack };
-      if (isResumeEligible) writeStoredResumeBlock(survey.id, blockId, history, variableStack);
+    (
+      blockId: string,
+      history: string[],
+      variableStack: StoredVariableEntry[],
+      variables: Record<string, string | number>
+    ) => {
+      latestPositionRef.current = { blockId, history, variableStack, variables };
+      if (isResumeEligible) writeStoredResumeBlock(survey.id, blockId, history, variableStack, variables);
     },
     [isResumeEligible, survey.id]
   );
