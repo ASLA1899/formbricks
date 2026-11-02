@@ -34,6 +34,7 @@ import {
 } from "@/modules/ee/sso/lib/better-auth-hooks";
 import { ssoGenericOAuthConfig, ssoSocialProviders } from "@/modules/ee/sso/lib/better-auth-providers";
 import { ssoRecoverySignInPlugin } from "@/modules/ee/sso/lib/better-auth-recovery-signin";
+import { getPendingSsoIdentity } from "@/modules/ee/sso/lib/sso-request-context";
 import { runAfterAuthHooks } from "./after-auth-hooks";
 import { EMAIL_VERIFICATION_TTL_SECONDS, USE_SECURE_COOKIES } from "./auth-cookies";
 import {
@@ -337,7 +338,8 @@ export const auth = betterAuth({
           await rejectDisallowedSsoDomainOnSessionCreate(
             session,
             getSsoProviderFromContext(context) !== null,
-            SSO_ALLOWED_EMAIL_DOMAINS
+            SSO_ALLOWED_EMAIL_DOMAINS,
+            getPendingSsoIdentity()?.email
           );
           await rejectInactiveUserOnSessionCreate(session, context);
         },

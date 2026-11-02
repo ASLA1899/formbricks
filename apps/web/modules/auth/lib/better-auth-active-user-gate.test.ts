@@ -31,6 +31,22 @@ describe("rejectDisallowedSsoDomainOnSessionCreate", () => {
     await expect(rejectDisallowedSsoDomainOnSessionCreate(session, true, allowed)).resolves.toBeUndefined();
   });
 
+  test("refuses when the stored email is allowed but the current IdP email is not", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ email: "member@asla.org" } as never);
+
+    await expect(
+      rejectDisallowedSsoDomainOnSessionCreate(session, true, allowed, "guest@external.test")
+    ).rejects.toMatchObject({ status: "FORBIDDEN", body: { code: "sso_email_domain_not_permitted" } });
+  });
+
+  test("lets through when both the stored and current IdP emails are allowed", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ email: "member@asla.org" } as never);
+
+    await expect(
+      rejectDisallowedSsoDomainOnSessionCreate(session, true, allowed, "new.name@asla.org")
+    ).resolves.toBeUndefined();
+  });
+
   test("fails closed when the user row cannot be found", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
 

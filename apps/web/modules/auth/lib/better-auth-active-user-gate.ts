@@ -14,18 +14,25 @@ type SessionCreateHook = NonNullable<NonNullable<SessionDatabaseHook["create"]>[
  * SSO callback passes through, and throws BEFORE the `Session` row is written. Scoped to SSO callbacks
  * (`isSsoCallback`) so password and magic-link sessions are not affected. New users are refused earlier
  * by `gateSsoProvisioning`, so no orphan user row is left behind.
+ *
+ * Better Auth resolves a returning user by the linked issuer/subject, not by email, and the profile
+ * sync keeps the OLD stored address. So the STORED address alone is not enough: an allowed stored
+ * address whose IdP subject now authenticates with a disallowed address must be refused. When the
+ * callback captured the current IdP email (`currentIdpEmail`), it must pass the allowlist too.
  */
 export const rejectDisallowedSsoDomainOnSessionCreate = async (
   session: Parameters<SessionCreateHook>[0],
   isSsoCallback: boolean,
-  allowedDomains: readonly string[]
+  allowedDomains: readonly string[],
+  currentIdpEmail?: string | null
 ): Promise<void> => {
   if (!isSsoCallback || allowedDomains.length === 0) return;
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
     select: { email: true },
   });
-  if (!user || !isSsoEmailDomainAllowed(user.email, allowedDomains)) {
+  const currentEmailAllowed = !currentIdpEmail || isSsoEmailDomainAllowed(currentIdpEmail, allowedDomains);
+  if (!user || !currentEmailAllowed || !isSsoEmailDomainAllowed(user.email, allowedDomains)) {
     throw new APIError("FORBIDDEN", {
       message: "Your email domain is not permitted to sign in.",
       code: "sso_email_domain_not_permitted",
