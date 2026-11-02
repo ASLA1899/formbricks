@@ -8,9 +8,12 @@ import {
   ArrowRightLeftIcon,
   CopyIcon,
   EyeIcon,
+  FileTextIcon,
+  GlobeIcon,
   LinkIcon,
   MoreVertical,
   PencilIcon,
+  PrinterIcon,
   SquarePenIcon,
   TrashIcon,
   UsersIcon,
@@ -23,11 +26,15 @@ import { useTranslation } from "react-i18next";
 import { logger } from "@formbricks/logger";
 import type { TSurveyStatus } from "@formbricks/types/surveys/types";
 import { useWorkspace } from "@/app/(app)/workspaces/[workspaceId]/context/workspace-context";
+import {
+  type TSurveyExportFormat,
+  runSurveyExport,
+} from "@/app/(app)/workspaces/[workspaceId]/surveys/[surveyId]/(analysis)/summary/lib/survey-export/run-export";
 import { cn } from "@/lib/cn";
 import { getFormattedErrorMessage } from "@/lib/utils/error-message";
 import { getV3ApiErrorMessage } from "@/modules/api/lib/v3-client";
 import { EditPublicSurveyAlertDialog } from "@/modules/survey/components/edit-public-survey-alert-dialog";
-import { copySurveyToOtherWorkspaceAction } from "@/modules/survey/list/actions";
+import { copySurveyToOtherWorkspaceAction, getSurveyForExportAction } from "@/modules/survey/list/actions";
 import { CopySurveyModal } from "@/modules/survey/list/components/copy-survey-modal";
 import { RenameSurveyModal } from "@/modules/survey/list/components/rename-survey-modal";
 import { getCustomCssCopyNotice } from "@/modules/survey/list/lib/custom-css-notice";
@@ -115,9 +122,6 @@ export const SurveyDropDownMenu = ({
   const canChangeStatus = !isArchived && !isReadOnly && survey.status !== "draft";
   const isInProgress = survey.status === "inProgress";
   const canCollaborate = showVisibilityControls(surveyVisibilityGate, survey.access);
-  const hasVisibleActions =
-    canCollaborate ||
-    (isArchived ? canManageSurvey : canManageSurvey || canPreviewOrCopyLink || canChangeStatus);
 
   const getStatusLabel = (t: TFunction, status: TSurveyStatus): string => {
     switch (status) {
@@ -201,6 +205,28 @@ export const SurveyDropDownMenu = ({
     }
   };
 
+  // The list rows are a lightweight shape without the questions, so the full survey is loaded on demand.
+  const handleExport = async (format: TSurveyExportFormat) => {
+    setIsDropDownOpen(false);
+    try {
+      const result = await getSurveyForExportAction({ surveyId: survey.id });
+      if (!result?.data) {
+        toast.error(getFormattedErrorMessage(result) || t("workspace.surveys.export_load_failed"));
+        return;
+      }
+      await runSurveyExport(result.data, format);
+      const successMessages: Record<TSurveyExportFormat, string> = {
+        html: t("workspace.surveys.survey_exported_as_html"),
+        docx: t("workspace.surveys.survey_exported_as_docx"),
+        pdf: t("workspace.surveys.print_dialog_opened"),
+      };
+      toast.success(successMessages[format]);
+    } catch (error) {
+      logger.error(error, `Survey export as ${format} failed`);
+      toast.error(t("workspace.surveys.export_failed"));
+    }
+  };
+
   const handleEditforActiveSurvey = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsDropDownOpen(false);
@@ -231,10 +257,6 @@ export const SurveyDropDownMenu = ({
       setIsDuplicating(false);
     }
   };
-
-  if (!hasVisibleActions) {
-    return null;
-  }
 
   return (
     <div
@@ -331,6 +353,33 @@ export const SurveyDropDownMenu = ({
                 </button>
               </DropdownMenuItem>
             )}
+            <DropdownMenuItem
+              data-testid="export-survey-html"
+              icon={<GlobeIcon className="size-4" />}
+              onSelect={(e) => {
+                e.preventDefault();
+                void handleExport("html");
+              }}>
+              {t("workspace.surveys.export_as_html")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              data-testid="export-survey-docx"
+              icon={<FileTextIcon className="size-4" />}
+              onSelect={(e) => {
+                e.preventDefault();
+                void handleExport("docx");
+              }}>
+              {t("workspace.surveys.export_as_docx")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              data-testid="export-survey-pdf"
+              icon={<PrinterIcon className="size-4" />}
+              onSelect={(e) => {
+                e.preventDefault();
+                void handleExport("pdf");
+              }}>
+              {t("workspace.surveys.print_as_pdf")}
+            </DropdownMenuItem>
             {canChangeStatus && (
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger data-testid="survey-status-submenu" chevronSide="left">
