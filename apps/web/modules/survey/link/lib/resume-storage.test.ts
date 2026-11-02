@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test } from "vitest";
-import { clearStoredResumeId, readStoredResumeId, writeStoredResumeId } from "./resume-storage";
+import {
+  RESUME_MAX_AGE_MS,
+  clearStoredResumeId,
+  readStoredResumeId,
+  writeStoredResumeId,
+} from "./resume-storage";
 
 const store = new Map<string, string>();
 
@@ -21,6 +26,13 @@ describe("resume-storage", () => {
     expect(readStoredResumeId("s1")).toBe("r1");
     expect(readStoredResumeId("s2")).toBeNull();
     clearStoredResumeId("s1");
+    expect(readStoredResumeId("s1")).toBeNull();
+  });
+  test("ignores entries older than the max age", () => {
+    store.set(
+      "formbricks-resume-s1",
+      JSON.stringify({ responseId: "r1", updatedAt: Date.now() - RESUME_MAX_AGE_MS - 1000 })
+    );
     expect(readStoredResumeId("s1")).toBeNull();
   });
   test("ignores corrupt values", () => {

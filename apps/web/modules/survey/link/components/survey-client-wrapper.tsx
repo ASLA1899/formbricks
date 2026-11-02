@@ -185,7 +185,8 @@ export const SurveyClientWrapper = ({
   // submit and the unfinished response is fetched on revisit. Skipped for previews, contact surveys
   // and single-use links (the server already tracks those), and when upstream offline support
   // (IndexedDB) is on, which restores its own progress.
-  const isResumeEligible = !isPreview && !contactId && !singleUseId && !offlineSupport;
+  const isResumeEligible =
+    !isPreview && !contactId && !singleUseId && !offlineSupport && !survey.isVerifyEmailEnabled;
   const [resumeStatus, setResumeStatus] = useState<"loading" | "ready">(
     isResumeEligible ? "loading" : "ready"
   );

@@ -40,17 +40,19 @@ export const getResponseHandler = async ({
 
     const response = await getResponse(responseId);
     if (!response || response.surveyId !== surveyId || response.finished) return notFound;
+    // Contact and single-use responses are tracked server-side; the client never resumes them.
+    if (response.contact?.id || response.singleUseId) return notFound;
 
     const survey = await getSurvey(surveyId);
     if (!survey || survey.workspaceId !== resolved.workspaceId || survey.status !== "inProgress") {
       return notFound;
     }
-    if (survey.type !== "link") return notFound;
+    // Email-verified surveys resume only through their own gate, so a stored id cannot skip it.
+    if (survey.type !== "link" || survey.isVerifyEmailEnabled) return notFound;
     if (survey.pin && !verifyLinkSurveyPinToken(req.headers.get(PIN_TOKEN_HEADER), survey.id)) {
       return notFound;
     }
 
-    // The verified address is set server-side and never read back by the client (PUT strips it).
     const { [VERIFIED_EMAIL_RESPONSE_KEY]: _verifiedEmail, ...data } = response.data;
 
     return {

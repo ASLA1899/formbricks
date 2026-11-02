@@ -57,6 +57,19 @@ describe("getResponseHandler", () => {
     ["finished response", () => mocks.getResponse.mockResolvedValue({ ...partial, finished: true })],
     ["missing response", () => mocks.getResponse.mockResolvedValue(null)],
     ["surveyId mismatch", () => mocks.getResponse.mockResolvedValue({ ...partial, surveyId: "other" })],
+    ["contact response", () => mocks.getResponse.mockResolvedValue({ ...partial, contact: { id: "c1" } })],
+    ["single-use response", () => mocks.getResponse.mockResolvedValue({ ...partial, singleUseId: "su" })],
+    [
+      "email-verified survey",
+      () =>
+        mocks.getSurvey.mockResolvedValue({
+          id: "s1",
+          workspaceId: "w1",
+          status: "inProgress",
+          type: "link",
+          isVerifyEmailEnabled: true,
+        }),
+    ],
     ["unknown workspace", () => mocks.resolveClientApiIds.mockResolvedValue(null)],
     [
       "survey in another workspace",

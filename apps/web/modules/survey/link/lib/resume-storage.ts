@@ -1,11 +1,16 @@
 const RESUME_STORAGE_PREFIX = "formbricks-resume-";
+export const RESUME_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const readStoredResumeId = (surveyId: string): string | null => {
   try {
     const raw = globalThis.localStorage?.getItem(RESUME_STORAGE_PREFIX + surveyId);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { responseId?: unknown };
-    return typeof parsed.responseId === "string" && parsed.responseId ? parsed.responseId : null;
+    const parsed = JSON.parse(raw) as { responseId?: unknown; updatedAt?: unknown };
+    if (typeof parsed.responseId !== "string" || !parsed.responseId) return null;
+    if (typeof parsed.updatedAt !== "number" || Date.now() - parsed.updatedAt > RESUME_MAX_AGE_MS) {
+      return null;
+    }
+    return parsed.responseId;
   } catch {
     return null;
   }
