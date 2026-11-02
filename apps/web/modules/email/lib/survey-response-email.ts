@@ -160,6 +160,7 @@ export const buildSurveyResponseEmailHtml = async ({
   attachResponseData,
   includeVariables = false,
   includeHiddenFields = false,
+  fileLink,
   logoUrl,
   locale,
 }: {
@@ -169,6 +170,8 @@ export const buildSurveyResponseEmailHtml = async ({
   attachResponseData: boolean;
   includeVariables?: boolean;
   includeHiddenFields?: boolean;
+  /** Tracked download link for a follow-up file; rendered as a button in the email. */
+  fileLink?: { url: string; fileName: string };
   logoUrl?: string;
   locale?: TUserLocale;
 }): Promise<string> => {
@@ -181,6 +184,7 @@ export const buildSurveyResponseEmailHtml = async ({
     responseData: buildResponseData(survey, response, attachResponseData),
     variables: buildVariables(survey, response, attachResponseData, includeVariables),
     hiddenFields: buildHiddenFields(survey, response, attachResponseData, includeHiddenFields),
+    fileLink,
     // The whitelabel logo is stored as a relative `/storage/...` path, which an email client cannot
     // resolve — it has no origin to resolve against, so the `<img>` renders broken. Resolve it to an
     // absolute URL here, exactly like every other email sender does (see `@/modules/email`).

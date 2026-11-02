@@ -157,30 +157,30 @@ model Contact {
 /// @property ttc - Time to completion metrics
 /// @property meta - Additional metadata about the response
 model Response {
-  id                String              @id @default(cuid())
-  createdAt         DateTime            @default(now()) @map(name: "created_at")
-  updatedAt         DateTime            @default(now()) @updatedAt @map(name: "updated_at")
-  finished          Boolean             @default(false)
-  survey            Survey              @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  id                String                   @id @default(cuid())
+  createdAt         DateTime                 @default(now()) @map(name: "created_at")
+  updatedAt         DateTime                 @default(now()) @updatedAt @map(name: "updated_at")
+  finished          Boolean                  @default(false)
+  survey            Survey                   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   surveyId          String
-  contact           Contact?            @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contact           Contact?                 @relation(fields: [contactId], references: [id], onDelete: Cascade)
   contactId         String?
   endingId          String?
   /// [ResponseData]
-  data              Json                @default("{}")
+  data              Json                     @default("{}")
   /// [ResponseVariables]
-  variables         Json                @default("{}")
+  variables         Json                     @default("{}")
   /// [ResponseTtc]
-  ttc               Json                @default("{}")
+  ttc               Json                     @default("{}")
   /// [ResponseMeta]
-  meta              Json                @default("{}")
+  meta              Json                     @default("{}")
   /// Why a value in `data` will not read back as its declared Embedded Data type — a failed coercion
   /// or a truncated oversize value (ENG-1845). Server-computed on every ingest and never accepted
   /// from the client. Null means no ingest boundary has written it, which is not the same claim as
   /// an empty list: without this column a wrong-typed value is indistinguishable from an absent one,
   /// and surfacing that in the UI (v2) would have nothing to read.
   /// [ResponseIngestFlags]
-  ingestFlags       Json?               @map(name: "ingest_flags")
+  ingestFlags       Json?                    @map(name: "ingest_flags")
   tags              TagsOnResponses[]
   quotaLinks        ResponseQuotaLink[]
   /// [ResponseContactAttributes]
@@ -188,9 +188,10 @@ model Response {
   // singleUseId, used to prevent multiple responses
   singleUseId       String?
   language          String?
-  displayId         String?             @unique
-  display           Display?            @relation(fields: [displayId], references: [id])
+  displayId         String?                  @unique
+  display           Display?                 @relation(fields: [displayId], references: [id])
   workflowRuns      WorkflowRun[]
+  followUpFileLinks SurveyFollowUpFileLink[]
   invitation        SurveyInvitation?
 
   @@unique([surveyId, singleUseId])
@@ -555,16 +556,41 @@ model ResponseQuotaLink {
 /// @property trigger - Conditions that activate the follow-up
 /// @property action - Actions to take when triggered
 model SurveyFollowUp {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now()) @map(name: "created_at")
-  updatedAt DateTime @updatedAt @map(name: "updated_at")
-  survey    Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  id        String                   @id @default(cuid())
+  createdAt DateTime                 @default(now()) @map(name: "created_at")
+  updatedAt DateTime                 @updatedAt @map(name: "updated_at")
+  survey    Survey                   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   surveyId  String
   name      String
   /// [SurveyFollowUpTrigger]
   trigger   Json
   /// [SurveyFollowUpAction]
   action    Json
+  fileLinks SurveyFollowUpFileLink[]
+}
+
+/// One tracked download link per follow-up email sent with a file. The token is the public
+/// identifier used at /f/<token>; downloads are counted only when the recipient confirms (POST).
+model SurveyFollowUpFileLink {
+  id                String         @id @default(cuid())
+  createdAt         DateTime       @default(now()) @map(name: "created_at")
+  token             String         @unique
+  followUp          SurveyFollowUp @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  followUpId        String
+  response          Response       @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  responseId        String
+  recipientEmail    String
+  /// Snapshot of the file at send time, so links already sent keep serving the file that was emailed.
+  storageKey        String
+  fileName          String
+  contentType       String
+  fileSize          Int            @map(name: "file_size")
+  firstDownloadedAt DateTime?      @map(name: "first_downloaded_at")
+  lastDownloadedAt  DateTime?      @map(name: "last_downloaded_at")
+  downloadCount     Int            @default(0) @map(name: "download_count")
+
+  @@index([followUpId, createdAt])
+  @@index([responseId])
 }
 
 /// Tracks a single recipient invited to take a survey, plus response and reminder state (ASLA fork).
