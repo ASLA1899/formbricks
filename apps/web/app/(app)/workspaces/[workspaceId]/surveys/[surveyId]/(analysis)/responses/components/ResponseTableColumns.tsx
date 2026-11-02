@@ -36,6 +36,7 @@ import { cn } from "@/modules/ui/lib/utils";
 import {
   RESERVED_COLUMN_ENTRIES,
   getAddressFieldLabel,
+  getScopedAddressKey,
   getContactInfoFieldLabel,
   getReservedColumnIcon,
   getReservedColumnLabel,
@@ -135,7 +136,7 @@ const getElementColumnsData = (
             );
           },
           cell: ({ row }) => {
-            const responseValue = row.original.responseData[addressField];
+            const responseValue = row.original.responseData[getScopedAddressKey(element.id, addressField)];
             if (typeof responseValue === "string") {
               return <p className="text-slate-900">{responseValue}</p>;
             }

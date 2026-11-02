@@ -104,7 +104,7 @@ export const SingleResponseCardHeader = ({
                 {" · "}
                 {t("common.completed")} {formatDateTimeForDisplay(response.updatedAt, locale)}
                 {typeof response.ttc?._total === "number" && response.ttc._total > 0
-                  ? ` · ${formatDurationClock(response.ttc._total)}`
+                  ? ` · ${t("common.duration")} ${formatDurationClock(response.ttc._total)}`
                   : ""}
               </>
             )}

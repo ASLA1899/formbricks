@@ -12,7 +12,7 @@ import { TSurvey } from "@formbricks/types/surveys/types";
 import { TTag } from "@formbricks/types/tags";
 import { TUser, TUserLocale } from "@formbricks/types/user";
 import { ResponseTable } from "@/app/(app)/workspaces/[workspaceId]/surveys/[surveyId]/(analysis)/responses/components/ResponseTable";
-import { getReservedColumnValues } from "@/app/(app)/workspaces/[workspaceId]/surveys/[surveyId]/(analysis)/responses/lib/utils";
+import { getReservedColumnValues, getScopedAddressKey } from "@/app/(app)/workspaces/[workspaceId]/surveys/[surveyId]/(analysis)/responses/lib/utils";
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
 
 interface ResponseDataViewProps {
@@ -78,7 +78,11 @@ export const extractResponseData = (response: TResponseWithQuotas, survey: TSurv
         }
         break;
       case "address":
-        Object.assign(responseData, formatAddressData(responseValue, element as TSurveyAddressElement));
+        for (const [field, value] of Object.entries(
+          formatAddressData(responseValue, element as TSurveyAddressElement)
+        )) {
+          responseData[getScopedAddressKey(element.id, field)] = value;
+        }
         break;
       case "contactInfo":
         Object.assign(responseData, formatContactInfoData(responseValue));

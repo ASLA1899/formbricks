@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { TResponseWithQuotas } from "@formbricks/types/responses";
 import type { TSurveyAddressElement } from "@formbricks/types/surveys/elements";
 import type { TSurvey } from "@formbricks/types/surveys/types";
+import { getScopedAddressKey } from "../lib/utils";
 import { extractResponseData, formatAddressData } from "./ResponseDataView";
 
 vi.mock(
@@ -72,5 +73,29 @@ describe("extractResponseData", () => {
       data: { name: "Open text value", addr: ["1 Main St", "", "Austin", "TX", "78701", "USA", "", ""] },
     } as unknown as TResponseWithQuotas;
     expect(extractResponseData(response, survey).name).toBe("Open text value");
+  });
+
+  test("shown address name and organization are keyed per element and keep the open text answer", () => {
+    const survey = {
+      hiddenFields: { enabled: false, fieldIds: [] },
+      blocks: [
+        {
+          id: "b1",
+          name: "B1",
+          elements: [
+            { id: "name", type: "openText", headline: { default: "Name" }, required: false },
+            addressElement(true, true),
+          ],
+        },
+      ],
+    } as unknown as TSurvey;
+    const response = {
+      data: { name: "Project A", addr: ["1 Main St", "", "Austin", "TX", "78701", "USA", "Jane", "ASLA"] },
+    } as unknown as TResponseWithQuotas;
+    const data = extractResponseData(response, survey);
+    expect(data.name).toBe("Project A");
+    expect(data[getScopedAddressKey("addr", "name")]).toBe("Jane");
+    expect(data[getScopedAddressKey("addr", "organization")]).toBe("ASLA");
+    expect(data.addressLine1).toBe("1 Main St");
   });
 });
