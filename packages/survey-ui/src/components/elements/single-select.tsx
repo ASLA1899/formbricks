@@ -16,6 +16,7 @@ import {
 import { ElementError, getElementErrorAria } from "@/components/general/element-error";
 import { ElementHeader } from "@/components/general/element-header";
 import { Input } from "@/components/general/input";
+import { renderInlineMarkdown } from "@/lib/inline-markdown";
 import { FB_PART } from "@/lib/parts";
 import { useRovingRadioGroup } from "@/lib/use-roving-radio-group";
 import { cn } from "@/lib/utils";
@@ -82,6 +83,8 @@ interface SingleSelectProps {
   searchPlaceholder?: string;
   /** Message shown when search yields no results */
   searchNoResultsText?: string;
+  /** Columns for the list variant: "1" (default) or "2" (one column on narrow screens). Ignored by the dropdown variant. */
+  columns?: "1" | "2";
 }
 
 const useDropdownCommitState = ({
@@ -279,7 +282,7 @@ function SingleSelectDropdownVariant({
                   <span
                     data-fb-part={FB_PART.optionLabel}
                     className="font-input font-input-weight text-input-text">
-                    {option.label}
+                    {renderInlineMarkdown(option.label)}
                   </span>
                 </DropdownMenuRadioItem>
               ))}
@@ -292,7 +295,7 @@ function SingleSelectDropdownVariant({
                   <span
                     data-fb-part={FB_PART.optionLabel}
                     className="font-input font-input-weight text-input-text">
-                    {otherValue || otherOptionLabel}
+                    {otherValue || renderInlineMarkdown(otherOptionLabel)}
                   </span>
                 </DropdownMenuRadioItem>
               ) : null}
@@ -363,6 +366,7 @@ const getDropdownDisplayText = ({
 
 interface ListVariantProps {
   inputId: string;
+  columns?: "1" | "2";
   dir: Direction;
   disabled: boolean;
   errorMessage?: string;
@@ -475,7 +479,7 @@ function SingleSelectOptionItem({
         />
         <RadioIndicator />
         <span data-fb-part={FB_PART.optionLabel} className={cn("mx-3 grow", OPTION_LABEL_CLASS)}>
-          {option.label}
+          {renderInlineMarkdown(option.label)}
         </span>
       </span>
     </label>
@@ -483,6 +487,7 @@ function SingleSelectOptionItem({
 }
 
 function SingleSelectListVariant({
+  columns = "1",
   inputId,
   dir,
   disabled,
@@ -544,7 +549,7 @@ function SingleSelectListVariant({
   return (
     <div className="relative" data-element-input>
       <ElementError errorMessage={errorMessage} dir={dir} id={errorAria.errorId} />
-      <div className="w-full space-y-2">
+      <div className={cn("w-full", columns === "2" ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "space-y-2")}>
         {regularOptions.map(renderOption)}
         {hasOtherOption && otherOptionId ? (
           <OtherOptionLabel
@@ -640,7 +645,7 @@ function OtherOptionLabel({
         />
         <RadioIndicator />
         <span data-fb-part={FB_PART.optionLabel} className={cn("mr-3 ml-3 grow", OPTION_LABEL_CLASS)}>
-          {otherOptionLabel}
+          {renderInlineMarkdown(otherOptionLabel)}
         </span>
       </label>
       {/* The enclosing <fieldset role="radiogroup"> carries aria-describedby, but an ancestor's
@@ -682,6 +687,7 @@ function SingleSelect({
   dir = "auto",
   disabled = false,
   variant = "list",
+  columns = "1",
   placeholder = "Select an option...",
   otherOptionId,
   otherOptionLabel = "Other",
@@ -782,6 +788,7 @@ function SingleSelect({
           />
           <SingleSelectListVariant
             inputId={inputId}
+            columns={columns}
             dir={dir}
             disabled={disabled}
             errorMessage={errorMessage}

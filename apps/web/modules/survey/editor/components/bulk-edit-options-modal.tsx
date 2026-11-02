@@ -1,16 +1,25 @@
 "use client";
 
 import { createId } from "@paralleldrive/cuid2";
+import { Trash2Icon } from "lucide-react";
 import { type JSX, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { getLanguageLabel } from "@formbricks/i18n-utils/utils";
 import { TI18nString } from "@formbricks/types/i18n";
+import { TOptionList } from "@formbricks/types/option-list";
 import { TSurveyMultipleChoiceElement } from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { TUserLocale } from "@formbricks/types/user";
 import { createI18nString } from "@/lib/i18n/utils";
+import { getFormattedErrorMessage } from "@/lib/utils/error-message";
+import {
+  createOptionListAction,
+  deleteOptionListAction,
+  getOptionListsAction,
+} from "@/modules/survey/editor/option-list-actions";
 import { findElementLocation } from "@/modules/survey/editor/lib/blocks";
+import { DEFAULT_OPTION_LISTS } from "@/modules/survey/editor/lib/default-option-lists";
 import { findOptionUsedInLogic } from "@/modules/survey/editor/lib/utils";
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
 import { Button } from "@/modules/ui/components/button";
@@ -22,6 +31,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/modules/ui/components/dialog";
+import { Input } from "@/modules/ui/components/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/modules/ui/components/select";
 
 interface BulkEditOptionsModalProps {
   isOpen: boolean;
@@ -32,6 +49,7 @@ interface BulkEditOptionsModalProps {
   localSurvey: TSurvey;
   surveyLanguageCodes: string[];
   locale: TUserLocale;
+  workspaceId: string;
 }
 
 const parseUniqueLines = (content: string): string[] => {
@@ -68,11 +86,16 @@ export const BulkEditOptionsModal = ({
   localSurvey,
   surveyLanguageCodes,
   locale,
+  workspaceId,
 }: BulkEditOptionsModalProps): JSX.Element => {
   const selectedLanguageCode = "default";
   const { t } = useTranslation();
   const [textareaValue, setTextareaValue] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [savedLists, setSavedLists] = useState<TOptionList[]>([]);
+  const [selectedListId, setSelectedListId] = useState<string | undefined>(undefined);
+  const [newListName, setNewListName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const selectedLanguageName = useMemo(() => {
     if (localSurvey.languages.length <= 1) return null;
@@ -87,8 +110,25 @@ export const BulkEditOptionsModal = ({
     if (isOpen) {
       setTextareaValue(regularChoices.map((c) => c.label[selectedLanguageCode] || "").join("\n"));
       setValidationError(null);
+      setNewListName("");
+      setSelectedListId(undefined);
     }
   }, [isOpen, regularChoices, selectedLanguageCode]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let isCurrent = true;
+    getOptionListsAction({ workspaceId })
+      .then((result) => {
+        if (isCurrent && result?.data) setSavedLists(result.data);
+      })
+      .catch(() => {
+        // Saved lists are optional; the editor keeps working without them.
+      });
+    return () => {
+      isCurrent = false;
+    };
+  }, [isOpen, workspaceId]);
 
   const validateRemovedOptions = (newLabels: string[]): string | null => {
     const originalLabels = regularChoices.map((c) => c.label[selectedLanguageCode] || "");
@@ -130,6 +170,65 @@ export const BulkEditOptionsModal = ({
     });
   };
 
+  const handleLoadList = (listId: string) => {
+    const list = [...DEFAULT_OPTION_LISTS, ...savedLists].find((item) => item.id === listId);
+    if (!list) return;
+    setSelectedListId(listId);
+    setTextareaValue(list.options.join("\n"));
+    setValidationError(null);
+    toast.success(t("workspace.surveys.edit.list_loaded"));
+  };
+
+  const handleSaveList = async () => {
+    const name = newListName.trim();
+    if (!name) {
+      toast.error(t("workspace.surveys.edit.list_name_required"));
+      return;
+    }
+
+    const options = parseUniqueLines(textareaValue);
+    if (options.length === 0) {
+      toast.error(t("workspace.surveys.edit.cannot_save_empty_list"));
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const result = await createOptionListAction({ workspaceId, name, options });
+      if (result?.data) {
+        const created = result.data;
+        setSavedLists((lists) => [...lists, created].sort((a, b) => a.name.localeCompare(b.name)));
+        setSelectedListId(created.id);
+        setNewListName("");
+        toast.success(t("workspace.surveys.edit.list_saved_successfully"));
+      } else {
+        toast.error(getFormattedErrorMessage(result) || t("workspace.surveys.edit.failed_to_save_list"));
+      }
+    } catch {
+      toast.error(t("workspace.surveys.edit.failed_to_save_list"));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteList = async () => {
+    if (!selectedListId) return;
+    try {
+      const result = await deleteOptionListAction({ optionListId: selectedListId });
+      if (result?.serverError || result?.validationErrors) {
+        toast.error(getFormattedErrorMessage(result) || t("workspace.surveys.edit.failed_to_delete_list"));
+        return;
+      }
+      setSavedLists((lists) => lists.filter((list) => list.id !== selectedListId));
+      setSelectedListId(undefined);
+      toast.success(t("workspace.surveys.edit.list_deleted_successfully"));
+    } catch {
+      toast.error(t("workspace.surveys.edit.failed_to_delete_list"));
+    }
+  };
+
+  const isSavedListSelected = savedLists.some((list) => list.id === selectedListId);
+
   const handleSave = () => {
     const newLabels = parseUniqueLines(textareaValue);
     const error = validateRemovedOptions(newLabels);
@@ -162,7 +261,74 @@ export const BulkEditOptionsModal = ({
           <DialogDescription>{t("workspace.surveys.edit.bulk_edit_description")}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2">
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Select value={selectedListId ?? ""} onValueChange={handleLoadList}>
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder={t("workspace.surveys.edit.load_from_list")} />
+              </SelectTrigger>
+              <SelectContent>
+                {DEFAULT_OPTION_LISTS.length > 0 && (
+                  <>
+                    <div className="px-2 py-1.5 text-xs font-semibold text-slate-500">
+                      {t("workspace.surveys.edit.defaults")}
+                    </div>
+                    {DEFAULT_OPTION_LISTS.map((list) => (
+                      <SelectItem key={list.id} value={list.id}>
+                        {list.name}
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
+                {savedLists.length > 0 && (
+                  <>
+                    <div className="px-2 py-1.5 text-xs font-semibold text-slate-500">
+                      {t("workspace.surveys.edit.saved_lists")}
+                    </div>
+                    {savedLists.map((list) => (
+                      <SelectItem key={list.id} value={list.id}>
+                        {list.name}
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
+                {DEFAULT_OPTION_LISTS.length === 0 && savedLists.length === 0 && (
+                  <div className="px-2 py-4 text-center text-sm text-slate-500">
+                    {t("workspace.surveys.edit.no_saved_lists")}
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
+            {isSavedListSelected && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={t("workspace.surveys.edit.delete_list")}
+                title={t("workspace.surveys.edit.delete_list")}
+                onClick={handleDeleteList}>
+                <Trash2Icon className="h-4 w-4 text-slate-500" />
+              </Button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Input
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+              placeholder={t("workspace.surveys.edit.list_name")}
+              maxLength={100}
+              className="flex-1"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleSaveList}
+              disabled={isSaving || !newListName.trim()}>
+              {t("workspace.surveys.edit.save_as_list")}
+            </Button>
+          </div>
+
           <textarea
             value={textareaValue}
             onChange={(e) => {
