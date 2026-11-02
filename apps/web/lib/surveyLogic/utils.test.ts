@@ -912,6 +912,7 @@ describe("surveyLogic", () => {
               id: "dateQ",
               type: TSurveyElementTypeEnum.Date,
               format: "M-d-y",
+              dateKind: "full",
               headline: { default: "Date Question" },
               required: true,
             },

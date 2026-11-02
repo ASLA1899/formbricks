@@ -109,8 +109,8 @@ export const DateElementForm = ({
           <OptionsSwitch
             options={dateKindOptions}
             currentOption={element.dateKind ?? "full"}
-            handleOptionChange={(value: "full" | "monthYear") =>
-              updateElement(elementIdx, { dateKind: value })
+            handleOptionChange={(value: string) =>
+              updateElement(elementIdx, { dateKind: value === "monthYear" ? "monthYear" : "full" })
             }
           />
         </div>

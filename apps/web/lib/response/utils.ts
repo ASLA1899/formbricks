@@ -434,6 +434,7 @@ export const getResponsesJson = (
 
       if (element.type === "matrix") {
         // For matrix elements, we need to handle each row separately
+        const matrixAnswer = answer as Record<string, string> | undefined;
         const regularRows = element.rows.filter((row) => row.id !== "other");
         const hasOtherRow = element.rows.some((row) => row.id === "other");
         const knownRowLabels = new Set(regularRows.map((row) => row.label.default));
@@ -442,14 +443,12 @@ export const getResponsesJson = (
           if (answer) {
             if (hasOtherRow && index === regularRows.length) {
               // Last column is the "Other" row — find the response key not matching any known row
-              const otherEntry = Object.entries(answer as Record<string, string>).find(
-                ([key]) => !knownRowLabels.has(key)
-              );
+              const otherEntry = Object.entries(matrixAnswer ?? {}).find(([key]) => !knownRowLabels.has(key));
               jsonData[idx][headline] = otherEntry ? `${otherEntry[0]}: ${otherEntry[1]}` : "";
             } else {
               const row = regularRows[index];
-              if (row && row.label.default && answer[row.label.default] !== undefined) {
-                jsonData[idx][headline] = answer[row.label.default];
+              if (row && row.label.default && matrixAnswer?.[row.label.default] !== undefined) {
+                jsonData[idx][headline] = matrixAnswer[row.label.default];
               } else {
                 jsonData[idx][headline] = "";
               }

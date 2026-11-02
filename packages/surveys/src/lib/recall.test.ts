@@ -14,6 +14,8 @@ vi.mock("./i18n", () => ({
 
 // Mock date-time functions as they are used internally and we want to isolate recall logic
 vi.mock("./date-time", () => ({
+  isMonthYearString: (val: string) => /^\d{4}-\d{2}$/.test(val),
+  formatMonthYear: vi.fn((val: string) => `${val}_month_year`),
   isValidDateString: (val: string) => /^\d{4}-\d{2}-\d{2}$/.test(val) || /^\d{2}-\d{2}-\d{4}$/.test(val),
   formatDateWithOrdinal: vi.fn(
     (date: Date) =>
@@ -80,6 +82,14 @@ describe("replaceRecallInfo", () => {
     replaceRecallInfo(text, responseData, variables, "fr-FR");
 
     expect(vi.mocked(formatDateWithOrdinal)).toHaveBeenCalledWith(expect.any(Date), "fr-FR");
+  });
+
+  test("should format month & year values without a day", () => {
+    const text = "Started: #recall:startMonth/fallback:N/A#.";
+
+    expect(replaceRecallInfo(text, { startMonth: "2025-05" }, {}, "en-US")).toBe(
+      "Started: 2025-05_month_year."
+    );
   });
 
   test("should join array values with a comma and space", () => {
