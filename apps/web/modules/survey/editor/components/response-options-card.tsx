@@ -147,6 +147,16 @@ export const ResponseOptionsCard = ({
     setLocalSurvey({ ...localSurvey, isBackButtonHidden: !localSurvey.isBackButtonHidden });
   };
 
+  const hasRecordNumberHiddenField = Boolean(
+    localSurvey.hiddenFields?.fieldIds?.some((id) =>
+      ["recordnumber", "customerid", "contactid"].includes(id.toLowerCase())
+    )
+  );
+
+  const handleSnowflakeSyncToggle = () => {
+    setLocalSurvey({ ...localSurvey, snowflakeSync: !localSurvey.snowflakeSync });
+  };
+
   const handleAutoProgressToggle = () => {
     setLocalSurvey({ ...localSurvey, isAutoProgressingEnabled: !localSurvey.isAutoProgressingEnabled });
   };
@@ -569,6 +579,17 @@ export const ResponseOptionsCard = ({
             onToggle={handleHideBackButtonToggle}
             title={t("workspace.surveys.edit.hide_back_button")}
             description={t("workspace.surveys.edit.hide_back_button_description")}
+          />
+          <AdvancedOptionToggle
+            htmlId="snowflakeSync"
+            isChecked={localSurvey.snowflakeSync ?? false}
+            onToggle={handleSnowflakeSyncToggle}
+            title={t("workspace.surveys.edit.snowflake_sync")}
+            description={
+              localSurvey.snowflakeSync && !hasRecordNumberHiddenField
+                ? t("workspace.surveys.edit.snowflake_sync_no_record_number_warning")
+                : t("workspace.surveys.edit.snowflake_sync_description")
+            }
           />
           {/*
            * Disabled while anonymizing, because anonymize overrides it: the ingest gate drops

@@ -1099,6 +1099,7 @@ export const ZSurveyBase = z.object({
   isVerifyEmailEnabled: z.boolean(),
   recaptcha: ZSurveyRecaptcha.nullable(),
   isBackButtonHidden: z.boolean(),
+  snowflakeSync: z.boolean().optional(),
   isAutoProgressingEnabled: z.boolean().optional().prefault(false),
   isCaptureIpEnabled: z.boolean(),
   /**

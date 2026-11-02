@@ -10,6 +10,7 @@ import { assertOrganizationAIConfigured } from "@/lib/ai/service";
 import { assertCan } from "@/lib/authorization";
 import { capturePostHogEvent } from "@/lib/posthog";
 import { getResponseCountBySurveyId } from "@/lib/response/service";
+import { deleteResponsesFromSnowflake } from "@/lib/snowflake/sync";
 import { getSurvey, updateSurvey } from "@/lib/survey/service";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
 import { convertToCsv } from "@/lib/utils/file-conversion";
@@ -91,13 +92,18 @@ export const resetSurveyAction = authenticatedActionClient.inputSchema(ZResetSur
       throw new OperationNotAllowedError("Cannot reset an archived survey.");
     }
 
-    const { deletedResponsesCount, deletedDisplaysCount } = await deleteResponsesAndDisplaysForSurvey(
-      parsedInput.surveyId
-    );
+    const { deletedResponsesCount, deletedDisplaysCount, deletedResponseIds } =
+      await deleteResponsesAndDisplaysForSurvey(parsedInput.surveyId);
+
+    // Only the responses this reset deleted leave Snowflake. A response submitted during the reset survives
+    // locally, and its warehouse row must survive too. A sync job that is still writing a deleted response
+    // removes its own rows (it re-checks that the response exists). A failure is logged and the reset goes on.
+    const snowflakeCleanedUp = await deleteResponsesFromSnowflake(deletedResponseIds.map((id) => ({ id })));
 
     ctx.auditLoggingCtx.newObject = {
       deletedResponsesCount: deletedResponsesCount,
       deletedDisplaysCount: deletedDisplaysCount,
+      snowflakeCleanedUp,
     };
 
     return {

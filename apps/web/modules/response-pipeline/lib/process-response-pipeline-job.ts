@@ -17,6 +17,7 @@ import { handleFeedbackSourcePipeline } from "@/lib/feedback-source/pipeline-han
 import { getIntegrations } from "@/lib/integration/service";
 import { isDatabasePoolExhaustionError } from "@/lib/jobs/pool-exhaustion";
 import { getResponseCountBySurveyId } from "@/lib/response/service";
+import { syncResponseToSnowflake } from "@/lib/snowflake/sync";
 import { isSurveyOutboundAllowed, surveyOutboundVisibilitySelect } from "@/lib/survey/visibility/outbound";
 import { sendTelemetryEvents } from "@/lib/telemetry/usage-update";
 import { isNewReleaseWorkEnabled } from "@/lib/upgrade/compatibility";
@@ -63,6 +64,7 @@ const pipelineSurveySelect = {
   embeddedDataLinks: selectSurveyEmbeddedDataLinks,
   followUps: true,
   autoComplete: true,
+  snowflakeSync: true,
   // ASLA fork: surveys with no invitation config skip the invitation lookup on responseFinished.
   invitationConfig: true,
   languages: {
@@ -637,6 +639,12 @@ const runOutboundResponseFinishedEffects = async ({
     recordSurveyOutboundSkipped("integration");
     recordSurveyOutboundSkipped("feedback_source");
     if (survey.followUps?.length) recordSurveyOutboundSkipped("follow_up", survey.followUps.length);
+    if (survey.snowflakeSync) {
+      logger.info(
+        { ...logContext, reason: "survey_not_workspace_visible" },
+        "Response pipeline skipped Snowflake sync for a survey that is not workspace-visible"
+      );
+    }
     return;
   }
 
@@ -664,6 +672,11 @@ const runOutboundResponseFinishedEffects = async ({
       },
       "Response pipeline feedbackSource handling failed"
     );
+  }
+
+  // The sync swallows its own errors (a warehouse outage must not fail the job or its retries).
+  if (survey.snowflakeSync) {
+    await syncResponseToSnowflake(survey, data.response);
   }
 
   await handleFollowUpsSafely({

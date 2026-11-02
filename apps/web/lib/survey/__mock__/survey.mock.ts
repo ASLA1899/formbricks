@@ -206,6 +206,7 @@ const baseSurveyProperties = {
   questions: [],
   blocks: mockBlocks as unknown as SurveyMock["blocks"],
   isBackButtonHidden: false,
+  snowflakeSync: false,
   isAutoProgressingEnabled: false,
   isCaptureIpEnabled: false,
   isAnonymizeResponsesEnabled: false,

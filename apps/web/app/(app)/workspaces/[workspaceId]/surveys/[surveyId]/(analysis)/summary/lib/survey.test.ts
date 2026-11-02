@@ -40,6 +40,8 @@ const mockResponsePages = (...pages: ScannedResponse[][]) => {
   findMany.mockResolvedValue([] as never);
 };
 
+const deletedRows = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `response-${i}` }));
+
 beforeEach(() => {
   // Default: a survey with no file-upload element and no responses to scan.
   mockSurvey(surveyWithoutFileUpload);
@@ -52,7 +54,7 @@ describe("Tests for deleteResponsesAndDisplaysForSurvey service", () => {
   describe("Happy Path", () => {
     test("Deletes all responses and displays for a survey", async () => {
       // Mock $transaction to return the results directly
-      vi.mocked(prisma.$transaction).mockResolvedValue([{ count: 5 }, { count: 3 }]);
+      vi.mocked(prisma.$transaction).mockResolvedValue([deletedRows(5), { count: 3 }]);
 
       const result = await deleteResponsesAndDisplaysForSurvey(surveyId);
 
@@ -60,11 +62,12 @@ describe("Tests for deleteResponsesAndDisplaysForSurvey service", () => {
       expect(result).toEqual({
         deletedResponsesCount: 5,
         deletedDisplaysCount: 3,
+        deletedResponseIds: ["response-0", "response-1", "response-2", "response-3", "response-4"],
       });
     });
 
     test("runs the reset on its own execution budget rather than the client default (ENG-3285)", async () => {
-      vi.mocked(prisma.$transaction).mockResolvedValue([{ count: 0 }, { count: 0 }]);
+      vi.mocked(prisma.$transaction).mockResolvedValue([deletedRows(0), { count: 0 }]);
 
       await deleteResponsesAndDisplaysForSurvey(surveyId);
 
@@ -74,13 +77,14 @@ describe("Tests for deleteResponsesAndDisplaysForSurvey service", () => {
 
     test("Handles case with no responses or displays to delete", async () => {
       // Mock $transaction to return zero counts
-      vi.mocked(prisma.$transaction).mockResolvedValue([{ count: 0 }, { count: 0 }]);
+      vi.mocked(prisma.$transaction).mockResolvedValue([deletedRows(0), { count: 0 }]);
 
       const result = await deleteResponsesAndDisplaysForSurvey(surveyId);
 
       expect(result).toEqual({
         deletedResponsesCount: 0,
         deletedDisplaysCount: 0,
+        deletedResponseIds: [],
       });
     });
 
@@ -97,7 +101,7 @@ describe("Tests for deleteResponsesAndDisplaysForSurvey service", () => {
         },
         responseWithFiles("response-2", ["file3.png"]),
       ]);
-      vi.mocked(prisma.$transaction).mockResolvedValue([{ count: 2 }, { count: 0 }]);
+      vi.mocked(prisma.$transaction).mockResolvedValue([deletedRows(2), { count: 0 }]);
 
       await deleteResponsesAndDisplaysForSurvey(surveyId);
 
@@ -119,7 +123,7 @@ describe("Tests for deleteResponsesAndDisplaysForSurvey service", () => {
       }) as never);
       vi.mocked(prisma.$transaction).mockImplementation((() => {
         callOrder.push("delete");
-        return Promise.resolve([{ count: 1 }, { count: 0 }]) as never;
+        return Promise.resolve([deletedRows(1), { count: 0 }]) as never;
       }) as never);
       deleteResponseFileUrls.mockImplementation(async () => {
         callOrder.push("storage");
@@ -142,7 +146,7 @@ describe("Tests for deleteResponsesAndDisplaysForSurvey service", () => {
 
       mockSurvey(surveyWithFileUpload);
       mockResponsePages(firstPage, secondPage);
-      vi.mocked(prisma.$transaction).mockResolvedValue([{ count: 501 }, { count: 0 }]);
+      vi.mocked(prisma.$transaction).mockResolvedValue([deletedRows(501), { count: 0 }]);
 
       await deleteResponsesAndDisplaysForSurvey(surveyId);
 
@@ -180,7 +184,7 @@ describe("Tests for deleteResponsesAndDisplaysForSurvey service", () => {
 
       mockSurvey(surveyWithFileUpload);
       mockResponsePages(responses);
-      vi.mocked(prisma.$transaction).mockResolvedValue([{ count: 250 }, { count: 0 }]);
+      vi.mocked(prisma.$transaction).mockResolvedValue([deletedRows(250), { count: 0 }]);
 
       await deleteResponsesAndDisplaysForSurvey(surveyId);
 
@@ -208,7 +212,7 @@ describe("Tests for deleteResponsesAndDisplaysForSurvey service", () => {
           },
         },
       ]);
-      vi.mocked(prisma.$transaction).mockResolvedValue([{ count: 1 }, { count: 0 }]);
+      vi.mocked(prisma.$transaction).mockResolvedValue([deletedRows(1), { count: 0 }]);
 
       await deleteResponsesAndDisplaysForSurvey(surveyId);
 
@@ -218,7 +222,7 @@ describe("Tests for deleteResponsesAndDisplaysForSurvey service", () => {
 
     test("Skips storage cleanup when the survey no longer exists", async () => {
       mockSurvey(null);
-      vi.mocked(prisma.$transaction).mockResolvedValue([{ count: 0 }, { count: 0 }]);
+      vi.mocked(prisma.$transaction).mockResolvedValue([deletedRows(0), { count: 0 }]);
 
       await deleteResponsesAndDisplaysForSurvey(surveyId);
 
@@ -237,7 +241,7 @@ describe("Tests for deleteResponsesAndDisplaysForSurvey service", () => {
           data: { [fileUploadElement.id]: [42, null] as unknown as string[] },
         },
       ]);
-      vi.mocked(prisma.$transaction).mockResolvedValue([{ count: 2 }, { count: 0 }]);
+      vi.mocked(prisma.$transaction).mockResolvedValue([deletedRows(2), { count: 0 }]);
 
       await deleteResponsesAndDisplaysForSurvey(surveyId);
 
@@ -266,7 +270,7 @@ describe("Tests for deleteResponsesAndDisplaysForSurvey service", () => {
           },
         },
       ]);
-      vi.mocked(prisma.$transaction).mockResolvedValue([{ count: 1 }, { count: 0 }]);
+      vi.mocked(prisma.$transaction).mockResolvedValue([deletedRows(1), { count: 0 }]);
 
       await deleteResponsesAndDisplaysForSurvey(surveyId);
 
@@ -303,7 +307,7 @@ describe("Tests for deleteResponsesAndDisplaysForSurvey service", () => {
     test("Reports the reset as successful when storage cleanup fails", async () => {
       mockSurvey(surveyWithFileUpload);
       mockResponsePages([responseWithFiles("response-1", ["file1.png"])]);
-      vi.mocked(prisma.$transaction).mockResolvedValue([{ count: 1 }, { count: 0 }]);
+      vi.mocked(prisma.$transaction).mockResolvedValue([deletedRows(1), { count: 0 }]);
       deleteResponseFileUrls.mockRejectedValue(new Error("storage down"));
       const loggerSpy = vi.spyOn(logger, "error").mockImplementation(() => undefined);
 
@@ -311,7 +315,11 @@ describe("Tests for deleteResponsesAndDisplaysForSurvey service", () => {
       // reset the caller would retry — it is logged and the counts still come back.
       const result = await deleteResponsesAndDisplaysForSurvey(surveyId);
 
-      expect(result).toEqual({ deletedResponsesCount: 1, deletedDisplaysCount: 0 });
+      expect(result).toEqual({
+        deletedResponsesCount: 1,
+        deletedDisplaysCount: 0,
+        deletedResponseIds: ["response-0"],
+      });
       expect(loggerSpy).toHaveBeenCalled();
 
       loggerSpy.mockRestore();

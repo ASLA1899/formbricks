@@ -8,6 +8,7 @@ import { type TKeysetCursor, keysetOrderBy, keysetPagePredicate } from "@/app/ap
 import { transformQuestionsToBlocks } from "@/app/lib/api/survey-transformation";
 import { deleteDisplay } from "@/lib/display/service";
 import { inlineSurveyEmbeddedFields, selectSurveyEmbeddedDataLinks } from "@/lib/embedded-data/survey-fields";
+import { deleteResponseFromSnowflake, deleteResponsesFromSnowflake } from "@/lib/snowflake/sync";
 import type { TSurveyActorContext } from "@/lib/survey/visibility/actor-context";
 import { andVisibleSurveys, visibleSurveySqlPredicate } from "@/lib/survey/visibility/predicate";
 import { deleteResponseFileUrls } from "@/modules/storage/lib/delete-response-files";
@@ -221,6 +222,9 @@ export async function deleteScopedResponse(
     }
   }
 
+  // Best effort and after the commit; it logs and swallows its own failures.
+  await deleteResponseFromSnowflake(row);
+
   return row;
 }
 
@@ -256,7 +260,7 @@ export async function deleteScopedResponses(
   responseIds: string[],
   { visibleSurveyWhere = {}, workspaceId }: TWorkspaceScope
 ): Promise<TBatchDeleteResult> {
-  let outcome: TBatchDeleteResult & { fileUrls: string[] };
+  let outcome: TBatchDeleteResult & { fileUrls: string[]; deletedRows: { id: string; surveyId: string }[] };
 
   try {
     outcome = await prisma.$transaction(async (tx) => {
@@ -268,7 +272,7 @@ export async function deleteScopedResponses(
       });
 
       if (rows.length === 0) {
-        return { deleted: 0, deletedIds: [], fileUrls: [] };
+        return { deleted: 0, deletedIds: [], fileUrls: [], deletedRows: [] };
       }
 
       // One read per distinct survey rather than per response: a batch may span several surveys in the
@@ -306,13 +310,21 @@ export async function deleteScopedResponses(
         await tx.display.deleteMany({ where: { id: { in: displayIds } } });
       }
 
-      return { deleted: count, deletedIds: rows.map((row) => row.id), fileUrls };
+      return {
+        deleted: count,
+        deletedIds: rows.map((row) => row.id),
+        fileUrls,
+        deletedRows: rows.map((row) => ({ id: row.id, surveyId: row.surveyId })),
+      };
     });
   } catch (error) {
     rethrowScopedPrismaError(error);
   }
 
-  const { fileUrls, ...result } = outcome;
+  const { fileUrls, deletedRows, ...result } = outcome;
+
+  // Best effort and after the commit; it logs and swallows its own failures.
+  await deleteResponsesFromSnowflake(deletedRows);
 
   if (fileUrls.length > 0) {
     try {
