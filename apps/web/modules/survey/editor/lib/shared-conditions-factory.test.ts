@@ -147,8 +147,6 @@ describe("shared-conditions-factory", () => {
     recontactDays: null,
     displayLimit: null,
     autoClose: null,
-    runOnDate: null,
-    closeOnDate: null,
     delay: 0,
     autoComplete: null,
 
