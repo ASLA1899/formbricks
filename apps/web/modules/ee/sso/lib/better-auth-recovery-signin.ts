@@ -5,9 +5,10 @@ import { setSessionCookie } from "better-auth/cookies";
 import { z } from "zod";
 import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
-import { WEBAPP_URL } from "@/lib/constants";
+import { SSO_ALLOWED_EMAIL_DOMAINS, WEBAPP_URL } from "@/lib/constants";
 import { verifyToken } from "@/lib/jwt";
 import { getValidatedCallbackUrl } from "@/lib/utils/url";
+import { isSsoEmailDomainAllowed } from "@/modules/auth/lib/sso-email-domain";
 import { getSsoRecoveryFailureRedirectUrl } from "@/modules/ee/sso/lib/sso-recovery";
 
 /**
@@ -47,9 +48,17 @@ export const ssoRecoverySignInPlugin = {
             throw new Error("Token is not an SSO recovery token");
           }
           // isActive is a Formbricks column, not a Better Auth field — check it directly.
-          const dbUser = await prisma.user.findUnique({ where: { id }, select: { isActive: true } });
+          const dbUser = await prisma.user.findUnique({
+            where: { id },
+            select: { isActive: true, email: true },
+          });
           if (!dbUser || dbUser.isActive === false) {
             throw new Error("User not found or inactive");
+          }
+          // Enforce the CURRENT allowlist at redemption: a link issued before the allowlist was enabled
+          // or tightened must not mint a session for an address that is now excluded.
+          if (!isSsoEmailDomainAllowed(dbUser.email, SSO_ALLOWED_EMAIL_DOMAINS)) {
+            throw new Error("User email domain is not permitted");
           }
           const user = await ctx.context.internalAdapter.findUserById(id);
           if (!user) {

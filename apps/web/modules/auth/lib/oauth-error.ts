@@ -45,6 +45,8 @@ const VARIANT_BY_REJECT_REASON: Record<TSsoProvisioningRejectReason, TOAuthError
   invalid_invite_token: "signup_not_allowed",
   invite_email_mismatch: "signup_not_allowed",
   invite_token_validation_error: "signup_not_allowed",
+  // ASLA fork: the allowlist refuses this address; the user did nothing wrong and retrying cannot help.
+  sso_email_domain_not_permitted: "signup_not_allowed",
 
   // Operator misconfiguration: the user did nothing wrong and retrying cannot clear it.
   missing_default_team_id: "misconfigured",

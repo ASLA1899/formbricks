@@ -46,8 +46,18 @@ describe("getSsoAvailability", () => {
     });
   });
 
-  test("offers none without the SSO licence, as the pages hide the whole block", async () => {
+  test("without the SSO licence, offers Microsoft only (ASLA fork) and shows the SSO block for it", async () => {
     vi.mocked(getIsSsoEnabled).mockResolvedValue(false);
+
+    expect(await getSsoAvailability()).toEqual({
+      isSsoEnabled: true,
+      providers: { google: false, github: false, azuread: true, openid: false, saml: false },
+    });
+  });
+
+  test("offers none without the SSO licence when Microsoft is not configured, so the pages hide the block", async () => {
+    vi.mocked(getIsSsoEnabled).mockResolvedValue(false);
+    mocks.configured.azuread = false;
 
     expect(await getSsoAvailability()).toEqual({
       isSsoEnabled: false,

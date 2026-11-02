@@ -19,6 +19,7 @@ import {
   PASSWORD_RESET_TOKEN_LIFETIME_MINUTES,
   RATE_LIMITING_DISABLED,
   SESSION_MAX_AGE,
+  SSO_ALLOWED_EMAIL_DOMAINS,
 } from "@/lib/constants";
 import { hashSecret, verifySecret } from "@/lib/crypto";
 import { BETTER_AUTH_IP_ADDRESS_CONFIG } from "@/lib/utils/client-ip";
@@ -26,12 +27,20 @@ import {
   accountDeletionConfig,
   requireDeletionConfirmationBeforeHandler,
 } from "@/modules/account/lib/better-auth-account-deletion";
-import { ssoDatabaseHooks, ssoLicenseGateBeforeHandler } from "@/modules/ee/sso/lib/better-auth-hooks";
+import {
+  isSsoSessionContext,
+  ssoDatabaseHooks,
+  ssoLicenseGateBeforeHandler,
+} from "@/modules/ee/sso/lib/better-auth-hooks";
 import { ssoGenericOAuthConfig, ssoSocialProviders } from "@/modules/ee/sso/lib/better-auth-providers";
 import { ssoRecoverySignInPlugin } from "@/modules/ee/sso/lib/better-auth-recovery-signin";
+import { getPendingSsoIdentity } from "@/modules/ee/sso/lib/sso-request-context";
 import { runAfterAuthHooks } from "./after-auth-hooks";
 import { EMAIL_VERIFICATION_TTL_SECONDS, USE_SECURE_COOKIES } from "./auth-cookies";
-import { rejectInactiveUserOnSessionCreate } from "./better-auth-active-user-gate";
+import {
+  rejectDisallowedSsoDomainOnSessionCreate,
+  rejectInactiveUserOnSessionCreate,
+} from "./better-auth-active-user-gate";
 import { runAfterEmailVerificationHooks } from "./better-auth-email-verification";
 import { hibpBreachCheckBeforeHandler } from "./better-auth-hibp";
 import { auditPasswordReset, betterAuthLogger, signInAuditDatabaseHook } from "./better-auth-observability";
@@ -325,7 +334,15 @@ export const auth = betterAuth({
     ...ssoDatabaseHooks,
     session: {
       create: {
-        before: rejectInactiveUserOnSessionCreate,
+        before: async (session, context) => {
+          await rejectDisallowedSsoDomainOnSessionCreate(
+            session,
+            isSsoSessionContext(context),
+            SSO_ALLOWED_EMAIL_DOMAINS,
+            getPendingSsoIdentity()?.email
+          );
+          await rejectInactiveUserOnSessionCreate(session, context);
+        },
         after: signInAuditDatabaseHook.create?.after,
       },
     },

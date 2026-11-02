@@ -10,6 +10,7 @@ import { getIsSamlSsoEnabled, getIsSsoEnabled } from "@/modules/ee/license-check
 import {
   blockedSignupDomainRedirectAfter,
   getSsoProviderFromContext,
+  isSsoSessionContext,
   ssoDatabaseHooks,
   ssoLicenseGateBefore,
   ssoProfileSyncUpdateBefore,
@@ -59,7 +60,13 @@ vi.mock("@/modules/auth/lib/credential-signup-backstop", () => ({
   enforceCredentialSignupBackstop: vi.fn(),
 }));
 
-vi.mock("@/lib/constants", () => ({ WEBAPP_URL: "http://localhost:3000" }));
+const ssoDomains = vi.hoisted(() => ({ allowed: [] as string[] }));
+vi.mock("@/lib/constants", () => ({
+  WEBAPP_URL: "http://localhost:3000",
+  get SSO_ALLOWED_EMAIL_DOMAINS() {
+    return ssoDomains.allowed;
+  },
+}));
 vi.mock("@/modules/ee/license-check/lib/utils", () => ({
   getIsSsoEnabled: vi.fn(),
   getIsSamlSsoEnabled: vi.fn(),
@@ -527,7 +534,7 @@ describe("ssoLicenseGateBefore", () => {
    * Pinned per provider because that shared predicate IS the argument: narrow one side's selection and
    * the gate silently stops covering the other.
    */
-  test.each(["google", "github", "azuread", "azure-ad", "openid", "saml"])(
+  test.each(["google", "github", "openid", "saml"])(
     "rejects a %s callback when SSO is unlicensed, so no recovery intent can be minted",
     async (providerId) => {
       vi.mocked(getIsSsoEnabled).mockResolvedValue(false);
@@ -535,6 +542,19 @@ describe("ssoLicenseGateBefore", () => {
       await expect(
         ssoLicenseGateBefore({ path: "/callback/:providerId", params: { providerId } } as never)
       ).rejects.toThrow("SSO is not enabled");
+    }
+  );
+
+  // ASLA fork: Microsoft (Entra) sign-in is exempt from the license check, and only Microsoft is.
+  test.each(["azuread", "azure-ad"])(
+    "lets a %s callback through when SSO is unlicensed",
+    async (providerId) => {
+      vi.mocked(getIsSsoEnabled).mockResolvedValue(false);
+
+      await expect(
+        ssoLicenseGateBefore({ path: "/callback/:providerId", params: { providerId } } as never)
+      ).resolves.toBeUndefined();
+      expect(getIsSsoEnabled).not.toHaveBeenCalled();
     }
   );
 
@@ -573,6 +593,21 @@ describe("ssoRecoveryAfter", () => {
       })
     );
     expect(redirect).toHaveBeenCalledWith(expect.stringContaining("/auth/verification-requested"));
+  });
+
+  test("refuses recovery for an identity outside the SSO email-domain allowlist", async () => {
+    ssoDomains.allowed = ["asla.org"];
+    try {
+      const ctx = makeCtx();
+      await runWithSsoRequestContext(async () => {
+        captureSsoIdentity({ email: "guest@external.com", providerAccountId: "sub-1" });
+        await ssoRecoveryAfter(ctx as never); // returns: the default error redirect stays in place
+      });
+      expect(startSsoRecovery).not.toHaveBeenCalled();
+      expect(ctx.redirect).not.toHaveBeenCalled();
+    } finally {
+      ssoDomains.allowed = [];
+    }
   });
 
   test("ignores callbacks that did not collide", async () => {
@@ -881,5 +916,19 @@ describe("SSO sign-up persists the IdP's email_verified claim (real Better Auth,
     const location = callback.headers.get("location") ?? "";
     expect(location).toContain(`error=${SIGNUP_EMAIL_DOMAIN_BLOCKED_ERROR_CODE}`);
     expect(location).not.toContain("unable_to_create_user");
+  });
+});
+
+describe("isSsoSessionContext", () => {
+  test("covers callbacks and the direct ID-token sign-in routes", () => {
+    expect(isSsoSessionContext({ path: "/callback/:id", params: { id: "azuread" } })).toBe(true);
+    expect(isSsoSessionContext({ path: "/sign-in/social" })).toBe(true);
+    expect(isSsoSessionContext({ path: "/sign-in/oauth2" })).toBe(true);
+  });
+
+  test("does not cover password or other sessions", () => {
+    expect(isSsoSessionContext({ path: "/sign-in/email" })).toBe(false);
+    expect(isSsoSessionContext({ path: "/sso-recovery/sign-in" })).toBe(false);
+    expect(isSsoSessionContext(null)).toBe(false);
   });
 });

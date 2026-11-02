@@ -256,6 +256,10 @@ x-environment: &environment
     # AUTH_SSO_DEFAULT_ORGANIZATION_ID:
     # AUTH_SSO_DEFAULT_ORGANIZATION_ROLE:
 
+    # ASLA fork: only these email domains may sign in or be provisioned through SSO (comma-separated,
+    # exact match). Empty = no restriction.
+    # AUTH_SSO_ALLOWED_EMAIL_DOMAINS: "asla.org,aslafund.org"
+
     # Configure the minimum role for user management from UI(owner, manager, disabled)
     # USER_MANAGEMENT_MINIMUM_ROLE: "manager"
 

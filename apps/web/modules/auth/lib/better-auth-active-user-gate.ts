@@ -2,8 +2,43 @@ import "server-only";
 import type { BetterAuthOptions } from "better-auth";
 import { APIError } from "better-auth/api";
 import { prisma } from "@formbricks/database";
+import { isSsoEmailDomainAllowed } from "./sso-email-domain";
 
 type SessionDatabaseHook = NonNullable<NonNullable<BetterAuthOptions["databaseHooks"]>["session"]>;
+
+type SessionCreateHook = NonNullable<NonNullable<SessionDatabaseHook["create"]>["before"]>;
+
+/**
+ * ASLA fork: enforce `AUTH_SSO_ALLOWED_EMAIL_DOMAINS` for sign-ins by EXISTING users, who skip
+ * `user.create` (and so the provisioning gate). Runs on session creation, the one choke point every
+ * SSO callback passes through, and throws BEFORE the `Session` row is written. Scoped to SSO callbacks
+ * (`isSsoCallback`) so password and magic-link sessions are not affected. New users are refused earlier
+ * by `gateSsoProvisioning`, so no orphan user row is left behind.
+ *
+ * Better Auth resolves a returning user by the linked issuer/subject, not by email, and the profile
+ * sync keeps the OLD stored address. So the STORED address alone is not enough: an allowed stored
+ * address whose IdP subject now authenticates with a disallowed address must be refused. When the
+ * callback captured the current IdP email (`currentIdpEmail`), it must pass the allowlist too.
+ */
+export const rejectDisallowedSsoDomainOnSessionCreate = async (
+  session: Parameters<SessionCreateHook>[0],
+  isSsoCallback: boolean,
+  allowedDomains: readonly string[],
+  currentIdpEmail?: string | null
+): Promise<void> => {
+  if (!isSsoCallback || allowedDomains.length === 0) return;
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { email: true },
+  });
+  const currentEmailAllowed = !currentIdpEmail || isSsoEmailDomainAllowed(currentIdpEmail, allowedDomains);
+  if (!user || !currentEmailAllowed || !isSsoEmailDomainAllowed(user.email, allowedDomains)) {
+    throw new APIError("FORBIDDEN", {
+      message: "Your email domain is not permitted to sign in.",
+      code: "sso_email_domain_not_permitted",
+    });
+  }
+};
 
 /**
  * `databaseHooks.session.create.before` gate (ENG-1054) — preserves the NextAuth

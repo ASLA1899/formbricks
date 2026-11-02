@@ -1,5 +1,6 @@
 import "server-only";
 import { TUserLocale } from "@formbricks/types/user";
+import { parseSsoAllowedEmailDomains } from "@/modules/auth/lib/sso-email-domain";
 import { env } from "./env";
 
 export { DEFAULT_BRAND_COLOR } from "./brand-color";
@@ -181,6 +182,10 @@ export const DEFAULT_TEAM_ID = env.AUTH_DEFAULT_TEAM_ID;
 // yet. ENG-2089.
 export const DEFAULT_ORGANIZATION_ID = env.AUTH_DEFAULT_ORGANIZATION_ID;
 export const DEFAULT_ORGANIZATION_ROLE = env.AUTH_DEFAULT_ORGANIZATION_ROLE;
+// ASLA fork: optional allowlist of email domains permitted to sign in or auto-provision via SSO (e.g.
+// "asla.org,aslafund.org"). Empty = no restriction. Enforced in the Better Auth SSO hooks; see
+// modules/auth/lib/sso-email-domain.ts.
+export const SSO_ALLOWED_EMAIL_DOMAINS = parseSsoAllowedEmailDomains(env.AUTH_SSO_ALLOWED_EMAIL_DOMAINS);
 
 // Cloud-only kill-switch: when enabled, the personal-email sign-up block also applies to invited
 // users (default exempts invites). See @/modules/auth/lib/signup-email-domain.

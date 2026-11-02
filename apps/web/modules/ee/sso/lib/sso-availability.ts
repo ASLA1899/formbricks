@@ -10,7 +10,7 @@ import { getIsSamlSsoEnabled, getIsSsoEnabled } from "@/modules/ee/license-check
 import type { TSsoIdentityProvider } from "./provider-normalization";
 
 export type TSsoAvailability = {
-  /** The licence's `sso` feature. Without it the login and signup pages hide every SSO button. */
+  /** Whether the login and signup pages show the SSO block: the licence's `sso` feature, or Microsoft (ASLA fork). */
   readonly isSsoEnabled: boolean;
   /** Whether each provider's button is offered: licensed AND configured on this instance. */
   readonly providers: Readonly<Record<TSsoIdentityProvider, boolean>>;
@@ -25,12 +25,15 @@ export type TSsoAvailability = {
 export const getSsoAvailability = async (): Promise<TSsoAvailability> => {
   const [isSsoEnabled, isSamlSsoEnabled] = await Promise.all([getIsSsoEnabled(), getIsSamlSsoEnabled()]);
 
+  // ASLA fork: Microsoft (Entra) sign-in does not need the enterprise license, so its button is offered
+  // whenever it is configured, and the SSO block is shown for it even when the `sso` feature is off.
+  // Every other provider still needs the license.
   return {
-    isSsoEnabled,
+    isSsoEnabled: isSsoEnabled || AZURE_OAUTH_ENABLED,
     providers: {
       google: isSsoEnabled && GOOGLE_OAUTH_ENABLED,
       github: isSsoEnabled && GITHUB_OAUTH_ENABLED,
-      azuread: isSsoEnabled && AZURE_OAUTH_ENABLED,
+      azuread: AZURE_OAUTH_ENABLED,
       openid: isSsoEnabled && OIDC_OAUTH_ENABLED,
       saml: isSsoEnabled && isSamlSsoEnabled && SAML_OAUTH_ENABLED,
     },
