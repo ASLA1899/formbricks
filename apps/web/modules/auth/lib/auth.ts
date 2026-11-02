@@ -28,7 +28,7 @@ import {
   requireDeletionConfirmationBeforeHandler,
 } from "@/modules/account/lib/better-auth-account-deletion";
 import {
-  getSsoProviderFromContext,
+  isSsoSessionContext,
   ssoDatabaseHooks,
   ssoLicenseGateBeforeHandler,
 } from "@/modules/ee/sso/lib/better-auth-hooks";
@@ -337,7 +337,7 @@ export const auth = betterAuth({
         before: async (session, context) => {
           await rejectDisallowedSsoDomainOnSessionCreate(
             session,
-            getSsoProviderFromContext(context) !== null,
+            isSsoSessionContext(context),
             SSO_ALLOWED_EMAIL_DOMAINS,
             getPendingSsoIdentity()?.email
           );

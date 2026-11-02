@@ -10,6 +10,7 @@ import { getIsSamlSsoEnabled, getIsSsoEnabled } from "@/modules/ee/license-check
 import {
   blockedSignupDomainRedirectAfter,
   getSsoProviderFromContext,
+  isSsoSessionContext,
   ssoDatabaseHooks,
   ssoLicenseGateBefore,
   ssoProfileSyncUpdateBefore,
@@ -915,5 +916,19 @@ describe("SSO sign-up persists the IdP's email_verified claim (real Better Auth,
     const location = callback.headers.get("location") ?? "";
     expect(location).toContain(`error=${SIGNUP_EMAIL_DOMAIN_BLOCKED_ERROR_CODE}`);
     expect(location).not.toContain("unable_to_create_user");
+  });
+});
+
+describe("isSsoSessionContext", () => {
+  test("covers callbacks and the direct ID-token sign-in routes", () => {
+    expect(isSsoSessionContext({ path: "/callback/:id", params: { id: "azuread" } })).toBe(true);
+    expect(isSsoSessionContext({ path: "/sign-in/social" })).toBe(true);
+    expect(isSsoSessionContext({ path: "/sign-in/oauth2" })).toBe(true);
+  });
+
+  test("does not cover password or other sessions", () => {
+    expect(isSsoSessionContext({ path: "/sign-in/email" })).toBe(false);
+    expect(isSsoSessionContext({ path: "/sso-recovery/sign-in" })).toBe(false);
+    expect(isSsoSessionContext(null)).toBe(false);
   });
 });

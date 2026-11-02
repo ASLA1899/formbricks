@@ -53,6 +53,19 @@ export const getSsoProviderFromContext = (
 };
 
 /**
+ * True when the endpoint can mint a session from an IdP identity: the callback routes AND the direct
+ * ID-token routes (`POST /sign-in/social` with an `idToken`, `POST /sign-in/oauth2`), which skip the
+ * callback and would otherwise bypass the SSO domain allowlist (ASL-1865 re-review P1).
+ */
+export const isSsoSessionContext = (
+  context: { path?: string; params?: Record<string, string | undefined> } | null | undefined
+): boolean => {
+  if (getSsoProviderFromContext(context) !== null) return true;
+  const path = context?.path ?? "";
+  return path.startsWith("/sign-in/social") || path.startsWith("/sign-in/oauth2");
+};
+
+/**
  * The SSO provider this Better Auth endpoint context belongs to, normalized to the Prisma enum, or
  * null when the context is not an SSO callback at all (e.g. `/sign-up/email`). Every hook below opens
  * with this pair of calls, so it lives here once.
