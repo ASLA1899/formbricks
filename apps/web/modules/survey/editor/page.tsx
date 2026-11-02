@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { ResourceNotFoundError } from "@formbricks/types/errors";
 import { type TSurvey } from "@formbricks/types/surveys/types";
 import {
@@ -41,6 +42,7 @@ import { getOrganizationBilling, getSurvey } from "@/modules/survey/lib/survey";
 import { getSurveyAuth } from "@/modules/survey/lib/survey-auth";
 import { getWorkspaceWithTeamIds } from "@/modules/survey/lib/workspace";
 import { SURVEY_SCHEDULING_CONFIG } from "@/modules/survey/scheduling/lib/constants";
+import { getSurveyEditorPermissions } from "@/modules/survey/sharing/lib/permissions";
 import { getSurveyVisibilityViewer } from "@/modules/survey/visibility/lib/gate";
 import { ErrorComponent } from "@/modules/ui/components/error-component";
 import { SurveyEditor } from "./components/survey-editor";
@@ -74,6 +76,13 @@ export const SurveyEditorPage = async (props: {
   } = await getSurveyAuth(params.workspaceId, params.surveyId);
 
   const t = await getTranslate();
+
+  // ASLA fork (ASL-1881): reading a survey (including one only shared with this user) is not editing it.
+  // The same 404 as an unreadable survey, so the editor never opens for a read-only share.
+  const { canManageSharing, canWrite } = await getSurveyEditorPermissions(session.user.id, params.surveyId);
+  if (!canWrite) {
+    notFound();
+  }
 
   const [
     survey,
@@ -201,6 +210,7 @@ export const SurveyEditorPage = async (props: {
       surveyAccess={surveyAccess}
       ownerName={ownerName}
       customCssEditor={customCssEditor}
+      canManageSharing={canManageSharing}
     />
   );
 };
