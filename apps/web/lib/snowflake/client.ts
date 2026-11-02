@@ -27,6 +27,8 @@ let connection: snowflake.Connection | null = null;
 /** The connect attempt in flight, shared so concurrent callers never call connect() twice. */
 let connecting: Promise<void> | null = null;
 let logConfigured = false;
+/** Connections whose session already has the server statement timeout. */
+const sessionConfigured = new WeakSet<snowflake.Connection>();
 
 /** True only when every credential the sync needs is set. Without them the sync is a silent no-op. */
 export const isSnowflakeConfigured = (): boolean =>
@@ -61,28 +63,40 @@ const getConnection = (): snowflake.Connection => {
 /** The server cancels a statement at this limit, before the client deadline below. */
 const SERVER_STATEMENT_TIMEOUT_SECONDS = 40;
 
+const SESSION_SETUP_DEADLINE_MS = 10_000;
+
+const resetConnection = (conn: snowflake.Connection) => {
+  if (connection === conn) connection = null; // build a fresh connection next time
+  conn.destroy(() => undefined);
+};
+
+/** Connects and sets the server statement timeout. `connecting` stays set until both are done. */
 const ensureConnected = (conn: snowflake.Connection): Promise<void> => {
-  if (conn.isUp()) return Promise.resolve();
+  if (conn.isUp() && sessionConfigured.has(conn)) return Promise.resolve();
   connecting ??= new Promise<void>((resolve, reject) => {
-    conn.connect((error) => {
+    const finish = (error?: Error) => {
       connecting = null;
       if (error) {
-        connection = null; // build a fresh connection next time
+        resetConnection(conn);
         reject(error);
       } else {
-        conn.execute({
-          sqlText: `ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS = ${SERVER_STATEMENT_TIMEOUT_SECONDS}`,
-          complete: (sessionError) => {
-            if (sessionError) {
-              connection = null;
-              conn.destroy(() => undefined);
-              reject(sessionError);
-            } else {
-              resolve();
-            }
-          },
-        });
+        resolve();
       }
+    };
+    conn.connect((error) => {
+      if (error) return finish(error);
+      const timer = setTimeout(
+        () => finish(new Error("Snowflake session setup exceeded its deadline")),
+        SESSION_SETUP_DEADLINE_MS
+      );
+      conn.execute({
+        sqlText: `ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS = ${SERVER_STATEMENT_TIMEOUT_SECONDS}`,
+        complete: (sessionError) => {
+          clearTimeout(timer);
+          if (!sessionError) sessionConfigured.add(conn);
+          finish(sessionError);
+        },
+      });
     });
   });
   return connecting;
@@ -101,11 +115,14 @@ const executeQuery = async (sqlText: string, binds: TBind[], deadlineAt?: number
   }
   const conn = getConnection();
   await ensureConnected(conn);
+  // Connecting counts against the caller's budget too.
+  if (deadlineAt !== undefined && Date.now() >= deadlineAt) {
+    throw new Error("Snowflake write budget exhausted before the statement started");
+  }
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
       // Drop the session so nothing from it can complete later; the next call builds a fresh connection.
-      if (connection === conn) connection = null;
-      conn.destroy(() => undefined);
+      resetConnection(conn);
       reject(new Error("Snowflake statement exceeded its client deadline"));
     }, SNOWFLAKE_STATEMENT_DEADLINE_MS);
     conn.execute({
