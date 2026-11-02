@@ -314,7 +314,7 @@ export async function runPendingInvitationSends(args: {
         const headingTemplate = config.emailTemplates.invitation.headingText;
         const heading = headingTemplate === undefined ? undefined : renderTemplate(headingTemplate, vars);
 
-        await sendSurveyInvitationEmail({
+        const delivered = await sendSurveyInvitationEmail({
           to: inv.recipientEmail,
           subject,
           body,
@@ -323,6 +323,9 @@ export async function runPendingInvitationSends(args: {
           heading,
           fromName: config.fromName,
         });
+        // sendEmail resolves false when nothing was sent (e.g. SMTP not configured).
+        // Throw so the catch below rolls back the claim and a later tick retries.
+        if (!delivered) throw new Error("Email was not delivered (sender returned false)");
         sent++;
       } catch (error) {
         // Roll back the claim so the next drainer tick retries this row. Any
@@ -378,6 +381,7 @@ export async function linkResponseToInvitation(responseId: string): Promise<void
       surveyId: true,
       contactId: true,
       contactAttributes: true,
+      data: true,
     },
   });
   if (!response) return;
@@ -404,7 +408,8 @@ export async function linkResponseToInvitation(responseId: string): Promise<void
     if (pendingCount === 0) return;
 
     const attrs = (response.contactAttributes ?? {}) as Record<string, unknown>;
-    const rawEmail = attrs.email;
+    const verifiedEmail = (response.data as Record<string, unknown> | null)?.verifiedEmail;
+    const rawEmail = typeof verifiedEmail === "string" && verifiedEmail.trim() ? verifiedEmail : attrs.email;
     const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : undefined;
 
     if (!email) {

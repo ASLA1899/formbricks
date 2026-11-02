@@ -131,6 +131,17 @@ describe("runPendingInvitationSends", () => {
     expect(res.sent).toBe(0);
   });
 
+  test("a skipped delivery (sender returns false) clears sentAt and does not count as sent", async () => {
+    vi.mocked(sendSurveyInvitationEmail).mockResolvedValue(false);
+    const res = await runPendingInvitationSends({});
+    expect(res.sent).toBe(0);
+    expect(res.failed).toBe(1);
+    expect(prisma.surveyInvitation.update).toHaveBeenCalledWith({
+      where: { id: "inv1" },
+      data: { sentAt: null },
+    });
+  });
+
   test("a failed send clears sentAt so the next tick retries the invitation", async () => {
     vi.mocked(sendSurveyInvitationEmail).mockRejectedValue(new Error("smtp down"));
     const res = await runPendingInvitationSends({});
@@ -251,6 +262,25 @@ describe("linkResponseToInvitation", () => {
     });
     expect(prisma.surveyInvitation.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "inv9" } })
+    );
+  });
+
+  test("with no contact, matches on response.data.verifiedEmail", async () => {
+    vi.mocked(prisma.response.findUnique).mockResolvedValue({
+      ...response,
+      contactId: null,
+      contactAttributes: null,
+      data: { verifiedEmail: " Bo@X.org " },
+    } as never);
+    vi.mocked(prisma.surveyInvitation.count).mockResolvedValue(2 as never);
+    vi.mocked(prisma.surveyInvitation.findUnique).mockResolvedValue({ id: "inv8" } as never);
+    await linkResponseToInvitation("r1");
+    expect(prisma.surveyInvitation.findUnique).toHaveBeenCalledWith({
+      where: { surveyId_recipientEmail: { surveyId: "s1", recipientEmail: "bo@x.org" } },
+      select: { id: true },
+    });
+    expect(prisma.surveyInvitation.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "inv8" } })
     );
   });
 
