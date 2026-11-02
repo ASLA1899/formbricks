@@ -334,7 +334,8 @@ export function Survey({
   const questions = useMemo(() => getElementsFromSurveyBlocks(localSurvey.blocks), [localSurvey.blocks]);
 
   const originalQuestionRequiredStates = useMemo(() => {
-    return questions.reduce<Record<string, boolean>>((acc, question) => {
+    // Read from the unmodified survey definition: localSurvey may already carry resumed required rules.
+    return getElementsFromSurveyBlocks(survey.blocks).reduce<Record<string, boolean>>((acc, question) => {
       acc[question.id] = question.required;
       return acc;
     }, {});
