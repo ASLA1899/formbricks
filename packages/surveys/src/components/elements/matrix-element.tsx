@@ -32,7 +32,6 @@ export function MatrixElement({
   dir = "auto",
 }: Readonly<MatrixElementProps>) {
   const [startTime, setStartTime] = useState(performance.now());
-  const [otherValue, setOtherValue] = useState("");
   const isCurrent = element.id === currentElementId;
   const isRequired = element.required;
   const { t } = useTranslation();
@@ -84,97 +83,71 @@ export function MatrixElement({
     return new Set(rows.map((r) => r.label));
   }, [rows]);
 
+  // Recover the "other" row's typed text and column from a stored response (hydration only)
+  const recoverOther = (valueObj: Record<string, string>) => {
+    if (otherRow) {
+      for (const [rowLabel, columnLabel] of Object.entries(valueObj)) {
+        if (columnLabel && rowLabel && !knownRowLabels.has(rowLabel)) {
+          return { text: rowLabel, columnId: columns.find((col) => col.label === columnLabel)?.id };
+        }
+      }
+    }
+    return { text: "", columnId: undefined as string | undefined };
+  };
+
+  const [otherValue, setOtherValue] = useState(() => recoverOther(value).text);
+  // The "other" row's selected column is tracked locally so the selection survives while the text is empty
+  const [otherColumnId, setOtherColumnId] = useState<string | undefined>(() => recoverOther(value).columnId);
+
   // Convert value from row label -> column label mapping to row id -> column id mapping
   const convertValueToIds = (valueObj: Record<string, string>): Record<string, string> => {
     const result: Record<string, string> = {};
 
     Object.entries(valueObj).forEach(([rowLabel, columnLabel]) => {
-      if (columnLabel) {
-        // Find the row ID that corresponds to this row label
-        const rowId = rows.find((row) => row.label === rowLabel)?.id;
-        // Find the column ID that corresponds to this column label
-        const columnId = columns.find((col) => col.label === columnLabel)?.id;
-
-        if (rowId && columnId) {
-          result[rowId] = columnId;
-        } else if (!knownRowLabels.has(rowLabel) && otherRow) {
-          // This is the "other" row response — recover the typed text and column
-          const otherColumnId = columns.find((col) => col.label === columnLabel)?.id;
-          if (otherColumnId) {
-            result["other"] = otherColumnId;
-            // Recover the typed text (only set once on initial hydration)
-            if (!otherValue && rowLabel) {
-              setOtherValue(rowLabel);
-            }
-          }
-        }
+      const rowId = rows.find((row) => row.label === rowLabel)?.id;
+      const columnId = columns.find((col) => col.label === columnLabel)?.id;
+      if (rowId && columnId) {
+        result[rowId] = columnId;
       }
     });
+
+    if (otherRow && otherColumnId) {
+      result["other"] = otherColumnId;
+    }
 
     return result;
   };
 
-  // Convert value from row id -> column id mapping to row label -> column label mapping
-  const convertValueFromIds = (valueObj: Record<string, string>): Record<string, string> => {
+  // Build the row label -> column label response. The "other" row is only emitted when it has text that
+  // does not collide with a regular row label.
+  const buildLabelValue = (idValue: Record<string, string>, text: string): Record<string, string> => {
     const result: Record<string, string> = {};
 
-    Object.entries(valueObj).forEach(([rowId, columnId]) => {
+    Object.entries(idValue).forEach(([rowId, columnId]) => {
+      const columnLabel = columns.find((col) => col.id === columnId)?.label;
+      if (!columnLabel) return;
       if (rowId === "other") {
-        // For "other" row, use the typed text as the response key
-        const columnLabel = columns.find((col) => col.id === columnId)?.label;
-        if (columnLabel && otherValue) {
-          result[otherValue] = columnLabel;
+        const trimmed = text.trim();
+        if (trimmed && !knownRowLabels.has(trimmed)) {
+          result[trimmed] = columnLabel;
         }
         return;
       }
-      // Find the row label that corresponds to this row ID
       const rowLabel = rows.find((row) => row.id === rowId)?.label;
-      // Find the column label that corresponds to this column ID
-      const columnLabel = columns.find((col) => col.id === columnId)?.label;
-
-      if (rowLabel && columnLabel) {
-        result[rowLabel] = columnLabel;
-      }
+      if (rowLabel) result[rowLabel] = columnLabel;
     });
 
     return result;
   };
 
   const handleChange = (newValue: Record<string, string>) => {
-    const labelValue = convertValueFromIds(newValue);
-
-    // Check if all values are empty and if so, make it an empty object
-    if (Object.values(labelValue).every((val) => val === "")) {
-      onChange({ [element.id]: {} });
-    } else {
-      onChange({ [element.id]: labelValue });
-    }
+    setOtherColumnId(newValue["other"]);
+    onChange({ [element.id]: buildLabelValue(newValue, otherValue) });
   };
 
   const handleOtherValueChange = (newText: string) => {
     setOtherValue(newText);
-    // Re-emit the current value with updated other text
-    const currentIds = convertValueToIds(value);
-    if (currentIds["other"]) {
-      const columnLabel = columns.find((col) => col.id === currentIds["other"])?.label;
-      if (columnLabel) {
-        // Build label value from scratch with the new text
-        const result: Record<string, string> = {};
-        Object.entries(currentIds).forEach(([rowId, colId]) => {
-          if (rowId === "other") {
-            if (newText) {
-              const colLabel = columns.find((c) => c.id === colId)?.label;
-              if (colLabel) result[newText] = colLabel;
-            }
-          } else {
-            const rowLabel = rows.find((r) => r.id === rowId)?.label;
-            const colLabel = columns.find((c) => c.id === colId)?.label;
-            if (rowLabel && colLabel) result[rowLabel] = colLabel;
-          }
-        });
-        onChange({ [element.id]: result });
-      }
-    }
+    onChange({ [element.id]: buildLabelValue(convertValueToIds(value), newText) });
   };
 
   const handleSubmit = (e: Event) => {

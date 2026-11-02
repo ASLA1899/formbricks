@@ -120,6 +120,14 @@ const parseNumericValue = (value: TResponseDataValue): number | null => {
 /**
  * Registry of all validators, keyed by rule type
  */
+/**
+ * A month/year answer ("YYYY-MM") covers every day of that month; a full date covers only itself.
+ * Date rules compare the span so the picker (which enables a month when any day in it is allowed)
+ * and the validators agree.
+ */
+const dateSpan = (value: string): { first: string; last: string } =>
+  /^\d{4}-\d{2}$/.test(value) ? { first: `${value}-01`, last: `${value}-31` } : { first: value, last: value };
+
 export const validators: Record<TValidationRuleType, TValidator> = {
   minLength: {
     check: (value: TResponseDataValue, params: TValidationRuleParams): TValidatorCheckResult => {
@@ -408,10 +416,10 @@ export const validators: Record<TValidationRuleType, TValidator> = {
       // original exclusive behaviour.
       if (hasRelativeBound(params)) {
         const bound = resolveRelativeDate(params.relative, applyTimezoneGrace(new Date(), "lower"));
-        return { valid: value >= bound };
+        return { valid: dateSpan(value).last >= bound };
       }
       const typedParams = params as TValidationRuleParamsIsLaterThanFixed;
-      return { valid: value > typedParams.date };
+      return { valid: dateSpan(value).last > typedParams.date };
     },
     getDefaultMessage: (params: TValidationRuleParams, _element: TSurveyElement, t: TFunction): string => {
       // Relative bounds are resolved to a concrete date so the respondent reads a real day rather
@@ -432,10 +440,10 @@ export const validators: Record<TValidationRuleType, TValidator> = {
       }
       if (hasRelativeBound(params)) {
         const bound = resolveRelativeDate(params.relative, applyTimezoneGrace(new Date(), "upper"));
-        return { valid: value <= bound };
+        return { valid: dateSpan(value).first <= bound };
       }
       const typedParams = params as TValidationRuleParamsIsEarlierThanFixed;
-      return { valid: value < typedParams.date };
+      return { valid: dateSpan(value).first < typedParams.date };
     },
     getDefaultMessage: (params: TValidationRuleParams, _element: TSurveyElement, t: TFunction): string => {
       const date = hasRelativeBound(params)
@@ -452,10 +460,12 @@ export const validators: Record<TValidationRuleType, TValidator> = {
       }
       if (hasRelativeRange(params)) {
         const { startDate, endDate } = resolveRelativeRange(params, "accepts-inside");
-        return { valid: value >= startDate && value <= endDate };
+        const span = dateSpan(value);
+        return { valid: span.last >= startDate && span.first <= endDate };
       }
       const typedParams = params as TValidationRuleParamsIsBetweenFixed;
-      return { valid: value > typedParams.startDate && value < typedParams.endDate };
+      const span = dateSpan(value);
+      return { valid: span.last > typedParams.startDate && span.first < typedParams.endDate };
     },
     getDefaultMessage: (params: TValidationRuleParams, _element: TSurveyElement, t: TFunction): string => {
       const { startDate, endDate } = hasRelativeRange(params)
@@ -474,10 +484,12 @@ export const validators: Record<TValidationRuleType, TValidator> = {
       // outside it.
       if (hasRelativeRange(params)) {
         const { startDate, endDate } = resolveRelativeRange(params, "accepts-outside");
-        return { valid: value < startDate || value > endDate };
+        const span = dateSpan(value);
+        return { valid: span.first < startDate || span.last > endDate };
       }
       const typedParams = params as TValidationRuleParamsIsNotBetweenFixed;
-      return { valid: value < typedParams.startDate || value > typedParams.endDate };
+      const span = dateSpan(value);
+      return { valid: span.first < typedParams.startDate || span.last > typedParams.endDate };
     },
     getDefaultMessage: (params: TValidationRuleParams, _element: TSurveyElement, t: TFunction): string => {
       const { startDate, endDate } = hasRelativeRange(params)

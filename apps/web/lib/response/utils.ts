@@ -437,7 +437,11 @@ export const getResponsesJson = (
         const matrixAnswer = answer as Record<string, string> | undefined;
         const regularRows = element.rows.filter((row) => row.id !== "other");
         const hasOtherRow = element.rows.some((row) => row.id === "other");
-        const knownRowLabels = new Set(regularRows.map((row) => row.label.default));
+        const rowLabelsFor = (row: (typeof regularRows)[number]) =>
+          Object.values(row.label).filter(
+            (label): label is string => typeof label === "string" && label !== ""
+          );
+        const knownRowLabels = new Set(regularRows.flatMap(rowLabelsFor));
 
         elementHeadline.forEach((headline, index) => {
           if (answer) {
@@ -447,8 +451,11 @@ export const getResponsesJson = (
               jsonData[idx][headline] = otherEntry ? `${otherEntry[0]}: ${otherEntry[1]}` : "";
             } else {
               const row = regularRows[index];
-              if (row && row.label.default && matrixAnswer?.[row.label.default] !== undefined) {
-                jsonData[idx][headline] = matrixAnswer[row.label.default];
+              const answerKey = row
+                ? rowLabelsFor(row).find((label) => matrixAnswer?.[label] !== undefined)
+                : undefined;
+              if (answerKey !== undefined && matrixAnswer) {
+                jsonData[idx][headline] = matrixAnswer[answerKey];
               } else {
                 jsonData[idx][headline] = "";
               }

@@ -1466,6 +1466,48 @@ describe("Response Utils", () => {
       expect(result[0]["person.email"]).toBe("test@example.com");
     });
 
+    test("matrix export maps regular rows by any language label and keeps Other separate", () => {
+      const matrixSurvey = asRead({
+        ...mockSurvey,
+        blocks: [
+          {
+            id: "block1",
+            name: "Block 1",
+            elements: [
+              {
+                id: "m1",
+                type: TSurveyElementTypeEnum.Matrix,
+                headline: { default: "Rate" },
+                required: false,
+                rows: [
+                  { id: "r1", label: { default: "Speed", de: "Tempo" } },
+                  { id: "r2", label: { default: "Comfort", de: "Komfort" } },
+                  { id: "other", label: { default: "Other" } },
+                ],
+                columns: [{ id: "c1", label: { default: "Good", de: "Gut" } }],
+                shuffleOption: "none",
+                isDraft: false,
+              },
+            ],
+          },
+        ],
+      });
+      const response = {
+        ...mockResponses[0],
+        data: { m1: { Tempo: "Gut", Komfort: "Gut", Portability: "Gut" } },
+      };
+      const result = getResponsesJson(
+        matrixSurvey as TSurvey,
+        [response] as TResponse[],
+        [["1. Rate - Speed", "1. Rate - Comfort", "1. Rate - Other"]],
+        [],
+        false
+      );
+      expect(result[0]["1. Rate - Speed"]).toBe("Gut");
+      expect(result[0]["1. Rate - Comfort"]).toBe("Gut");
+      expect(result[0]["1. Rate - Other"]).toBe("Portability: Gut");
+    });
+
     test("a computed field named `__proto__` keeps its value, and reaches both writers", async () => {
       // `ZEmbeddedDataName` is a non-blank string, so `__proto__` is a legal variable name. On an
       // ordinary row object, assigning that key runs Object.prototype's inherited setter instead of
