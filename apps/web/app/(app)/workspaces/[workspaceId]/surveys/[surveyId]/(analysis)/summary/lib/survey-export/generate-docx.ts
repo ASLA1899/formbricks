@@ -13,10 +13,11 @@ import {
   TextRun,
   WidthType,
 } from "docx";
+import { formatDateForDisplay } from "@/lib/utils/datetime";
 import { type ExportableQuestion, type ExportableSection, type ExportableSurvey } from "./types";
 
-function formatDate(date: Date): string {
-  return new Date(date).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+function formatDate(date: Date, locale: string): string {
+  return formatDateForDisplay(new Date(date), locale, { year: "numeric", month: "long", day: "numeric" });
 }
 
 const C = {
@@ -305,7 +306,7 @@ function buildSectionContent(section: ExportableSection): (Paragraph | Table)[] 
   return content;
 }
 
-export async function generateSurveyDocx(data: ExportableSurvey): Promise<Blob> {
+export async function generateSurveyDocx(data: ExportableSurvey, locale = "en-US"): Promise<Blob> {
   const totalQuestions = data.sections.reduce((sum, s) => sum + s.questions.length, 0);
   const children: (Paragraph | Table)[] = [];
 
@@ -315,7 +316,7 @@ export async function generateSurveyDocx(data: ExportableSurvey): Promise<Blob> 
     new Paragraph({
       children: [
         txt(
-          `Created: ${formatDate(data.createdAt)}  |  Status: ${data.status.toUpperCase()}  |  Type: ${data.type}  |  Questions: ${totalQuestions}`,
+          `Created: ${formatDate(data.createdAt, locale)}  |  Status: ${data.status.toUpperCase()}  |  Type: ${data.type}  |  Questions: ${totalQuestions}`,
           { size: 20, color: C.muted }
         ),
       ],
@@ -354,6 +355,32 @@ export async function generateSurveyDocx(data: ExportableSurvey): Promise<Blob> 
     children.push(...buildSectionContent(section));
   }
 
+  // Hidden fields and variables
+  if (data.hiddenFields.length > 0 || data.variables.length > 0) {
+    children.push(
+      new Paragraph({
+        text: "Hidden Fields & Variables",
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 300, after: 100 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: C.border, space: 8 } },
+      })
+    );
+    if (data.hiddenFields.length > 0) {
+      children.push(para([txt("Hidden Fields", { bold: true, size: 20 })], { before: 80 }));
+      for (const field of data.hiddenFields) {
+        children.push(para([txt(field, { size: 20, color: C.muted })]));
+      }
+    }
+    if (data.variables.length > 0) {
+      children.push(para([txt("Variables", { bold: true, size: 20 })], { before: 80 }));
+      for (const v of data.variables) {
+        children.push(
+          para([txt(`${v.name} (${v.type}, default: ${String(v.value)})`, { size: 20, color: C.muted })])
+        );
+      }
+    }
+  }
+
   // Endings
   if (data.endings.length > 0) {
     children.push(
@@ -381,7 +408,7 @@ export async function generateSurveyDocx(data: ExportableSurvey): Promise<Blob> 
   children.push(
     new Paragraph({
       children: [
-        txt(`Exported from Formbricks on ${formatDate(new Date())}`, {
+        txt(`Exported from Formbricks on ${formatDate(new Date(), locale)}`, {
           size: 18,
           color: C.muted,
           italics: true,

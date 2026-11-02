@@ -1,8 +1,8 @@
 import { generateSurveyHtml } from "./generate-html";
 import { type ExportableSurvey } from "./types";
 
-export async function generateSurveyPdf(data: ExportableSurvey): Promise<void> {
-  const html = generateSurveyHtml(data);
+export async function generateSurveyPdf(data: ExportableSurvey, locale = "en-US"): Promise<void> {
+  const html = generateSurveyHtml(data, locale);
 
   // Open in a new window and trigger the print dialog (Save as PDF)
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });

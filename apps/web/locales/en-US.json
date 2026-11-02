@@ -4210,7 +4210,7 @@
       "open_options": "Open options",
       "preview_survey_in_a_new_tab": "Preview survey in a new tab",
       "print_as_pdf": "Print as PDF",
-      "print_dialog_opened": "Print dialog opened. Select \"Save as PDF\".",
+      "print_dialog_opened": "In the print dialog, choose \"Save as PDF\".",
       "read_only_user_not_allowed_to_create_survey_warning": "As a Read-Only user you are not allowed to create surveys. Please ask a user with write access to create a survey or a manager to upgrade your role.",
       "relevance": "Relevance",
       "rename_survey": "Rename survey",

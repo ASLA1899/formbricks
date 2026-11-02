@@ -97,7 +97,7 @@ export const SurveyDropDownMenu = ({
 }: Readonly<SurveyDropDownMenuProps>) => {
   const { workspace } = useWorkspace();
 
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isArchiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -214,7 +214,7 @@ export const SurveyDropDownMenu = ({
         toast.error(getFormattedErrorMessage(result) || t("workspace.surveys.export_load_failed"));
         return;
       }
-      await runSurveyExport(result.data, format);
+      await runSurveyExport(result.data, format, i18n.resolvedLanguage ?? i18n.language ?? "en-US");
       const successMessages: Record<TSurveyExportFormat, string> = {
         html: t("workspace.surveys.survey_exported_as_html"),
         docx: t("workspace.surveys.survey_exported_as_docx"),
@@ -354,13 +354,13 @@ export const SurveyDropDownMenu = ({
               </DropdownMenuItem>
             )}
             <DropdownMenuItem
-              data-testid="export-survey-html"
-              icon={<GlobeIcon className="size-4" />}
+              data-testid="export-survey-pdf"
+              icon={<PrinterIcon className="size-4" />}
               onSelect={(e) => {
                 e.preventDefault();
-                void handleExport("html");
+                void handleExport("pdf");
               }}>
-              {t("workspace.surveys.export_as_html")}
+              {t("workspace.surveys.print_as_pdf")}
             </DropdownMenuItem>
             <DropdownMenuItem
               data-testid="export-survey-docx"
@@ -372,13 +372,13 @@ export const SurveyDropDownMenu = ({
               {t("workspace.surveys.export_as_docx")}
             </DropdownMenuItem>
             <DropdownMenuItem
-              data-testid="export-survey-pdf"
-              icon={<PrinterIcon className="size-4" />}
+              data-testid="export-survey-html"
+              icon={<GlobeIcon className="size-4" />}
               onSelect={(e) => {
                 e.preventDefault();
-                void handleExport("pdf");
+                void handleExport("html");
               }}>
-              {t("workspace.surveys.print_as_pdf")}
+              {t("workspace.surveys.export_as_html")}
             </DropdownMenuItem>
             {canChangeStatus && (
               <DropdownMenuSub>

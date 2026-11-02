@@ -90,6 +90,21 @@ describe("surveyToExportable", () => {
     expect(data.endings[0]).toMatchObject({ type: "endScreen", headline: "Thanks" });
   });
 
+  test("does not add the other-option placeholder as an extra choice", () => {
+    const survey = buildSurvey();
+    const el = survey.blocks[0].elements[0] as unknown as Record<string, unknown>;
+    el.choices = [
+      { id: "c1", label: t("Yes") },
+      { id: "c2", label: t("No") },
+      { id: "other", label: t("Other") },
+    ];
+    el.otherOptionPlaceholder = t("Please specify");
+
+    const labels = surveyToExportable(survey).sections[0].questions[0].choices?.map((c) => c.label);
+
+    expect(labels).toEqual(["Yes", "No", "Other"]);
+  });
+
   test("shows choice labels, not choice ids, in the logic summary", () => {
     const data = surveyToExportable(buildSurvey());
     const summary = data.sections[0].logic?.[0].summary ?? "";
@@ -133,6 +148,24 @@ describe("generateSurveyDocx", () => {
     expect(bytes.length).toBeGreaterThan(1000);
     // DOCX files are zip archives: they start with "PK".
     expect(String.fromCharCode(bytes[0], bytes[1])).toBe("PK");
+  });
+});
+
+describe("generateSurveyDocx hidden fields and variables", () => {
+  test("adds a section for hidden fields and variables", async () => {
+    const withExtras = surveyToExportable(buildSurvey());
+    const without = { ...withExtras, hiddenFields: [], variables: [] };
+
+    const sizeWith = (await generateSurveyDocx(withExtras)).size;
+    const sizeWithout = (await generateSurveyDocx(without)).size;
+
+    expect(sizeWith).toBeGreaterThan(sizeWithout);
+  });
+
+  test("formats dates with the given locale", () => {
+    const html = generateSurveyHtml(surveyToExportable(buildSurvey()), "de-DE");
+
+    expect(html).toMatch(/Exported from Formbricks on \d{1,2}\. \w+ \d{4}/);
   });
 });
 

@@ -93,9 +93,6 @@ function extractRichData(el: TSurveyElement, q: ExportableQuestion): void {
     case TSurveyElementTypeEnum.MultipleChoiceMulti: {
       const mc = el as TSurveyMultipleChoiceElement;
       q.choices = mc.choices.map((c) => ({ label: i18n(c.label) }));
-      if (mc.otherOptionPlaceholder) {
-        q.choices.push({ label: i18n(mc.otherOptionPlaceholder) || "Other", isOther: true });
-      }
       if (mc.shuffleOption && mc.shuffleOption !== "none") {
         q.details.push({
           label: "Shuffle",

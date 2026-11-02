@@ -21,7 +21,7 @@ interface SurveyExportDropdownProps {
 }
 
 export const SurveyExportDropdown = ({ survey }: SurveyExportDropdownProps) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [exportingFormat, setExportingFormat] = useState<TSurveyExportFormat | null>(null);
 
   const successMessages: Record<TSurveyExportFormat, string> = {
@@ -33,7 +33,7 @@ export const SurveyExportDropdown = ({ survey }: SurveyExportDropdownProps) => {
   const handleExport = async (format: TSurveyExportFormat) => {
     setExportingFormat(format);
     try {
-      await runSurveyExport(survey, format);
+      await runSurveyExport(survey, format, i18n.resolvedLanguage ?? i18n.language ?? "en-US");
       toast.success(successMessages[format]);
     } catch (error) {
       logger.error(error, `Survey export as ${format} failed`);

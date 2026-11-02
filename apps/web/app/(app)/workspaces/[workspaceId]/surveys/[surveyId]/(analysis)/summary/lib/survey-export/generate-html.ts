@@ -1,3 +1,4 @@
+import { formatDateForDisplay } from "@/lib/utils/datetime";
 import {
   type ExportableChoice,
   type ExportableFieldConfig,
@@ -8,16 +9,16 @@ import {
   type ExportableSurvey,
 } from "./types";
 
+const DEFAULT_EXPORT_LOCALE = "en-US";
+
 function esc(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function formatDate(date: Date): string {
-  return new Date(date).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+const LONG_DATE: Intl.DateTimeFormatOptions = { year: "numeric", month: "long", day: "numeric" };
+
+function formatDate(date: Date, locale: string): string {
+  return formatDateForDisplay(new Date(date), locale, LONG_DATE);
 }
 
 function statusBadge(status: string): string {
@@ -185,7 +186,7 @@ function renderQuestionWidget(q: ExportableQuestion): string {
 
 // --- Main generator ---
 
-export function generateSurveyHtml(data: ExportableSurvey): string {
+export function generateSurveyHtml(data: ExportableSurvey, locale = DEFAULT_EXPORT_LOCALE): string {
   let body = "";
 
   // Welcome card
@@ -366,7 +367,7 @@ export function generateSurveyHtml(data: ExportableSurvey): string {
 <div class="header">
   <h1>${esc(data.name)}</h1>
   <div class="header-meta">
-    <span>Created: ${formatDate(data.createdAt)}</span>
+    <span>Created: ${formatDate(data.createdAt, locale)}</span>
     <span>Status: ${statusBadge(data.status)}</span>
     <span>Type: ${esc(data.type)}</span>
     <span>Questions: ${data.sections.reduce((sum, s) => sum + s.questions.length, 0)}</span>
@@ -375,7 +376,7 @@ export function generateSurveyHtml(data: ExportableSurvey): string {
 <div class="container">
 ${body}
 </div>
-<div class="footer">Exported from Formbricks on ${formatDate(new Date())}</div>
+<div class="footer">Exported from Formbricks on ${formatDate(new Date(), locale)}</div>
 </body>
 </html>`;
 }
