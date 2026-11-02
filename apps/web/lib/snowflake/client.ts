@@ -58,6 +58,9 @@ const getConnection = (): snowflake.Connection => {
   return connection;
 };
 
+/** The server cancels a statement at this limit, before the client deadline below. */
+const SERVER_STATEMENT_TIMEOUT_SECONDS = 40;
+
 const ensureConnected = (conn: snowflake.Connection): Promise<void> => {
   if (conn.isUp()) return Promise.resolve();
   connecting ??= new Promise<void>((resolve, reject) => {
@@ -67,43 +70,85 @@ const ensureConnected = (conn: snowflake.Connection): Promise<void> => {
         connection = null; // build a fresh connection next time
         reject(error);
       } else {
-        resolve();
+        conn.execute({
+          sqlText: `ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS = ${SERVER_STATEMENT_TIMEOUT_SECONDS}`,
+          complete: (sessionError) => {
+            if (sessionError) {
+              connection = null;
+              conn.destroy(() => undefined);
+              reject(sessionError);
+            } else {
+              resolve();
+            }
+          },
+        });
       }
     });
   });
   return connecting;
 };
 
-const executeQuery = async (sqlText: string, binds: TBind[]): Promise<void> => {
+/**
+ * Every statement ends within this time, success or failure. The server cancels it at the shorter limit;
+ * the client gives up and drops the connection at the longer one. A write therefore cannot finish after the
+ * caller's lock (a Postgres transaction) is gone, as long as the caller's budget covers the deadline.
+ */
+export const SNOWFLAKE_STATEMENT_DEADLINE_MS = 45_000;
+
+const executeQuery = async (sqlText: string, binds: TBind[], deadlineAt?: number): Promise<void> => {
+  if (deadlineAt !== undefined && Date.now() >= deadlineAt) {
+    throw new Error("Snowflake write budget exhausted before the statement started");
+  }
   const conn = getConnection();
   await ensureConnected(conn);
   await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      // Drop the session so nothing from it can complete later; the next call builds a fresh connection.
+      if (connection === conn) connection = null;
+      conn.destroy(() => undefined);
+      reject(new Error("Snowflake statement exceeded its client deadline"));
+    }, SNOWFLAKE_STATEMENT_DEADLINE_MS);
     conn.execute({
       sqlText,
       binds,
-      complete: (error) => (error ? reject(error) : resolve()),
+      complete: (error) => {
+        clearTimeout(timer);
+        if (error) reject(error);
+        else resolve();
+      },
     });
   });
 };
 
 /** Inserts rows into SURVEY_RESPONSES. Throws on failure; the caller decides whether that matters. */
-export const insertSurveyResponseRows = async (rows: TSnowflakeResponseRow[]): Promise<void> => {
+export const insertSurveyResponseRows = async (
+  rows: TSnowflakeResponseRow[],
+  deadlineAt?: number
+): Promise<void> => {
   if (rows.length === 0 || !isSnowflakeConfigured()) return;
 
   for (let start = 0; start < rows.length; start += INSERT_BATCH_SIZE) {
     const batch = rows.slice(start, start + INSERT_BATCH_SIZE);
     const placeholders = batch.map(() => `(${COLUMNS.map(() => "?").join(", ")})`).join(",\n");
     const binds = batch.flatMap((row) => COLUMNS.map((column): TBind => row[column]));
-    await executeQuery(`INSERT INTO SURVEY_RESPONSES (${COLUMNS.join(", ")})\nVALUES ${placeholders}`, binds);
+    await executeQuery(
+      `INSERT INTO SURVEY_RESPONSES (${COLUMNS.join(", ")})\nVALUES ${placeholders}`,
+      binds,
+      deadlineAt
+    );
   }
 };
 
 /** Removes the rows of the given responses. */
-export const deleteSurveyResponseRows = async (responseIds: string[]): Promise<void> => {
+export const deleteSurveyResponseRows = async (responseIds: string[], deadlineAt?: number): Promise<void> => {
   if (responseIds.length === 0 || !isSnowflakeConfigured()) return;
   for (let start = 0; start < responseIds.length; start += INSERT_BATCH_SIZE) {
     const batch = responseIds.slice(start, start + INSERT_BATCH_SIZE);
     const placeholders = batch.map(() => "?").join(", ");
-    await executeQuery(`DELETE FROM SURVEY_RESPONSES WHERE RESPONSE_ID IN (${placeholders})`, batch);
+    await executeQuery(
+      `DELETE FROM SURVEY_RESPONSES WHERE RESPONSE_ID IN (${placeholders})`,
+      batch,
+      deadlineAt
+    );
   }
 };

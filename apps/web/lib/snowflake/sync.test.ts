@@ -1,15 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "@formbricks/database";
-import {
-  deleteSurveyResponseRows,
-  insertSurveyResponseRows,
-  isSnowflakeConfigured,
-} from "./client";
-import {
-  deleteResponseFromSnowflake,
-  deleteResponsesFromSnowflake,
-  syncResponseToSnowflake,
-} from "./sync";
+import { deleteSurveyResponseRows, insertSurveyResponseRows, isSnowflakeConfigured } from "./client";
+import { deleteResponseFromSnowflake, deleteResponsesFromSnowflake, syncResponseToSnowflake } from "./sync";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@formbricks/logger", () => ({ logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() } }));
@@ -46,8 +38,11 @@ beforeEach(() => {
 describe("syncResponseToSnowflake", () => {
   test("replaces the response's rows: delete first, then insert", async () => {
     await syncResponseToSnowflake(survey, response);
-    expect(deleteSurveyResponseRows).toHaveBeenCalledWith(["r1"]);
-    expect(insertSurveyResponseRows).toHaveBeenCalledWith([expect.objectContaining({ QUESTION_ID: "q1" })]);
+    expect(deleteSurveyResponseRows).toHaveBeenCalledWith(["r1"], expect.any(Number));
+    expect(insertSurveyResponseRows).toHaveBeenCalledWith(
+      [expect.objectContaining({ QUESTION_ID: "q1" })],
+      expect.any(Number)
+    );
     expect(vi.mocked(deleteSurveyResponseRows).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(insertSurveyResponseRows).mock.invocationCallOrder[0]
     );
@@ -151,6 +146,39 @@ describe("ordering and deleted responses", () => {
     await syncResponseToSnowflake(survey, response);
     expect(insertSurveyResponseRows).toHaveBeenCalledTimes(1);
     expect(deleteSurveyResponseRows).toHaveBeenCalledTimes(2);
+  });
+
+  test("still removes the rows when the transaction fails after the write (for example it expired)", async () => {
+    // Inside the transaction the final check throws (like Prisma P2028); outside it the response is gone.
+    vi.mocked(prisma.response.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.$transaction).mockImplementation((async (fn: (tx: unknown) => Promise<unknown>) => {
+      await fn({
+        $executeRaw: vi.fn(),
+        response: { findUnique: vi.fn().mockResolvedValueOnce({ id: "r1" }) },
+      });
+      throw new Error("Transaction already closed (P2028)");
+    }) as never);
+    await expect(syncResponseToSnowflake(survey, response)).resolves.toBeUndefined();
+    expect(insertSurveyResponseRows).toHaveBeenCalledTimes(1);
+    expect(deleteSurveyResponseRows).toHaveBeenLastCalledWith(["r1"]);
+  });
+
+  test("keeps the rows when the transaction fails but the response still exists", async () => {
+    vi.mocked(prisma.$transaction).mockImplementation((async (fn: (tx: unknown) => Promise<unknown>) => {
+      await fn(tx);
+      throw new Error("Transaction already closed (P2028)");
+    }) as never);
+    await syncResponseToSnowflake(survey, response);
+    expect(deleteSurveyResponseRows).toHaveBeenCalledTimes(1);
+  });
+
+  test("gives every Snowflake write one deadline that ends before the transaction can expire", async () => {
+    await syncResponseToSnowflake(survey, response);
+    const [, deleteDeadline] = vi.mocked(deleteSurveyResponseRows).mock.calls[0];
+    const [, insertDeadline] = vi.mocked(insertSurveyResponseRows).mock.calls[0];
+    expect(deleteDeadline).toBe(insertDeadline);
+    // budget (480s) + one statement deadline (45s) is under the 600s transaction timeout.
+    expect((deleteDeadline as number) - Date.now()).toBeLessThanOrEqual(480_000);
   });
 
   test("runs two syncs of one response one after the other", async () => {
