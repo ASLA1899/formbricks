@@ -1,4 +1,4 @@
-import { Container, Heading, Text } from "react-email";
+import { Heading, Text } from "react-email";
 import { EmailButton } from "../../src/components/email-button";
 import { EmailFooter } from "../../src/components/email-footer";
 import { EmailTemplate } from "../../src/components/email-template";
@@ -23,7 +23,7 @@ export function LinkSurveyEmail({
 }: LinkSurveyEmailProps): React.JSX.Element {
   return (
     <EmailTemplate logoUrl={logoUrl} t={t} {...legalProps}>
-      <Container>
+      <>
         <Heading>{t("emails.verification_email_hey")}</Heading>
         <Text className="text-sm">{t("emails.verification_email_thanks")}</Text>
         <Text className="text-sm">{t("emails.verification_email_to_fill_survey")}</Text>
@@ -32,7 +32,7 @@ export function LinkSurveyEmail({
           {t("emails.verification_email_survey_name")}: {surveyName}
         </Text>
         <EmailFooter t={t} />
-      </Container>
+      </>
     </EmailTemplate>
   );
 }

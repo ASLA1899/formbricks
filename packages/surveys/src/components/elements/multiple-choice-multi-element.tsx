@@ -259,6 +259,7 @@ export function MultipleChoiceMultiElement({
         dir={dir}
         placeholder={t("common.select_options")}
         variant={element.displayType ?? "list"}
+        columns={element.columns}
         otherOptionId={otherOption?.id}
         otherOptionLabel={otherOption ? getLocalizedValue(otherOption.label, languageCode) : undefined}
         otherOptionPlaceholder={

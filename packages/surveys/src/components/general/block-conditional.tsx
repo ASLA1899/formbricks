@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { type TJsFileUploadParams } from "@formbricks/types/js";
 import { type TResponseData, type TResponseTtc } from "@formbricks/types/responses";
 import { type TUploadFileConfig } from "@formbricks/types/storage";
+import type { TCardSize } from "@formbricks/types/styling";
 import { type TSurveyBlock } from "@formbricks/types/surveys/blocks";
 import { TSurveyElementTypeEnum } from "@formbricks/types/surveys/constants";
 import { type TSurveyElement, type TSurveyRankingElement } from "@formbricks/types/surveys/elements";
@@ -88,6 +89,7 @@ interface BlockConditionalProps {
   onOpenExternalURL?: (url: string) => void | Promise<void>;
   dir?: "ltr" | "rtl" | "auto";
   fullSizeCards: boolean;
+  cardSize?: TCardSize;
   isCardless?: boolean;
   surveyLanguages: TSurveyLanguage[];
 }
@@ -114,6 +116,7 @@ export function BlockConditional({
   onOpenExternalURL,
   dir,
   fullSizeCards,
+  cardSize,
   isCardless = false,
   surveyLanguages,
 }: Readonly<BlockConditionalProps>) {
@@ -449,7 +452,10 @@ export function BlockConditional({
   return (
     <div ref={containerRef} className={cn("space-y-6", fullSizeCards ? "h-full" : "")}>
       {/* Scrollable container for the entire block */}
-      <ScrollableContainer fullSizeCards={fullSizeCards} disableInternalScroll={isCardless}>
+      <ScrollableContainer
+        fullSizeCards={fullSizeCards}
+        cardSize={cardSize}
+        disableInternalScroll={isCardless}>
         <div className="space-y-6">
           <div className="space-y-6">
             {block.elements.map((element, index) => {

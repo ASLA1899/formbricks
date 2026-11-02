@@ -15,6 +15,7 @@ import {
 import { ElementError, getElementErrorAria } from "@/components/general/element-error";
 import { ElementHeader } from "@/components/general/element-header";
 import { Input } from "@/components/general/input";
+import { renderInlineMarkdown, stripInlineMarkdown } from "@/lib/inline-markdown";
 import { FB_PART } from "@/lib/parts";
 import { cn } from "@/lib/utils";
 
@@ -84,6 +85,8 @@ interface MultiSelectProps {
   searchPlaceholder?: string;
   /** Message shown when search yields no results */
   searchNoResultsText?: string;
+  /** Columns for the list variant: "1" (default) or "2" (one column on narrow screens). Ignored by the dropdown variant. */
+  columns?: "1" | "2";
 }
 
 // Shared className for option labels
@@ -172,7 +175,7 @@ function MultiSelectOptionItem({
         />
         <CheckboxIndicator />
         <span data-fb-part={FB_PART.optionLabel} className={cn("mx-3", optionLabelClassName)}>
-          {option.label}
+          {renderInlineMarkdown(option.label)}
         </span>
       </span>
     </label>
@@ -320,7 +323,7 @@ function DropdownVariant({
                   <span
                     data-fb-part={FB_PART.optionLabel}
                     className="font-input font-input-weight text-input-text">
-                    {option.label}
+                    {renderInlineMarkdown(option.label)}
                   </span>
                 </DropdownMenuCheckboxItem>
               );
@@ -344,7 +347,7 @@ function DropdownVariant({
                 <span
                   data-fb-part={FB_PART.optionLabel}
                   className="font-input font-input-weight text-input-text">
-                  {otherOptionLabel}
+                  {renderInlineMarkdown(otherOptionLabel)}
                 </span>
               </DropdownMenuCheckboxItem>
             ) : null}
@@ -401,6 +404,7 @@ function DropdownVariant({
 
 interface ListVariantProps {
   inputId: string;
+  columns?: "1" | "2";
   options: MultiSelectOption[];
   selectedValues: string[];
   value: string[];
@@ -420,6 +424,7 @@ interface ListVariantProps {
 }
 
 function ListVariant({
+  columns = "1",
   inputId,
   options,
   selectedValues,
@@ -462,7 +467,7 @@ function ListVariant({
   return (
     <>
       <ElementError errorMessage={errorMessage} dir={dir} id={errorAria.errorId} />
-      <div className="space-y-2">
+      <div className={columns === "2" ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "space-y-2"}>
         {options.filter((option) => option.id !== "none").map(renderOption)}
         {hasOtherOption && otherOptionId ? (
           // The free-text input must NOT live inside the option <label>: a label may own only one
@@ -495,7 +500,7 @@ function ListVariant({
               />
               <CheckboxIndicator />
               <span data-fb-part={FB_PART.optionLabel} className={cn("mx-3 grow", optionLabelClassName)}>
-                {otherOptionLabel}
+                {renderInlineMarkdown(otherOptionLabel)}
               </span>
             </label>
             {/* The enclosing <fieldset> carries aria-describedby, but an ancestor's description is
@@ -541,6 +546,7 @@ function MultiSelect({
   dir = "auto",
   disabled = false,
   variant = "list",
+  columns = "1",
   placeholder = "Select options...",
   otherOptionId,
   otherOptionLabel = "Other",
@@ -594,11 +600,13 @@ function MultiSelect({
   };
 
   // Get selected option labels for dropdown display
-  const selectedLabels = options.filter((opt) => selectedValues.includes(opt.id)).map((opt) => opt.label);
+  const selectedLabels = options
+    .filter((opt) => selectedValues.includes(opt.id))
+    .map((opt) => stripInlineMarkdown(opt.label));
 
-  // Handle "other" option label display
+  // Handle "other" option label display (typed text is shown as entered; only the label is stripped)
   if (hasOtherOption && otherOptionId && selectedValues.includes(otherOptionId)) {
-    const otherLabel = otherValue || otherOptionLabel;
+    const otherLabel = otherValue || stripInlineMarkdown(otherOptionLabel);
     if (!selectedLabels.includes(otherLabel)) {
       selectedLabels.push(otherLabel);
     }
@@ -638,6 +646,7 @@ function MultiSelect({
           <div className="relative" data-element-input>
             <ListVariant
               inputId={inputId}
+              columns={columns}
               options={options}
               selectedValues={selectedValues}
               value={value}

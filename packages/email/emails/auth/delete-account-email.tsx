@@ -1,4 +1,4 @@
-import { Container, Heading, Text } from "react-email";
+import { Heading, Text } from "react-email";
 import { EmailButton } from "../../src/components/email-button";
 import { EmailFooter } from "../../src/components/email-footer";
 import { EmailTemplate } from "../../src/components/email-template";
@@ -21,7 +21,7 @@ export function DeleteAccountEmail({
 }: Readonly<DeleteAccountEmailProps>): React.JSX.Element {
   return (
     <EmailTemplate t={t} {...legalProps}>
-      <Container>
+      <>
         <Heading>{t("emails.delete_account_email_heading")}</Heading>
         <Text className="text-sm">{t("emails.delete_account_email_text")}</Text>
         <Text className="text-sm font-bold">{t("emails.delete_account_email_warning")}</Text>
@@ -33,7 +33,7 @@ export function DeleteAccountEmail({
         </Text>
         <Text className="mb-0 text-sm">{t("emails.delete_account_email_did_not_request")}</Text>
         <EmailFooter t={t} />
-      </Container>
+      </>
     </EmailTemplate>
   );
 }

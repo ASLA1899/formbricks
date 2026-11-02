@@ -1,6 +1,7 @@
 import { CheckCheckIcon, MousePointerClickIcon, PhoneIcon } from "lucide-react";
 import React from "react";
 import { TResponseDataValue } from "@formbricks/types/responses";
+import { getAddressValuesInDisplayOrder } from "@formbricks/types/surveys/address-fields";
 import { normalizeContactInfoResponse } from "@formbricks/types/surveys/contact-info-response";
 import { TSurveyElement, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
@@ -94,10 +95,14 @@ export const RenderResponse: React.FC<RenderResponseProps> = ({
       break;
     case TSurveyElementTypeEnum.Matrix:
       if (typeof responseData === "object" && !Array.isArray(responseData)) {
+        const languagCode = getLanguageCode(survey.languages, language);
+        const regularRows = element.rows.filter((row) => row.id !== "other");
+        const hasOtherRow = element.rows.some((row) => row.id === "other");
+        const knownRowLabels = new Set(regularRows.map((row) => getLocalizedValue(row.label, languagCode)));
+
         return (
           <>
-            {element.rows.map((row) => {
-              const languagCode = getLanguageCode(survey.languages, language);
+            {regularRows.map((row) => {
               const rowValueInSelectedLanguage = getLocalizedValue(row.label, languagCode);
               if (!responseData[rowValueInSelectedLanguage]) return null;
               return (
@@ -106,13 +111,21 @@ export const RenderResponse: React.FC<RenderResponseProps> = ({
                 </p>
               );
             })}
+            {hasOtherRow &&
+              Object.entries(responseData)
+                .filter(([key]) => !knownRowLabels.has(key))
+                .map(([key, val]) => (
+                  <p key={key} className="ph-no-capture my-1 font-normal text-slate-700">
+                    {key}:{processResponseData(val)}
+                  </p>
+                ))}
           </>
         );
       }
       break;
     case TSurveyElementTypeEnum.Address:
       if (Array.isArray(responseData)) {
-        return <ArrayResponse value={responseData} />;
+        return <ArrayResponse value={getAddressValuesInDisplayOrder(responseData)} />;
       }
       break;
     case TSurveyElementTypeEnum.ContactInfo:

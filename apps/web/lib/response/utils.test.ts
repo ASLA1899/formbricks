@@ -1510,6 +1510,74 @@ describe("Response Utils", () => {
       expect(result[0]["1. Contact"]).toBe("First Name: Ada\nTitle: Dr.");
     });
 
+    describe("matrix export row classification follows the response language", () => {
+      const matrixSurvey = asRead({
+        ...mockSurvey,
+        languages: [
+          { default: true, enabled: true, language: { id: "l1", code: "en" } },
+          { default: false, enabled: true, language: { id: "l2", code: "de" } },
+        ],
+        blocks: [
+          {
+            id: "block1",
+            name: "Block 1",
+            elements: [
+              {
+                id: "m1",
+                type: TSurveyElementTypeEnum.Matrix,
+                headline: { default: "Rate" },
+                required: false,
+                rows: [
+                  { id: "r1", label: { default: "Speed", de: "Tempo" } },
+                  { id: "r2", label: { default: "Comfort", de: "Komfort" } },
+                  { id: "other", label: { default: "Other" } },
+                ],
+                columns: [{ id: "c1", label: { default: "Good", de: "Gut" } }],
+                shuffleOption: "none",
+                isDraft: false,
+              },
+            ],
+          },
+        ],
+      }) as TSurvey;
+      const headers = [["1. Rate - Speed", "1. Rate - Comfort", "1. Rate - Other"]];
+      const exportRow = (language: string | null, data: Record<string, string>) =>
+        getResponsesJson(
+          matrixSurvey,
+          [{ ...mockResponses[0], language, data: { m1: data } }] as unknown as TResponse[],
+          headers,
+          [],
+          false
+        )[0];
+
+      test("maps regular rows by the response language label and keeps Other separate", () => {
+        const row = exportRow("de", { Tempo: "Gut", Komfort: "Gut", Portability: "Gut" });
+        expect(row["1. Rate - Speed"]).toBe("Gut");
+        expect(row["1. Rate - Comfort"]).toBe("Gut");
+        expect(row["1. Rate - Other"]).toBe("Portability: Gut");
+      });
+
+      test("Other text equal to another language's row label stays in Other", () => {
+        const row = exportRow(null, { Speed: "Good", Tempo: "Good" });
+        expect(row["1. Rate - Speed"]).toBe("Good");
+        expect(row["1. Rate - Comfort"]).toBe("");
+        expect(row["1. Rate - Other"]).toBe("Tempo: Good");
+      });
+
+      test("a response language the survey does not configure uses the default labels", () => {
+        const row = exportRow("fr-FR", { Speed: "Good", Comfort: "Good" });
+        expect(row["1. Rate - Speed"]).toBe("Good");
+        expect(row["1. Rate - Comfort"]).toBe("Good");
+        expect(row["1. Rate - Other"]).toBe("");
+      });
+
+      test("an unconfigured response language still keeps Other text in Other", () => {
+        const row = exportRow("fr-FR", { Speed: "Good", Portability: "Good" });
+        expect(row["1. Rate - Speed"]).toBe("Good");
+        expect(row["1. Rate - Other"]).toBe("Portability: Good");
+      });
+    });
+
     test("a computed field named `__proto__` keeps its value, and reaches both writers", async () => {
       // `ZEmbeddedDataName` is a non-blank string, so `__proto__` is a legal variable name. On an
       // ordinary row object, assigning that key runs Object.prototype's inherited setter instead of
@@ -1705,7 +1773,33 @@ describe("Response Utils", () => {
       expect(result[0]["person.email"]).toBe("linked@example.com");
     });
 
-    test("should format the Timestamp in UTC when no time zone is provided", () => {
+    test("should add Completed At and Duration, and no Timestamp column", () => {
+      const finished = [
+        {
+          ...mockResponses[0],
+          finished: true,
+          createdAt: new Date("2026-06-10T19:15:44.000Z"),
+          updatedAt: new Date("2026-06-10T20:00:04.000Z"),
+          ttc: { q1: 2650411, _total: 2650411 },
+        },
+      ] as TResponse[];
+      const result = getResponsesJson(mockSurvey as TSurvey, finished, [["1. Question 1"]], [], false);
+      expect(result[0]["Started At"]).toBe("2026-06-10 19:15:44 UTC");
+      expect(result[0]["Completed At"]).toBe("2026-06-10 20:00:04 UTC");
+      expect(result[0]["Duration"]).toBe("0:44:10");
+      expect(result[0]["Timestamp"]).toBeUndefined();
+    });
+
+    test("should leave Completed At and Duration empty for an unfinished response without timing", () => {
+      const unfinished = [
+        { ...mockResponses[0], finished: false, ttc: undefined },
+      ] as unknown as TResponse[];
+      const result = getResponsesJson(mockSurvey as TSurvey, unfinished, [["1. Question 1"]], [], false);
+      expect(result[0]["Completed At"]).toBe("");
+      expect(result[0]["Duration"]).toBe("");
+    });
+
+    test("should format Started At in UTC when no time zone is provided", () => {
       const responsesWithFixedDate = [
         { ...mockResponses[0], createdAt: new Date("2026-01-01T20:00:00.000Z") },
       ] as TResponse[];
@@ -1716,10 +1810,10 @@ describe("Response Utils", () => {
         [],
         false
       );
-      expect(result[0]["Timestamp"]).toBe("2026-01-01 20:00:00 UTC");
+      expect(result[0]["Started At"]).toBe("2026-01-01 20:00:00 UTC");
     });
 
-    test("should format the Timestamp in the configured time zone", () => {
+    test("should format Started At in the configured time zone", () => {
       const responsesWithFixedDate = [
         { ...mockResponses[0], createdAt: new Date("2026-01-01T20:00:00.000Z") },
       ] as TResponse[];
@@ -1731,7 +1825,61 @@ describe("Response Utils", () => {
         false,
         "Asia/Manila"
       );
-      expect(result[0]["Timestamp"]).toBe("2026-01-02 04:00:00 GMT+8");
+      expect(result[0]["Started At"]).toBe("2026-01-02 04:00:00 GMT+8");
+    });
+  });
+
+  describe("getResponsesJson address elements", () => {
+    const addressSurvey = {
+      id: "survey1",
+      name: "Address Survey",
+      blocks: [
+        {
+          id: "block1",
+          name: "Block 1",
+          elements: [
+            {
+              id: "addr1",
+              type: TSurveyElementTypeEnum.Address,
+              headline: { default: "Mailing address" },
+              required: false,
+            },
+          ],
+        },
+      ],
+      hiddenFields: { enabled: true, fieldIds: [] },
+    } as unknown as TSurvey;
+
+    const exportAddress = (addressValue: string[]) =>
+      getResponsesJson(
+        addressSurvey,
+        [
+          {
+            id: "response1",
+            data: { addr1: addressValue },
+            meta: {},
+            contactAttributes: {},
+            variables: {},
+            tags: [],
+            finished: true,
+            createdAt: new Date("2026-06-10T19:15:44Z"),
+            updatedAt: new Date("2026-06-10T20:00:04Z"),
+            ttc: {},
+          },
+        ] as unknown as TResponse[],
+        [["1. Mailing address"]],
+        [],
+        false
+      );
+
+    test("exports name and organization first, then the address lines", () => {
+      const result = exportAddress(["1 Main St", "", "Austin", "TX", "78701", "USA", "Jane Doe", "ASLA"]);
+      expect(result[0]["1. Mailing address"]).toBe("Jane Doe; ASLA; 1 Main St; Austin; TX; 78701; USA");
+    });
+
+    test("exports legacy 6-element responses unchanged", () => {
+      const result = exportAddress(["1 Main St", "", "Austin", "TX", "78701", "USA"]);
+      expect(result[0]["1. Mailing address"]).toBe("1 Main St; Austin; TX; 78701; USA");
     });
   });
 

@@ -2037,6 +2037,61 @@ describe("Address and ContactInfo question types", () => {
 });
 
 describe("Matrix question type tests", () => {
+  test("getQuestionSummary adds an Other row from free-text row keys", async () => {
+    const question = {
+      id: "matrix-other",
+      type: TSurveyElementTypeEnum.Matrix,
+      headline: { default: "Rate these aspects" },
+      required: false,
+      rows: [
+        { id: "row-1", label: { default: "Speed" } },
+        { id: "other", label: { default: "Other" } },
+      ],
+      columns: [
+        { id: "col-1", label: { default: "Poor" } },
+        { id: "col-2", label: { default: "Good" } },
+      ],
+    };
+    const survey = {
+      id: "survey-1",
+      blocks: [{ id: "block1", name: "Block 1", elements: [question] }],
+      questions: [],
+      languages: [],
+      welcomeCard: { enabled: false },
+    } as unknown as TSurvey;
+    const baseResponse = {
+      updatedAt: new Date(),
+      contact: null,
+      contactAttributes: {},
+      language: null,
+      ttc: {},
+      finished: true,
+    };
+    const responses = [
+      { ...baseResponse, id: "r1", data: { "matrix-other": { Speed: "Good", Comfort: "Good" } } },
+      { ...baseResponse, id: "r2", data: { "matrix-other": { Speed: "Poor", Warmth: "Poor" } } },
+    ] as any;
+    const dropOff = [
+      { elementId: "matrix-other", impressions: 2, dropOffCount: 0, dropOffPercentage: 0 },
+    ] as unknown as TSurveySummary["dropOff"];
+
+    const summary: any = await getElementSummary(
+      survey,
+      getElementsFromBlocks(survey.blocks),
+      responses,
+      dropOff
+    );
+
+    const rowLabels = summary[0].data.map((row: { rowLabel: string }) => row.rowLabel);
+    expect(rowLabels).toEqual(["Speed", "Other"]);
+    const otherRow = summary[0].data[1];
+    expect(otherRow.totalResponsesForRow).toBe(2);
+    expect(otherRow.columnPercentages).toEqual([
+      { column: "Poor", percentage: 50 },
+      { column: "Good", percentage: 50 },
+    ]);
+  });
+
   test("getQuestionSummary correctly processes Matrix question with valid responses", async () => {
     const question = {
       id: "matrix-q1",

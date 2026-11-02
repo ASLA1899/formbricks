@@ -693,6 +693,7 @@ model Workspace {
   /// [Logo]
   logo                        Json?
   workspaceTeams              WorkspaceTeam[]
+  optionLists                 OptionList[]
   appSetupCompleted           Boolean                      @default(false)
   customHeadScripts           String? // Custom HTML scripts for link surveys (self-hosted only)
   /// [CustomCssStored] Workspace custom CSS (ENG-2949), written only by the shared save service.
@@ -1361,6 +1362,25 @@ model Language {
   surveyLanguages SurveyLanguage[]
 
   @@unique([workspaceId, code])
+}
+
+/// ASLA fork (ASL-1866, Formbricks upgrade 1.2-01). Saved lists of choice options, reused across
+/// multiple-choice questions in a workspace (for example chapters, states, countries).
+///
+/// @property name - Display name, unique within the workspace
+/// @property options - The option labels, in order
+/// @property workspace - The owning workspace
+model OptionList {
+  id          String    @id @default(cuid())
+  createdAt   DateTime  @default(now()) @map(name: "created_at")
+  updatedAt   DateTime  @updatedAt @map(name: "updated_at")
+  name        String
+  options     String[]
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
 }
 
 /// Links surveys to their supported languages.

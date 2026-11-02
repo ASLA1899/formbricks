@@ -45,6 +45,7 @@ export const PRISMA_AUTHORIZATION_RESOURCE_INVENTORY = {
   Language: "parent_derived_or_data_integrity",
   Membership: "relationship_or_grant_source",
   OnlineUpgradeState: "authentication_or_application",
+  OptionList: "workspace_inherited_resource",
   Organization: "direct_authorization_resource",
   OrganizationBilling: "authentication_or_application",
   // This is a Prisma model name and a classification label, not a credential or credential value.
