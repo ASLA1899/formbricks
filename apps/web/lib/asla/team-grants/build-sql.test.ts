@@ -78,33 +78,56 @@ describe("pre-image and rollback", () => {
     surveyOwners: [{ surveyId: "cmt0f60i500fcqo010fmhp635", ownerEmail: "a@example.org" }],
   };
   const pre = {
-    teamExisted: false,
+    organizationId: "org1",
+    workspaceId: "ws1",
+    teamId: null,
+    grantPermission: null,
+    teamUsers: [],
     memberships: [["user1", "owner"], ["user2", "owner"]],
-    surveys: [["cmt0f60i500fcqo010fmhp635", null]],
+    ownerlessSurveys: ["cmt0f60i500fcqo010fmhp635"],
   };
 
   test("the pre-image query is read only and holds ids, not emails", () => {
     const sql = buildPreimageSql(input);
-    expect(sql).toMatch(/^SELECT json_build_object/);
+    expect(sql).toMatch(/SELECT json_build_object/);
     expect(sql).not.toMatch(/UPDATE|DELETE|INSERT/);
     expect(sql).not.toContain("a@example.org");
   });
 
-  test("rollback restores roles and survey owners and removes a team it created", () => {
+  test("rollback is bound to the pre-image organization and workspace", () => {
     const sql = buildRollbackSql(input, pre, "dry_run");
-    expect(sql).toContain("('user1', 'owner')");
-    expect(sql).toContain("('cmt0f60i500fcqo010fmhp635', NULL)");
-    expect(sql).toContain(`DELETE FROM "Team"`);
+    expect(sql).toContain("'org1'");
+    expect(sql).toContain("'ws1'");
+    expect(sql).toContain("the pre-image is for another organization or workspace");
     expect(sql).toMatch(/\nROLLBACK;/);
     expect(buildRollbackSql(input, pre, "apply")).toMatch(/\nCOMMIT;\n$/);
   });
 
-  test("rollback keeps a team that existed before", () => {
-    expect(buildRollbackSql(input, { ...pre, teamExisted: true }, "apply")).not.toContain(`DELETE FROM "Team"`);
+  test("rollback clears only owners the apply assigned, inside the workspace", () => {
+    const sql = buildRollbackSql(input, pre, "apply");
+    expect(sql).toContain(`s."workspaceId" = ws_id AND s."ownerId" = u.id`);
+    expect(sql).not.toMatch(/SET "ownerId" = b\./);
+  });
+
+  test("rollback removes a team the apply created", () => {
+    expect(buildRollbackSql(input, pre, "apply")).toContain(`DELETE FROM "Team" WHERE id = team_id`);
+  });
+
+  test("rollback restores an existing team's grant and members", () => {
+    const sql = buildRollbackSql(
+      input,
+      { ...pre, teamId: "team1", grantPermission: "read", teamUsers: [["user1", "admin"]] },
+      "apply"
+    );
+    expect(sql).not.toContain(`DELETE FROM "Team" WHERE id`);
+    expect(sql).toContain("('user1', 'admin')");
+    expect(sql).toContain("'read'::\"WorkspaceTeamPermission\"");
+    expect(sql).toContain("'team1'");
   });
 
   test("rollback rejects a bad pre-image", () => {
     expect(() => buildRollbackSql(input, { ...pre, memberships: [["u'; DROP", "owner"]] }, "apply")).toThrow();
     expect(() => buildRollbackSql(input, { ...pre, memberships: [["user1", "root"]] }, "apply")).toThrow();
+    expect(() => buildRollbackSql(input, { ...pre, organizationId: undefined }, "apply")).toThrow();
   });
 });

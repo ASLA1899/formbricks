@@ -160,12 +160,24 @@ ${mode === "apply" ? "COMMIT;" : "ROLLBACK; -- dry run: nothing is saved. Genera
 };
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+const id = z.string().regex(ID_PATTERN);
 
-/** What the mapping will change, recorded before `--apply`. Ids only, no emails. */
+/**
+ * What the mapping will change, recorded before `--apply`. Ids only, no emails.
+ * It is bound to one organization and workspace; a rollback refuses any other.
+ */
 export const ZPreimage = z.object({
-  teamExisted: z.boolean(),
-  memberships: z.array(z.tuple([z.string().regex(ID_PATTERN), z.enum(["owner", "manager", "member", "billing"])])),
-  surveys: z.array(z.tuple([z.string().regex(ID_PATTERN), z.string().regex(ID_PATTERN).nullable()])),
+  organizationId: id,
+  workspaceId: id,
+  /** Id of the team if it existed before the apply, else null (the apply creates it). */
+  teamId: id.nullable(),
+  /** The team's workspace grant before the apply, else null. Only read when the team existed. */
+  grantPermission: z.enum(["read", "readWrite", "manage"]).nullable(),
+  /** The team's members before the apply. Only read when the team existed. */
+  teamUsers: z.array(z.tuple([id, z.enum(["admin", "contributor"])])),
+  memberships: z.array(z.tuple([id, z.enum(["owner", "manager", "member", "billing"])])),
+  /** Mapped surveys in the workspace that had no owner before the apply. */
+  ownerlessSurveys: z.array(id),
 });
 export type TPreimage = z.infer<typeof ZPreimage>;
 
@@ -173,41 +185,94 @@ export type TPreimage = z.infer<typeof ZPreimage>;
 export const buildPreimageSql = (input: unknown): string => {
   const m = ZTeamGrantMapping.parse(input);
   const ids = m.surveyOwners.map((s) => lit(s.surveyId)).join(", ") || "NULL";
-  return `SELECT json_build_object(
-  'teamExisted', EXISTS (SELECT 1 FROM "Team" t JOIN "Organization" o ON o.id = t."organizationId"
-    WHERE o.name = ${lit(m.organizationName)} AND t.name = ${lit(m.team.name)}),
-  'memberships', COALESCE((SELECT json_agg(json_build_array(ms."userId", ms.role::text)) FROM "Membership" ms
-    JOIN "Organization" o ON o.id = ms."organizationId" WHERE o.name = ${lit(m.organizationName)} AND ms.accepted), '[]'::json),
-  'surveys', COALESCE((SELECT json_agg(json_build_array(s.id, s."ownerId")) FROM "Survey" s WHERE s.id IN (${ids})), '[]'::json)
+  return `WITH o AS (SELECT id FROM "Organization" WHERE name = ${lit(m.organizationName)}),
+w AS (SELECT w.id FROM "Workspace" w JOIN o ON o.id = w."organizationId" WHERE w.name = ${lit(m.workspaceName)}),
+t AS (SELECT t.id FROM "Team" t JOIN o ON o.id = t."organizationId" WHERE t.name = ${lit(m.team.name)})
+SELECT json_build_object(
+  'organizationId', (SELECT id FROM o),
+  'workspaceId', (SELECT id FROM w),
+  'teamId', (SELECT id FROM t),
+  'grantPermission', (SELECT wt.permission::text FROM "WorkspaceTeam" wt, t, w WHERE wt."teamId" = t.id AND wt."workspaceId" = w.id),
+  'teamUsers', COALESCE((SELECT json_agg(json_build_array(tu."userId", tu.role::text)) FROM "TeamUser" tu, t WHERE tu."teamId" = t.id), '[]'::json),
+  'memberships', COALESCE((SELECT json_agg(json_build_array(ms."userId", ms.role::text)) FROM "Membership" ms, o WHERE ms."organizationId" = o.id AND ms.accepted), '[]'::json),
+  'ownerlessSurveys', COALESCE((SELECT json_agg(s.id) FROM "Survey" s, w WHERE s."workspaceId" = w.id AND s.id IN (${ids}) AND s."ownerId" IS NULL), '[]'::json)
 );
 `;
 };
 
-/** SQL that puts back what the pre-image recorded. Deleting the team cascades to its members and grants. */
+/**
+ * SQL that puts back what the pre-image recorded.
+ * - Refuses a pre-image from another organization or workspace.
+ * - Survey owners: clears only an owner the apply assigned (survey was ownerless and the owner is still the mapped one).
+ * - Team: removes it if the apply created it; otherwise restores its members and workspace grant.
+ */
 export const buildRollbackSql = (input: unknown, preimageInput: unknown, mode: "dry_run" | "apply"): string => {
   const m = ZTeamGrantMapping.parse(input);
   const pre = ZPreimage.parse(preimageInput);
   const mRows = pre.memberships.map(([u, r]) => `(${lit(u)}, ${lit(r)})`).join(",\n  ");
-  const sRows = pre.surveys.map(([id, o]) => `(${lit(id)}, ${o === null ? "NULL" : lit(o)})`).join(",\n  ");
+  const tuRows = pre.teamUsers.map(([u, r]) => `(${lit(u)}, ${lit(r)})`).join(",\n  ");
+  const sRows = pre.ownerlessSurveys.map((x) => `(${lit(x)})`).join(",\n  ");
+  const emailRows = m.surveyOwners.map((s) => `(${lit(s.surveyId)}, ${lit(s.ownerEmail)})`).join(",\n  ");
+  const teamPart =
+    pre.teamId === null
+      ? `DELETE FROM "Team" WHERE id = team_id; -- the apply created the team; this cascades to its members and grant`
+      : `-- the team existed before the apply: restore its grant and members
+  IF team_id IS DISTINCT FROM ${lit(pre.teamId)} THEN
+    RAISE EXCEPTION 'the team is not the one in the pre-image';
+  END IF;
+  ${
+    pre.grantPermission === null
+      ? `DELETE FROM "WorkspaceTeam" WHERE "workspaceId" = ws_id AND "teamId" = team_id;`
+      : `INSERT INTO "WorkspaceTeam" ("workspaceId", "teamId", permission, updated_at)
+  VALUES (ws_id, team_id, ${lit(pre.grantPermission)}::"WorkspaceTeamPermission", now())
+  ON CONFLICT ("workspaceId", "teamId") DO UPDATE SET permission = EXCLUDED.permission, updated_at = now()
+    WHERE "WorkspaceTeam".permission IS DISTINCT FROM EXCLUDED.permission;`
+  }
+  DELETE FROM "TeamUser" tu WHERE tu."teamId" = team_id AND NOT EXISTS (
+    SELECT 1 FROM _asla_before_team_users b WHERE b."userId" = tu."userId");
+  INSERT INTO "TeamUser" ("teamId", "userId", role, updated_at)
+  SELECT team_id, b."userId", b.role, now() FROM _asla_before_team_users b
+  ON CONFLICT ("teamId", "userId") DO UPDATE SET role = EXCLUDED.role, updated_at = now()
+    WHERE "TeamUser".role IS DISTINCT FROM EXCLUDED.role;`;
   return `-- ASLA fork (ASL-1883): rollback of the team and role mapping. Mode: ${mode}. Generated; do not edit.
 \\set ON_ERROR_STOP on
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 CREATE TEMP TABLE _asla_before_roles ("userId" text PRIMARY KEY, role "OrganizationRole" NOT NULL) ON COMMIT DROP;
 ${mRows ? `INSERT INTO _asla_before_roles VALUES\n  ${mRows};` : "-- no memberships"}
-CREATE TEMP TABLE _asla_before_surveys (id text PRIMARY KEY, "ownerId" text) ON COMMIT DROP;
-${sRows ? `INSERT INTO _asla_before_surveys VALUES\n  ${sRows};` : "-- no surveys"}
+CREATE TEMP TABLE _asla_before_team_users ("userId" text PRIMARY KEY, role "TeamUserRole" NOT NULL) ON COMMIT DROP;
+${tuRows ? `INSERT INTO _asla_before_team_users VALUES\n  ${tuRows};` : "-- no team members"}
+CREATE TEMP TABLE _asla_before_surveys (id text PRIMARY KEY) ON COMMIT DROP;
+${sRows ? `INSERT INTO _asla_before_surveys VALUES\n  ${sRows};` : "-- no ownerless surveys"}
+CREATE TEMP TABLE _asla_survey_owners (survey_id text PRIMARY KEY, email text NOT NULL) ON COMMIT DROP;
+${emailRows ? `INSERT INTO _asla_survey_owners (survey_id, email) VALUES\n  ${emailRows};` : "-- no survey owners"}
 DO $asla$
 DECLARE
   org_id text;
+  ws_id text;
+  team_id text;
 BEGIN
   SELECT id INTO STRICT org_id FROM "Organization" WHERE name = ${lit(m.organizationName)};
+  SELECT id INTO STRICT ws_id FROM "Workspace" WHERE "organizationId" = org_id AND name = ${lit(m.workspaceName)};
+  IF org_id IS DISTINCT FROM ${lit(pre.organizationId)} OR ws_id IS DISTINCT FROM ${lit(pre.workspaceId)} THEN
+    RAISE EXCEPTION 'the pre-image is for another organization or workspace';
+  END IF;
+  SELECT id INTO team_id FROM "Team" WHERE "organizationId" = org_id AND name = ${lit(m.team.name)};
+
   UPDATE "Membership" ms SET role = b.role
   FROM _asla_before_roles b
   WHERE ms."userId" = b."userId" AND ms."organizationId" = org_id AND ms.role IS DISTINCT FROM b.role;
-  ${pre.teamExisted ? "-- the team existed before the mapping: it stays" : `DELETE FROM "Team" WHERE "organizationId" = org_id AND name = ${lit(m.team.name)};`}
-  UPDATE "Survey" s SET "ownerId" = b."ownerId", updated_at = now()
-  FROM _asla_before_surveys b WHERE s.id = b.id AND s."ownerId" IS DISTINCT FROM b."ownerId";
+
+  IF team_id IS NOT NULL THEN
+  ${teamPart}
+  END IF;
+
+  -- Clear only owners this apply assigned: the survey was ownerless before and still has the mapped owner.
+  UPDATE "Survey" s SET "ownerId" = NULL, updated_at = now()
+  FROM _asla_before_surveys b
+  JOIN _asla_survey_owners o ON o.survey_id = b.id
+  JOIN "User" u ON lower(u.email) = o.email
+  WHERE s.id = b.id AND s."workspaceId" = ws_id AND s."ownerId" = u.id;
 END
 $asla$;
 ${mode === "apply" ? "COMMIT;" : "ROLLBACK; -- dry run: nothing is saved. Generate with --apply to save."}

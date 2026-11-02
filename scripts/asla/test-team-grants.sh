@@ -2,6 +2,7 @@
 # ASLA fork (ASL-1883): runs the generated team-grants SQL on a throwaway PostgreSQL 17 container with
 # synthetic rows and a minimal copy of the 6.1.2 tables. Needs Docker and pnpm deps installed.
 #   A dry run changes nothing   B apply   C apply again (no change)   D demote an owner   E bad email
+#   I foreign pre-image refused  J later owner change kept  K existing team restored
 #   F no active owner   G survey in another workspace / owner outside the org   H rollback from the pre-image
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -78,4 +79,26 @@ check "H roles restored" "$(roles)" "$before"
 check "H team gone" "$(psqlc -c 'SELECT count(*) FROM "Team"')" "0"
 check "H grants and members gone" "$(psqlc -c 'SELECT (SELECT count(*) FROM "WorkspaceTeam") + (SELECT count(*) FROM "TeamUser")')" "0"
 check "H survey owner restored" "$(psqlc -c 'SELECT coalesce("ownerId",$$-$$) FROM "Survey" WHERE id = $$cmsurvey0000000000000001$$')" "-"
+# I: a pre-image from another organization is refused, and nothing is written there
+cat > "$TMP/m2.json" <<'JSON'
+{"organizationName":"Other","workspaceName":"Surveys","team":{"name":"All staff","permission":"readWrite"},
+ "owners":["stranger@y.org"],"surveyOwners":[{"surveyId":"cmsurvey0000000000000003","ownerEmail":"stranger@y.org"}]}
+JSON
+psqlc -c "UPDATE \"Survey\" SET \"ownerId\" = 'u6' WHERE id = 'cmsurvey0000000000000003'" >/dev/null
+if gen "$TMP/m2.json" --rollback "$TMP/pre.json" --apply | psqlc -v ON_ERROR_STOP=1 >/dev/null 2>&1; then check "I foreign pre-image refused" "ran" "failed"; else check "I foreign pre-image refused" "failed" "failed"; fi
+check "I other org survey untouched" "$(psqlc -c 'SELECT "ownerId" FROM "Survey" WHERE id = $$cmsurvey0000000000000003$$')" "u6"
+# J: rollback does not undo an owner change made after the apply
+psqlc -c "DELETE FROM \"Team\"; UPDATE \"Survey\" SET \"ownerId\" = NULL WHERE id IN ('cmsurvey0000000000000001','cmsurvey0000000000000002'); UPDATE \"Survey\" SET \"ownerId\" = 'u3' WHERE id = 'cmsurvey0000000000000002'" >/dev/null
+gen "$TMP/m.json" --preimage | psqlc -t > "$TMP/pre2.json"
+gen "$TMP/m.json" --apply | psqlc -v ON_ERROR_STOP=1 >/dev/null
+psqlc -c "UPDATE \"Survey\" SET \"ownerId\" = 'u1' WHERE id IN ('cmsurvey0000000000000001','cmsurvey0000000000000002')" >/dev/null
+gen "$TMP/m.json" --rollback "$TMP/pre2.json" --apply | psqlc -v ON_ERROR_STOP=1 >/dev/null
+check "J later owner change kept" "$(psqlc -c 'SELECT string_agg("ownerId", $$,$$ ORDER BY id) FROM "Survey" WHERE "workspaceId" = $$w1$$')" "u1,u1"
+# K: rollback restores an existing team's members and grant
+psqlc -c "DELETE FROM \"Team\"; INSERT INTO \"Team\" VALUES ('t1','All staff','o1',now()); INSERT INTO \"TeamUser\" VALUES ('t1','u1','admin',now()); INSERT INTO \"WorkspaceTeam\" VALUES ('w1','t1','read',now())" >/dev/null
+gen "$TMP/m.json" --preimage | psqlc -t > "$TMP/pre3.json"
+gen "$TMP/m.json" --apply | psqlc -v ON_ERROR_STOP=1 >/dev/null
+gen "$TMP/m.json" --rollback "$TMP/pre3.json" --apply | psqlc -v ON_ERROR_STOP=1 >/dev/null
+check "K team members restored" "$(psqlc -c 'SELECT string_agg("userId"||$$=$$||role, $$,$$ ORDER BY "userId") FROM "TeamUser"')" "u1=admin"
+check "K grant restored" "$(psqlc -c 'SELECT permission FROM "WorkspaceTeam"')" "read"
 exit $fail
