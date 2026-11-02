@@ -18,9 +18,28 @@ export const generateFileLinkToken = (): string => randomBytes(32).toString("bas
 
 export const getFollowUpFileUrl = (token: string): string => `${getPublicDomain()}/f/${token}`;
 
-/** A key is only usable for a survey if it points at a private file in that survey's own workspace. */
-export const isAttachmentKeyInWorkspace = (storageKey: string, workspaceId: string): boolean =>
-  storageKey.startsWith(`${workspaceId}/private/`) && !storageKey.includes("..");
+/**
+ * A key is only usable for a survey if it points at a private file in that survey's own workspace. Files
+ * uploaded before the 6.1.2 upgrade are keyed by the old environment ID, which the upgrade keeps as the
+ * workspace's `legacyEnvironmentId`; only that workspace's own legacy prefix is accepted.
+ */
+export const isAttachmentKeyInWorkspace = (
+  storageKey: string,
+  workspaceId: string,
+  legacyEnvironmentId?: string | null
+): boolean => {
+  if (storageKey.includes("..")) return false;
+  if (storageKey.startsWith(`${workspaceId}/private/`)) return true;
+  return !!legacyEnvironmentId && storageKey.startsWith(`${legacyEnvironmentId}/private/`);
+};
+
+export const getWorkspaceLegacyEnvironmentId = async (workspaceId: string): Promise<string | null> => {
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { legacyEnvironmentId: true },
+  });
+  return workspace?.legacyEnvironmentId ?? null;
+};
 
 export const canAttachFileToEmail = (attachment: TSurveyFollowUpAttachment | undefined): boolean =>
   !!attachment && attachment.attachToEmail && attachment.size <= FOLLOW_UP_ATTACHMENT_MAX_EMAIL_BYTES;
@@ -87,13 +106,17 @@ export const resolveFollowUpFileLink = async (token: string): Promise<TResolvedF
       fileName: true,
       contentType: true,
       fileSize: true,
-      followUp: { select: { survey: { select: { workspaceId: true } } } },
+      followUp: {
+        select: {
+          survey: { select: { workspaceId: true, workspace: { select: { legacyEnvironmentId: true } } } },
+        },
+      },
     },
   });
   if (!link) return null;
 
-  const workspaceId = link.followUp.survey.workspaceId;
-  if (!isAttachmentKeyInWorkspace(link.storageKey, workspaceId)) {
+  const { workspaceId, workspace } = link.followUp.survey;
+  if (!isAttachmentKeyInWorkspace(link.storageKey, workspaceId, workspace.legacyEnvironmentId)) {
     logger.warn({ workspaceId }, "Follow-up file link points outside its workspace");
     return null;
   }

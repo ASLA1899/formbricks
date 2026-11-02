@@ -35,12 +35,17 @@ vi.mock("@/lib/getPublicUrl", () => ({
 const WORKSPACE_ID = "clh3k2p0000001234abcdefgh";
 const TOKEN = generateFileLinkToken();
 
-const buildLinkRow = (storageKey = `${WORKSPACE_ID}/private/guide--fid--uuid.pdf`) => ({
+const LEGACY_ENV_ID = "clh3k2p0000009999legacyenv";
+
+const buildLinkRow = (
+  storageKey = `${WORKSPACE_ID}/private/guide--fid--uuid.pdf`,
+  legacyEnvironmentId: string | null = null
+) => ({
   storageKey,
   fileName: "Guide.pdf",
   contentType: "application/pdf",
   fileSize: 1000,
-  followUp: { survey: { workspaceId: WORKSPACE_ID } },
+  followUp: { survey: { workspaceId: WORKSPACE_ID, workspace: { legacyEnvironmentId } } },
 });
 
 describe("follow-up file link helpers", () => {
@@ -61,6 +66,20 @@ describe("follow-up file link helpers", () => {
     expect(isAttachmentKeyInWorkspace(`otherenv/private/a.pdf`, WORKSPACE_ID)).toBe(false);
     expect(isAttachmentKeyInWorkspace(`${WORKSPACE_ID}/public/a.pdf`, WORKSPACE_ID)).toBe(false);
     expect(isAttachmentKeyInWorkspace(`${WORKSPACE_ID}/private/../x.pdf`, WORKSPACE_ID)).toBe(false);
+  });
+
+  test("accepts only the workspace's own legacy environment prefix (files uploaded before the upgrade)", () => {
+    const legacyKey = `${LEGACY_ENV_ID}/private/a.pdf`;
+    expect(isAttachmentKeyInWorkspace(legacyKey, WORKSPACE_ID, LEGACY_ENV_ID)).toBe(true);
+    expect(isAttachmentKeyInWorkspace(legacyKey, WORKSPACE_ID, null)).toBe(false);
+    expect(isAttachmentKeyInWorkspace(legacyKey, WORKSPACE_ID)).toBe(false);
+    expect(isAttachmentKeyInWorkspace(`otherenv/private/a.pdf`, WORKSPACE_ID, LEGACY_ENV_ID)).toBe(false);
+    expect(isAttachmentKeyInWorkspace(`${LEGACY_ENV_ID}/public/a.pdf`, WORKSPACE_ID, LEGACY_ENV_ID)).toBe(
+      false
+    );
+    expect(isAttachmentKeyInWorkspace(`${LEGACY_ENV_ID}/private/../x.pdf`, WORKSPACE_ID, LEGACY_ENV_ID)).toBe(
+      false
+    );
   });
 
   test("attachment size gate: only files up to 5 MB with the toggle on are attached", () => {
@@ -100,6 +119,22 @@ describe("resolveFollowUpFileLink / registerFollowUpFileDownload", () => {
   test("returns null for a malformed token without touching the database", async () => {
     expect(await resolveFollowUpFileLink("nope")).toBeNull();
     expect(prisma.surveyFollowUpFileLink.findUnique).not.toHaveBeenCalled();
+  });
+
+  test("resolves a link whose file was uploaded under the legacy environment ID", async () => {
+    vi.mocked(prisma.surveyFollowUpFileLink.findUnique).mockResolvedValue(
+      buildLinkRow(`${LEGACY_ENV_ID}/private/old.pdf`, LEGACY_ENV_ID) as never
+    );
+    expect((await resolveFollowUpFileLink(TOKEN))?.attachment.storageKey).toBe(
+      `${LEGACY_ENV_ID}/private/old.pdf`
+    );
+  });
+
+  test("rejects a legacy-prefixed key when the workspace has a different legacy ID", async () => {
+    vi.mocked(prisma.surveyFollowUpFileLink.findUnique).mockResolvedValue(
+      buildLinkRow(`${LEGACY_ENV_ID}/private/old.pdf`, "someotherenvironment") as never
+    );
+    expect(await resolveFollowUpFileLink(TOKEN)).toBeNull();
   });
 
   test("resolving (the GET path) never counts a download", async () => {

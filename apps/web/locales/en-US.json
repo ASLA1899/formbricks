@@ -3657,7 +3657,7 @@
         "first_name": "First Name",
         "five_points_recommended": "5 points (recommended)",
         "follow_up_attachment_attach_description": "You can't track when recipients open an attached file. Only downloads through the download link are tracked.",
-        "follow_up_attachment_attach_disabled": "The limit for attached files is {maxSize} MB. Larger files are sent as a download link only.",
+        "follow_up_attachment_attach_disabled": "This file is over the {maxSize} MB attachment limit, so it is sent as a download link only.",
         "follow_up_attachment_attach_label": "Also attach the file to the email",
         "follow_up_attachment_description": "Every recipient gets a download link to this file. Downloads are tracked per recipient.",
         "follow_up_attachment_remove": "Remove file",

@@ -6,7 +6,11 @@ import { TSurvey } from "@formbricks/types/surveys/types";
 import { sendEmail } from "@/modules/email";
 import { buildSurveyResponseEmailHtml } from "@/modules/email/lib/survey-response-email";
 import { sendFollowUpEmail } from "./email";
-import { createFollowUpFileLink, deleteFollowUpFileLinkByToken } from "./file-links";
+import {
+  createFollowUpFileLink,
+  deleteFollowUpFileLinkByToken,
+  getWorkspaceLegacyEnvironmentId,
+} from "./file-links";
 
 vi.mock("@formbricks/storage", () => ({ getFileStream: vi.fn() }));
 vi.mock("@formbricks/database", () => ({ prisma: {} }));
@@ -19,6 +23,7 @@ vi.mock("./file-links", async () => {
     ...actual,
     createFollowUpFileLink: vi.fn(),
     deleteFollowUpFileLinkByToken: vi.fn(),
+    getWorkspaceLegacyEnvironmentId: vi.fn(),
     getFollowUpFileUrl: vi.fn((token: string) => `https://forms.example.org/f/${token}`),
   };
 });
@@ -83,6 +88,7 @@ describe("sendFollowUpEmail with a file", () => {
     vi.mocked(buildSurveyResponseEmailHtml).mockResolvedValue("<html></html>");
     vi.mocked(sendEmail).mockResolvedValue(true);
     vi.mocked(createFollowUpFileLink).mockResolvedValue("tok-123");
+    vi.mocked(getWorkspaceLegacyEnvironmentId).mockResolvedValue(null);
   });
 
   test("sends without creating a link when the follow-up has no file", async () => {
@@ -129,6 +135,13 @@ describe("sendFollowUpEmail with a file", () => {
     vi.mocked(getFileStream).mockResolvedValue(streamOf(6 * 1024 * 1024) as never);
     await send(buildFollowUp(attachment({ attachToEmail: true, size: 1000 })));
     expect(vi.mocked(sendEmail).mock.calls[0][0]).not.toHaveProperty("attachments");
+  });
+
+  test("sends a follow-up whose file was uploaded under the workspace's legacy environment ID", async () => {
+    vi.mocked(getWorkspaceLegacyEnvironmentId).mockResolvedValue("legacyenv");
+    await send(buildFollowUp(attachment({ storageKey: "legacyenv/private/old.pdf" })));
+    expect(createFollowUpFileLink).toHaveBeenCalled();
+    expect(sendEmail).toHaveBeenCalled();
   });
 
   test("refuses a file from another workspace", async () => {

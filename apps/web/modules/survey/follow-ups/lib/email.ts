@@ -15,6 +15,7 @@ import {
   createFollowUpFileLink,
   deleteFollowUpFileLinkByToken,
   getFollowUpFileUrl,
+  getWorkspaceLegacyEnvironmentId,
   isAttachmentKeyInWorkspace,
 } from "@/modules/survey/follow-ups/lib/file-links";
 
@@ -69,7 +70,14 @@ export const sendFollowUpEmail = async ({
     },
   } = followUp;
 
-  if (attachment && !isAttachmentKeyInWorkspace(attachment.storageKey, survey.workspaceId)) {
+  if (
+    attachment &&
+    !isAttachmentKeyInWorkspace(
+      attachment.storageKey,
+      survey.workspaceId,
+      await getWorkspaceLegacyEnvironmentId(survey.workspaceId)
+    )
+  ) {
     throw new Error(`Follow-up file does not belong to this survey's workspace: ${followUp.id}`);
   }
 

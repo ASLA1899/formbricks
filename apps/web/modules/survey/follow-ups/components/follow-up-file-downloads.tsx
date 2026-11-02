@@ -54,7 +54,7 @@ export const FollowUpFileDownloads = ({ surveyId, followUpId }: FollowUpFileDown
       ) : null}
 
       {!rows && !hasError ? (
-        <p className="text-sm text-slate-500">{t("environments.surveys.edit.follow_up_downloads_loading")}</p>
+        <p className="text-sm text-slate-500">{t("workspace.surveys.edit.follow_up_downloads_loading")}</p>
       ) : null}
 
       {rows && rows.length === 0 ? (
@@ -94,7 +94,7 @@ export const FollowUpFileDownloads = ({ surveyId, followUpId }: FollowUpFileDown
                   </td>
                   <td className="py-1 pr-2">
                     {formatDateTime(row.lastDownloadedAt) ||
-                      t("environments.surveys.edit.follow_up_downloads_not_downloaded")}
+                      t("workspace.surveys.edit.follow_up_downloads_not_downloaded")}
                   </td>
                   <td className="py-1 text-right">{row.downloadCount}</td>
                 </tr>
