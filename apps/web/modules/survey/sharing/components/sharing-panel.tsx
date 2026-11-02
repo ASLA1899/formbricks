@@ -1,10 +1,13 @@
 "use client";
 
 import * as Collapsible from "@radix-ui/react-collapsible";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, UsersIcon, XIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
+import { surveyKeys } from "@/modules/survey/list/lib/query";
 import {
   addSurveyAccessAction,
   getSurveySharingStateAction,
@@ -22,7 +25,6 @@ import {
   SelectValue,
 } from "@/modules/ui/components/select";
 
-type TMember = { id: string; name: string; email: string };
 type TAccessMode = "private" | "public";
 
 interface SharingPanelProps {
@@ -36,74 +38,85 @@ interface SharingPanelProps {
  */
 export const SharingPanel = ({ surveyId }: Readonly<SharingPanelProps>) => {
   const { t } = useTranslation();
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const [accessMode, setAccessMode] = useState<TAccessMode>("private");
-  const [access, setAccess] = useState<TMember[]>([]);
-  const [orgMembers, setOrgMembers] = useState<TMember[]>([]);
   const [pendingPick, setPendingPick] = useState("");
 
-  const load = async () => {
-    const result = await getSurveySharingStateAction({ surveyId });
-    if (result?.data) {
-      setAccessMode(result.data.accessMode);
-      setAccess(result.data.access);
-      setOrgMembers(result.data.orgMembers);
-      setLoaded(true);
-    } else {
-      toast.error(t("workspace.surveys.edit.survey_sharing_load_failed"));
-    }
+  // Keyed under the shared visibility key, so Collaborate (or any other visibility control) invalidating
+  // `surveyKeys.visibility(surveyId)` refetches this too. Refetched on every open.
+  const sharingKey = [...surveyKeys.visibility(surveyId), "sharing"] as const;
+  const { data: state, isError } = useQuery({
+    queryKey: sharingKey,
+    queryFn: async () => {
+      const result = await getSurveySharingStateAction({ surveyId });
+      if (!result?.data) throw new Error("sharing state unavailable");
+      return result.data;
+    },
+    enabled: open,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+  const loaded = state !== undefined;
+  const accessMode: TAccessMode = state?.accessMode ?? "private";
+  const pendingAccessMode = state?.pendingAccessMode ?? null;
+  const access = state?.access ?? [];
+  const orgMembers = state?.orgMembers ?? [];
+
+  useEffect(() => {
+    if (isError) toast.error(t("workspace.surveys.edit.survey_sharing_load_failed"));
+  }, [isError, t]);
+
+  const refreshVisibility = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: surveyKeys.visibility(surveyId) }),
+      queryClient.invalidateQueries({ queryKey: surveyKeys.lists() }),
+    ]);
+    router.refresh();
   };
 
-  const onOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (next && !loaded) void load();
-  };
-
-  const accessIds = useMemo(() => new Set(access.map((member) => member.id)), [access]);
-  const candidates = useMemo(
-    () => orgMembers.filter((member) => !accessIds.has(member.id)),
-    [orgMembers, accessIds]
-  );
+  const accessIds = new Set(access.map((member) => member.id));
+  const candidates = orgMembers.filter((member) => !accessIds.has(member.id));
 
   const onAccessModeChange = async (next: TAccessMode) => {
-    const previous = accessMode;
-    setAccessMode(next);
+    if (next === accessMode && !pendingAccessMode) return;
     const result = await setSurveyAccessModeAction({ accessMode: next, surveyId });
-    if (result?.data) {
-      toast.success(t("workspace.surveys.edit.survey_sharing_mode_updated"));
-    } else {
-      setAccessMode(previous);
+    if (!result?.data) {
       toast.error(t("workspace.surveys.edit.survey_sharing_mode_failed"));
+    } else if (result.data.projection === "failed") {
+      // Stored, but the permission graph has not acknowledged it: it finishes on its own, and until it
+      // does the refetched state keeps showing the enforced value rather than the stored one.
+      toast.success(t("workspace.surveys.visibility.visibility_update_pending"));
+    } else {
+      toast.success(t("workspace.surveys.edit.survey_sharing_mode_updated"));
     }
+    await refreshVisibility();
   };
+
+  const refetchSharing = () => queryClient.invalidateQueries({ queryKey: sharingKey });
 
   const onAddUser = async () => {
     const member = orgMembers.find((candidate) => candidate.id === pendingPick);
     if (!member) return;
     const result = await addSurveyAccessAction({ surveyId, userIds: [member.id] });
     if (result?.data) {
-      setAccess((current) => [...current, member]);
       setPendingPick("");
+      await refetchSharing();
     } else {
       toast.error(t("workspace.surveys.edit.survey_sharing_add_failed"));
     }
   };
 
   const onRemoveUser = async (userId: string) => {
-    const previous = access;
-    setAccess((current) => current.filter((member) => member.id !== userId));
     const result = await removeSurveyAccessAction({ surveyId, userId });
-    if (!result?.data) {
-      setAccess(previous);
-      toast.error(t("workspace.surveys.edit.survey_sharing_remove_failed"));
-    }
+    if (!result?.data) toast.error(t("workspace.surveys.edit.survey_sharing_remove_failed"));
+    await refetchSharing();
   };
 
   return (
     <Collapsible.Root
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={setOpen}
       className="w-full space-y-2 rounded-lg border border-slate-300 bg-white">
       <Collapsible.CollapsibleTrigger asChild className="h-full w-full cursor-pointer hover:bg-slate-50">
         <div className="inline-flex p-4">
@@ -148,6 +161,11 @@ export const SharingPanel = ({ surveyId }: Readonly<SharingPanelProps>) => {
               </div>
             </div>
           </RadioGroup>
+          {pendingAccessMode && (
+            <p className="mt-2 text-sm text-slate-500">
+              {t("workspace.surveys.visibility.visibility_update_pending")}
+            </p>
+          )}
 
           {accessMode === "private" && (
             <div className="mt-6">

@@ -6,6 +6,7 @@ import { InvalidInputError, ResourceNotFoundError } from "@formbricks/types/erro
 import { assertCan, can } from "@/lib/authorization";
 import { setSurveyAccessMode } from "@/lib/survey/access-mode";
 import { accessModeForVisibility } from "@/lib/survey/visibility/access-mode-map";
+import { getEffectiveVisibility, getPendingVisibility } from "@/lib/survey/visibility/policy";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
 import { getOrganizationIdFromSurveyId, getWorkspaceIdFromSurveyId } from "@/lib/utils/helper";
 import {
@@ -46,7 +47,12 @@ export const getSurveySharingStateAction = authenticatedActionClient
   .action(async ({ ctx, parsedInput }) => {
     const organizationId = await authorizeSharing(parsedInput.surveyId, ctx.user.id);
     const survey = await prisma.survey.findUnique({
-      select: { visibility: true, workspaceId: true },
+      select: {
+        visibility: true,
+        visibilityProjectedVersion: true,
+        visibilityVersion: true,
+        workspaceId: true,
+      },
       where: { id: parsedInput.surveyId },
     });
     if (!survey) throw new ResourceNotFoundError("Survey", parsedInput.surveyId);
@@ -54,14 +60,17 @@ export const getSurveySharingStateAction = authenticatedActionClient
       listSurveyAccess(parsedInput.surveyId),
       listShareableMembers(organizationId),
     ]);
-    // `visibility` is the authoritative state (it is what authorization enforces and what every other
-    // control writes), so the panel derives its mode from it, not from the mirrored `accessMode` column.
+    // The panel shows what authorization enforces right now (a grant the graph has not acknowledged
+    // counts as restricted) plus the value a stored change is still settling to, never the mirrored
+    // `accessMode` column or the raw stored flag.
     const orgMembers = await filterWorkspaceReaders(
       survey.workspaceId,
       members.map((member) => member.user)
     );
+    const pending = getPendingVisibility(survey);
     return {
-      accessMode: accessModeForVisibility(survey.visibility),
+      accessMode: accessModeForVisibility(getEffectiveVisibility(survey)),
+      pendingAccessMode: pending ? accessModeForVisibility(pending) : null,
       access: access.map((row) => row.user),
       orgMembers,
     };

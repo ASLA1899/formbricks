@@ -86,17 +86,47 @@ describe("survey sharing actions", () => {
     vi.mocked(prisma.survey.findUnique).mockResolvedValue({
       accessMode: "private",
       visibility: "workspace",
+      visibilityProjectedVersion: 1,
+      visibilityVersion: 1,
       workspaceId: "ws1",
     } as never);
     await expect(
       (getSurveySharingStateAction as never as (i: unknown) => Promise<{ accessMode: string }>)({ surveyId })
-    ).resolves.toMatchObject({ accessMode: "public" });
+    ).resolves.toMatchObject({ accessMode: "public", pendingAccessMode: null });
+  });
+
+  test("an unacknowledged public grant reads as private with the public target pending", async () => {
+    vi.mocked(assertCan).mockResolvedValue(undefined);
+    vi.mocked(prisma.survey.findUnique).mockResolvedValue({
+      visibility: "workspace",
+      visibilityProjectedVersion: 1,
+      visibilityVersion: 2,
+      workspaceId: "ws1",
+    } as never);
+    await expect(
+      (getSurveySharingStateAction as never as (i: unknown) => Promise<unknown>)({ surveyId })
+    ).resolves.toMatchObject({ accessMode: "private", pendingAccessMode: "public" });
+  });
+
+  test("a pending restriction reads as private with the private target pending", async () => {
+    vi.mocked(assertCan).mockResolvedValue(undefined);
+    vi.mocked(prisma.survey.findUnique).mockResolvedValue({
+      visibility: "restricted",
+      visibilityProjectedVersion: 3,
+      visibilityVersion: 4,
+      workspaceId: "ws1",
+    } as never);
+    await expect(
+      (getSurveySharingStateAction as never as (i: unknown) => Promise<unknown>)({ surveyId })
+    ).resolves.toMatchObject({ accessMode: "private", pendingAccessMode: "private" });
   });
 
   test("state offers only members who can read the survey's workspace", async () => {
     vi.mocked(assertCan).mockResolvedValue(undefined);
     vi.mocked(prisma.survey.findUnique).mockResolvedValue({
       visibility: "restricted",
+      visibilityProjectedVersion: 1,
+      visibilityVersion: 1,
       workspaceId: "ws1",
     } as never);
     vi.mocked(can).mockResolvedValue(false);
@@ -124,6 +154,8 @@ describe("survey sharing actions", () => {
     vi.mocked(assertCan).mockResolvedValue(undefined);
     vi.mocked(prisma.survey.findUnique).mockResolvedValue({
       visibility: "restricted",
+      visibilityProjectedVersion: 1,
+      visibilityVersion: 1,
       workspaceId: "ws1",
     } as never);
     await expect(
@@ -131,6 +163,7 @@ describe("survey sharing actions", () => {
     ).resolves.toEqual({
       access: [{ id: "u3", name: "C", email: "c@x" }],
       accessMode: "private",
+      pendingAccessMode: null,
       orgMembers: [{ id: "u2", name: "B", email: "b@x" }],
     });
   });
