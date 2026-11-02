@@ -110,10 +110,7 @@ describe("syncResponseToSnowflake", () => {
 
 describe("deleteResponsesFromSnowflake", () => {
   test("deletes the rows of every response, whatever the survey's sync flag", async () => {
-    await deleteResponsesFromSnowflake([
-      { id: "r1", surveyId: "s1" },
-      { id: "r2", surveyId: "s2" },
-    ]);
+    await deleteResponsesFromSnowflake([{ id: "r1" }, { id: "r2" }]);
     expect(deleteSurveyResponseRows).toHaveBeenCalledWith(["r1", "r2"]);
   });
 
@@ -127,13 +124,13 @@ describe("deleteResponsesFromSnowflake", () => {
   test("does nothing when unconfigured or empty", async () => {
     await deleteResponsesFromSnowflake([]);
     vi.mocked(isSnowflakeConfigured).mockReturnValue(false);
-    await deleteResponseFromSnowflake({ id: "r1", surveyId: "s1" });
+    await deleteResponseFromSnowflake({ id: "r1" });
     expect(deleteSurveyResponseRows).not.toHaveBeenCalled();
   });
 
   test("never throws", async () => {
     vi.mocked(deleteSurveyResponseRows).mockRejectedValue(new Error("down"));
-    await expect(deleteResponseFromSnowflake({ id: "r1", surveyId: "s1" })).resolves.toBeUndefined();
+    await expect(deleteResponseFromSnowflake({ id: "r1" })).resolves.toBeUndefined();
   });
 
   test("deletes again after the delay, even when the first delete failed", async () => {
