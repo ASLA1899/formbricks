@@ -169,6 +169,10 @@ export const ZStoredShuffleOptionWithDefault = z
 export const ZMultipleChoiceOptionDisplayType = z.enum(["list", "dropdown"]);
 export type TMultipleChoiceOptionDisplayType = z.infer<typeof ZMultipleChoiceOptionDisplayType>;
 
+// ASLA fork (ASL-1866): column count for the list layout. The dropdown layout ignores it.
+export const ZMultipleChoiceColumns = z.enum(["1", "2"]);
+export type TMultipleChoiceColumns = z.infer<typeof ZMultipleChoiceColumns>;
+
 // Multiple Choice Single Element
 export const ZSurveyMultipleChoiceSingleElement = ZSurveyElementBase.extend({
   type: z.literal(TSurveyElementTypeEnum.MultipleChoiceSingle),
@@ -178,6 +182,7 @@ export const ZSurveyMultipleChoiceSingleElement = ZSurveyElementBase.extend({
   shuffleOption: ZStoredShuffleOption,
   otherOptionPlaceholder: ZI18nString.optional(),
   displayType: ZMultipleChoiceOptionDisplayType.optional(),
+  columns: ZMultipleChoiceColumns.optional(),
 });
 
 // Multiple Choice Multi Element
@@ -190,6 +195,7 @@ export const ZSurveyMultipleChoiceMultiElement = ZSurveyElementBase.extend({
   otherOptionPlaceholder: ZI18nString.optional(),
   validation: ZValidation.optional(),
   displayType: ZMultipleChoiceOptionDisplayType.optional(),
+  columns: ZMultipleChoiceColumns.optional(),
 });
 
 // Union type for Multiple Choice Elements
