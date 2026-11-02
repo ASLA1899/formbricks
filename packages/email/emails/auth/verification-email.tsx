@@ -1,4 +1,4 @@
-import { Container, Heading, Link, Text } from "react-email";
+import { Heading, Link, Text } from "react-email";
 import { EmailButton } from "../../src/components/email-button";
 import { EmailFooter } from "../../src/components/email-footer";
 import { EmailTemplate } from "../../src/components/email-template";
@@ -21,7 +21,7 @@ export function VerificationEmail({
 }: VerificationEmailProps): React.JSX.Element {
   return (
     <EmailTemplate t={t} {...legalProps}>
-      <Container>
+      <>
         <Heading>{t("emails.verification_email_heading")}</Heading>
         <Text className="text-sm">{t("emails.verification_email_text")}</Text>
         <EmailButton href={verifyLink} label={t("emails.verification_email_verify_email")} />
@@ -37,7 +37,7 @@ export function VerificationEmail({
           </Link>
         </Text>
         <EmailFooter t={t} />
-      </Container>
+      </>
     </EmailTemplate>
   );
 }

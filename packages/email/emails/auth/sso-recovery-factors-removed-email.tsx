@@ -1,4 +1,4 @@
-import { Container, Heading, Text } from "react-email";
+import { Heading, Text } from "react-email";
 import { EmailButton } from "../../src/components/email-button";
 import { EmailFooter } from "../../src/components/email-footer";
 import { EmailTemplate } from "../../src/components/email-template";
@@ -39,7 +39,7 @@ export function SsoRecoveryFactorsRemovedEmail({
 }: Readonly<SsoRecoveryFactorsRemovedEmailProps>): React.JSX.Element {
   return (
     <EmailTemplate t={t} {...legalProps}>
-      <Container>
+      <>
         <Heading>{t("emails.sso_recovery_factors_removed_email_heading")}</Heading>
         <Text className="text-sm">{t("emails.sso_recovery_factors_removed_email_text")}</Text>
         {passwordRemoved ? (
@@ -71,7 +71,7 @@ export function SsoRecoveryFactorsRemovedEmail({
         ) : null}
         <Text className="mb-0 text-sm">{t("emails.sso_recovery_factors_removed_email_did_not_expect")}</Text>
         <EmailFooter t={t} />
-      </Container>
+      </>
     </EmailTemplate>
   );
 }
