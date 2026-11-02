@@ -85,4 +85,23 @@ describe("resolveRecordNumber", () => {
   test("returns null when nothing matches", () => {
     expect(resolveRecordNumber({ other: "x" }, null)).toBeNull();
   });
+
+  test("keeps QUESTION_ID unique when a hidden field collides with a contact attribute", () => {
+    const rows = buildSnowflakeRows(
+      { id: "s1", name: "S", blocks: [], hiddenFields: { fieldIds: ["contact_email"] } },
+      {
+        id: "r1",
+        createdAt: new Date("2026-11-01T00:00:00.000Z"),
+        finished: true,
+        language: null,
+        meta: {},
+        data: { contact_email: "hidden@example.org" },
+        contactAttributes: { email: "attr@example.org", name: "N" },
+      }
+    );
+    const ids = rows.map((row) => row.QUESTION_ID);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(rows.find((row) => row.QUESTION_ID === "contact_email")?.ANSWER).toBe("hidden@example.org");
+    expect(ids).toContain("contact_name");
+  });
 });

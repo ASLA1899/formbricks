@@ -96,11 +96,16 @@ export const buildSnowflakeRows = (
     rows.push({ ...base, QUESTION_ID: key, ...described, ANSWER: toText(value) });
   }
 
+  // QUESTION_ID is half of the MERGE key, so it must be unique per response. A hidden field named
+  // "contact_email" would collide with the "email" contact attribute; the response data wins.
+  const usedIds = new Set(rows.map((row) => row.QUESTION_ID));
   for (const [key, value] of Object.entries(contactAttributes ?? {})) {
-    if (value == null) continue;
+    const questionId = `contact_${key}`;
+    if (value == null || usedIds.has(questionId)) continue;
+    usedIds.add(questionId);
     rows.push({
       ...base,
-      QUESTION_ID: `contact_${key}`,
+      QUESTION_ID: questionId,
       QUESTION_TEXT: key,
       QUESTION_TYPE: "contactAttribute",
       ANSWER: String(value),

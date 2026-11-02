@@ -5,6 +5,7 @@ import {
   RECONCILE_DELAY_MS,
   deleteResponseFromSnowflake,
   deleteResponsesFromSnowflake,
+  reconcileResponses,
   syncResponseToSnowflake,
 } from "./sync";
 
@@ -30,15 +31,40 @@ const response = {
   data: { q1: "a" },
 };
 
+const currentRow = (overrides: Record<string, unknown> = {}) => ({
+  ...response,
+  survey: { ...survey, snowflakeSync: true },
+  ...overrides,
+});
+
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(isSnowflakeConfigured).mockReturnValue(true);
   vi.mocked(prisma.response.findUnique).mockResolvedValue({ id: "r1" } as never);
-  vi.mocked(prisma.response.findMany).mockResolvedValue([{ id: "r1" }] as never);
+  vi.mocked(prisma.response.findMany).mockResolvedValue([currentRow()] as never);
 });
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("reconcileResponses", () => {
+  test("writes a surviving response again from its current local data", async () => {
+    vi.mocked(prisma.response.findMany).mockResolvedValue([currentRow({ data: { q1: "newer" } })] as never);
+    await reconcileResponses(["r1"]);
+    expect(upsertSurveyResponseRows).toHaveBeenCalledWith("r1", [
+      expect.objectContaining({ QUESTION_ID: "q1", ANSWER: "newer" }),
+    ]);
+  });
+
+  test("does not rewrite when the survey stopped syncing or the response is unfinished", async () => {
+    vi.mocked(prisma.response.findMany).mockResolvedValue([
+      currentRow({ survey: { ...survey, snowflakeSync: false } }),
+      currentRow({ id: "r2", finished: false }),
+    ] as never);
+    await reconcileResponses(["r1", "r2"]);
+    expect(upsertSurveyResponseRows).not.toHaveBeenCalled();
+  });
 });
 
 describe("syncResponseToSnowflake", () => {
@@ -104,7 +130,9 @@ describe("syncResponseToSnowflake", () => {
       events.push("end");
     });
     await Promise.all([syncResponseToSnowflake(survey, response), syncResponseToSnowflake(survey, response)]);
-    expect(events).toEqual(["start", "end", "start", "end"]);
+    // The reconcile after each sync adds further writes; none may overlap.
+    expect(events.length % 2).toBe(0);
+    events.forEach((event, i) => expect(event).toBe(i % 2 === 0 ? "start" : "end"));
   });
 });
 

@@ -26,19 +26,39 @@ const runSerially = <T>(task: () => Promise<T>): Promise<T> => {
 export const RECONCILE_DELAY_MS = 10 * 60_000;
 
 /**
- * Deletes the warehouse rows of every given response that no longer exists locally. Never throws.
- * Returns whether the lookup and any delete succeeded.
+ * Settles the warehouse to the local state of every given response. Never throws.
+ * - A response that no longer exists locally has its rows deleted.
+ * - A finished response of a survey that still syncs is written again from its current local data. This
+ *   repairs a stale snapshot the driver delivered late (an old write that overwrote newer answers, or an
+ *   old prune that removed newer rows). Writes are MERGEs, so repeating them is safe.
+ * Returns whether the lookup and any write succeeded.
  */
 export const reconcileResponses = async (responseIds: string[]): Promise<boolean> => {
   if (responseIds.length === 0 || !isSnowflakeConfigured()) return false;
   try {
     const existing = await prisma.response.findMany({
       where: { id: { in: responseIds } },
-      select: { id: true },
+      select: {
+        id: true,
+        createdAt: true,
+        finished: true,
+        language: true,
+        meta: true,
+        data: true,
+        contactAttributes: true,
+        survey: { select: { id: true, name: true, blocks: true, hiddenFields: true, snowflakeSync: true } },
+      },
     });
     const present = new Set(existing.map((response) => response.id));
     const gone = responseIds.filter((id) => !present.has(id));
     if (gone.length > 0) await runSerially(() => deleteSurveyResponseRows(gone));
+    for (const { survey, ...response } of existing) {
+      if (!survey.snowflakeSync || !response.finished) continue;
+      const current = response as Parameters<typeof buildSnowflakeRows>[1];
+      await runSerially(() =>
+        upsertSurveyResponseRows(response.id, buildSnowflakeRows(survey as TSnowflakeSurvey, current))
+      );
+    }
     return true;
   } catch (error) {
     logger.error({ err: error, responseCount: responseIds.length }, "Snowflake reconcile failed");
