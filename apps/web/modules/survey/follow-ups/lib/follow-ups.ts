@@ -92,8 +92,11 @@ const evaluateFollowUp = async (
         status: "error",
         error: `Email address is not valid for followup: ${followUp.id}`,
       };
-    } else if (Array.isArray(toValueFromResponse)) {
-      const emailAddress = toValueFromResponse[2];
+    } else if (Array.isArray(toValueFromResponse) || typeof toValueFromResponse === "object") {
+      // Contact info answers: legacy positional array (email at index 2) or object keyed by field id
+      const emailAddress = Array.isArray(toValueFromResponse)
+        ? toValueFromResponse[2]
+        : (toValueFromResponse as Record<string, string>).email;
       if (!emailAddress) {
         return {
           followUpId: followUp.id,

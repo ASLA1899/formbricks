@@ -15,6 +15,8 @@ export interface FormFieldConfig {
   label: string;
   /** Placeholder text for the input */
   placeholder?: string;
+  /** Placeholder rendered inside the input (or dropdown trigger); unset for fields whose placeholder is only their label */
+  inputPlaceholder?: string;
   /** Input type (text, email, tel, number, url, date, dropdown) */
   type?: "text" | "email" | "tel" | "number" | "url" | "date" | "dropdown";
   /** Whether this field is required */
@@ -136,10 +138,12 @@ function FormField({
             const fieldValue = currentValues[field.id] ?? "";
             const fieldInputId = `${elementId}-${field.id}`;
 
-            // Determine input type (dropdown is handled separately; date falls back to text)
+            // Determine input type (dropdown is handled separately)
             const rawType = field.type ?? "text";
-            let inputType: "text" | "email" | "tel" | "number" | "url" =
-              rawType === "date" || rawType === "dropdown" ? "text" : rawType;
+            let inputType: "text" | "email" | "tel" | "number" | "url" | "date" =
+              rawType === "dropdown" ? "text" : rawType;
+            const isDropdown = field.type === "dropdown" && Boolean(field.options);
+            const dropdownInputId = `${fieldInputId}-select`;
             if (field.id === "email" && !field.type) {
               inputType = "email";
             } else if (field.id === "phone" && !field.type) {
@@ -148,7 +152,10 @@ function FormField({
 
             return (
               <div key={field.id} className="space-y-2">
-                <Label htmlFor={fieldInputId} variant="default">
+                <Label
+                  id={isDropdown ? `${dropdownInputId}-headline` : undefined}
+                  htmlFor={isDropdown ? undefined : fieldInputId}
+                  variant="default">
                   {fieldRequired ? `${field.label}*` : field.label}
                 </Label>
                 {field.type === "dropdown" && field.options ? (
@@ -156,7 +163,7 @@ function FormField({
                     <SingleSelect
                       elementId={fieldInputId}
                       headline=""
-                      inputId={`${fieldInputId}-select`}
+                      inputId={dropdownInputId}
                       options={field.options}
                       value={
                         // Value may be stored as label (human-readable), so resolve back to option ID
@@ -174,7 +181,7 @@ function FormField({
                       disabled={disabled}
                       dir={dir}
                       variant="dropdown"
-                      placeholder="Select..."
+                      placeholder={field.inputPlaceholder || "Select..."}
                     />
                     {/* Hidden input for native browser required validation on dropdown fields */}
                     {fieldRequired && (
@@ -193,6 +200,7 @@ function FormField({
                   <Input
                     id={fieldInputId}
                     type={inputType}
+                    placeholder={field.inputPlaceholder}
                     value={fieldValue}
                     onChange={(e) => {
                       handleFieldChange(field.id, e.target.value);

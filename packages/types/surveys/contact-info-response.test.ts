@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { normalizeContactInfoResponse } from "./contact-info-response";
+import { resolveContactInfoFieldOrder } from "./contact-info-response";
 
 describe("normalizeContactInfoResponse", () => {
   test("returns object-format responses unchanged, including custom field keys", () => {
@@ -29,5 +30,30 @@ describe("normalizeContactInfoResponse", () => {
 
   test.each([null, undefined, "text", 42])("returns null for %s", (value) => {
     expect(normalizeContactInfoResponse(value)).toBeNull();
+  });
+});
+
+describe("resolveContactInfoFieldOrder", () => {
+  test("defaults to built-ins then custom fields", () => {
+    expect(resolveContactInfoFieldOrder(undefined, ["a"])).toEqual([
+      "firstName",
+      "lastName",
+      "email",
+      "phone",
+      "company",
+      "a",
+    ]);
+  });
+
+  test("appends fields added after a reorder and drops unknown ids", () => {
+    expect(resolveContactInfoFieldOrder(["email", "a", "gone", "firstName"], ["a", "b"])).toEqual([
+      "email",
+      "a",
+      "firstName",
+      "lastName",
+      "phone",
+      "company",
+      "b",
+    ]);
   });
 });

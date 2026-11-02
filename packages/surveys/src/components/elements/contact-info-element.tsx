@@ -2,6 +2,7 @@ import { useState } from "preact/hooks";
 import { useTranslation } from "react-i18next";
 import { FormField, type FormFieldConfig } from "@formbricks/survey-ui";
 import { type TResponseData, type TResponseTtc } from "@formbricks/types/responses";
+import { resolveContactInfoFieldOrder } from "@formbricks/types/surveys/contact-info-response";
 import type { TSurveyContactInfoElement } from "@formbricks/types/surveys/elements";
 import { getLocalizedValue } from "@/lib/i18n";
 import { getUpdatedTtc, useTtc } from "@/lib/ttc";
@@ -88,10 +89,10 @@ export function ContactInfoElement({
   };
 
   // Determine field order — if no explicit order, show built-ins then custom fields
-  const fieldOrder = element.fieldOrder ?? [
-    ...DEFAULT_FIELD_ORDER,
-    ...(element.customFields ?? []).map((cf) => cf.id),
-  ];
+  const fieldOrder = resolveContactInfoFieldOrder(
+    element.fieldOrder ?? DEFAULT_FIELD_ORDER,
+    (element.customFields ?? []).map((cf) => cf.id)
+  );
 
   // Build FormFieldConfig array from fieldOrder
   const formFields: FormFieldConfig[] = fieldOrder
@@ -117,8 +118,10 @@ export function ContactInfoElement({
       const fieldConfig: FormFieldConfig = {
         id: customField.id,
         label: customField.label,
-        placeholder:
-          getLocalizedValue(customField.placeholder, languageCode) || `Select ${customField.label}...`,
+        placeholder: getLocalizedValue(customField.placeholder, languageCode),
+        inputPlaceholder:
+          getLocalizedValue(customField.placeholder, languageCode) ||
+          (customField.type === "dropdown" ? `Select ${customField.label}...` : undefined),
         required: customField.required,
         show: customField.show,
         type: CUSTOM_TYPE_MAP[customField.type] || "text",

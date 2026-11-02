@@ -310,7 +310,7 @@ export function BlockConditional({
           response && typeof response === "object" && !Array.isArray(response)
             ? (response as Record<string, string>)
             : {};
-        const hasEmptyRequiredDropdown = element.customFields.some(
+        const hasEmptyRequiredDropdown = (element.customFields ?? []).some(
           (cf) => cf.show && cf.required && cf.type === "dropdown" && !responseObj[cf.id]?.trim()
         );
         if (hasEmptyRequiredDropdown) {

@@ -270,6 +270,23 @@ describe("Follow-ups", () => {
       }
     });
 
+    test("should read the recipient from an object-format contact-info answer", async () => {
+      vi.mocked(getResponse).mockResolvedValue({
+        ...mockResponse,
+        data: { email: { firstName: "A", email: "contact@example.com" } },
+      } as unknown as any);
+
+      const result = await sendFollowUpsForResponse("response1");
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data[0]).toEqual({ followUpId: "followup1", status: "success" });
+        expect(sendFollowUpEmail).toHaveBeenCalledWith(
+          expect.objectContaining({ to: "contact@example.com" })
+        );
+      }
+    });
+
     test("should handle missing email value in response data", async () => {
       const modifiedResponse = {
         ...mockResponse,

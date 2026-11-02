@@ -20,3 +20,23 @@ export function normalizeContactInfoResponse(value: unknown): Record<string, str
   }
   return null;
 }
+
+const CONTACT_INFO_BUILTIN_FIELD_IDS = ["firstName", "lastName", "email", "phone", "company"];
+
+/**
+ * Resolves the display order of contact-info fields. Saved order comes first (unknown ids dropped);
+ * any built-in or custom field missing from the saved order is appended, so fields added or
+ * re-enabled after a reorder still appear.
+ */
+export function resolveContactInfoFieldOrder(
+  fieldOrder: string[] | undefined,
+  customFieldIds: string[]
+): string[] {
+  const known = [...CONTACT_INFO_BUILTIN_FIELD_IDS, ...customFieldIds];
+  const saved = (fieldOrder ?? []).filter((id) => known.includes(id));
+  const result = [...new Set(saved)];
+  for (const id of known) {
+    if (!result.includes(id)) result.push(id);
+  }
+  return result;
+}

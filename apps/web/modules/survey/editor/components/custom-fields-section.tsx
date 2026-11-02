@@ -4,6 +4,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { type JSX, useState } from "react";
 import { CONTACT_FIELD_PRESETS } from "@formbricks/types/surveys/contact-field-presets";
+import { resolveContactInfoFieldOrder } from "@formbricks/types/surveys/contact-info-response";
 import { TCustomField, TSurveyContactInfoElement } from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { TUserLocale } from "@formbricks/types/user";
@@ -137,7 +138,10 @@ export const CustomFieldsSection = ({
   };
 
   const getEffectiveFieldOrder = (): string[] => {
-    const base = element.fieldOrder ?? [...BUILTIN_IDS, ...customFields.map((cf) => cf.id)];
+    const base = resolveContactInfoFieldOrder(
+      element.fieldOrder,
+      customFields.map((cf) => cf.id)
+    );
     return base.filter(isFieldVisible);
   };
 
@@ -163,7 +167,7 @@ export const CustomFieldsSection = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-slate-800">CUSTOM FIELDS</h3>
+          <h3 className="text-sm font-semibold text-slate-800">Custom fields</h3>
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
             {customFields.length}/10
           </span>
@@ -185,12 +189,13 @@ export const CustomFieldsSection = ({
           {customFields.map((field) => (
             <div key={field.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               {/* Row 1: Label, Type, Show, Required, Delete */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="min-w-0 flex-1">
                   <Input
                     value={field.label}
                     onChange={(e) => updateCustomField(field.id, { label: e.target.value })}
                     placeholder="Field name"
+                    aria-label="Field name"
                     className="h-8 text-sm"
                   />
                 </div>
@@ -200,6 +205,14 @@ export const CustomFieldsSection = ({
                     onValueChange={(val) => {
                       const updates: Partial<TCustomField> = { type: val as TCustomField["type"] };
                       if (val !== "dropdown") {
+                        if (
+                          (field.options ?? []).length > 0 &&
+                          !window.confirm(
+                            "Changing the field type removes this field's dropdown options. Continue?"
+                          )
+                        ) {
+                          return;
+                        }
                         updates.options = undefined;
                         updates.presetId = undefined;
                       }
@@ -218,15 +231,21 @@ export const CustomFieldsSection = ({
                   </Select>
                 </div>
                 <div className="flex items-center gap-1">
-                  <label className="text-xs text-slate-500">Show</label>
+                  <label htmlFor={`${field.id}-show`} className="text-xs text-slate-500">
+                    Show
+                  </label>
                   <Switch
+                    id={`${field.id}-show`}
                     checked={field.show}
                     onCheckedChange={(show) => updateCustomField(field.id, { show })}
                   />
                 </div>
                 <div className="flex items-center gap-1">
-                  <label className="text-xs text-slate-500">Req</label>
+                  <label htmlFor={`${field.id}-required`} className="text-xs text-slate-500">
+                    Required
+                  </label>
                   <Switch
+                    id={`${field.id}-required`}
                     checked={field.required}
                     onCheckedChange={(required) => updateCustomField(field.id, { required })}
                     disabled={!field.show}
@@ -237,13 +256,24 @@ export const CustomFieldsSection = ({
                   variant="ghost"
                   type="button"
                   className="h-8 w-8 p-0 text-slate-400 hover:text-red-500"
-                  onClick={() => removeCustomField(field.id)}>
+                  aria-label={`Delete field ${field.label || ""}`.trim()}
+                  title="Delete field"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Delete this custom field? Existing responses keep their saved answers, but the field is removed from the survey."
+                      )
+                    ) {
+                      removeCustomField(field.id);
+                    }
+                  }}>
                   <Trash2Icon className="h-4 w-4" />
                 </Button>
               </div>
 
               {/* Row 2: Placeholder */}
               <div className="mt-2">
+                <p className="mb-1 text-xs font-medium text-slate-600">Placeholder</p>
                 <ElementFormInput
                   id={`${field.id}.placeholder`}
                   label=""
@@ -276,6 +306,12 @@ export const CustomFieldsSection = ({
                       value={field.presetId || "none"}
                       onValueChange={(val) => {
                         if (val === "none") {
+                          if (
+                            (field.options ?? []).length > 0 &&
+                            !window.confirm("Remove all options from this field?")
+                          ) {
+                            return;
+                          }
                           updateCustomField(field.id, { presetId: undefined, options: [] });
                         } else {
                           applyPreset(field.id, val);
@@ -298,7 +334,7 @@ export const CustomFieldsSection = ({
                   {/* Inline options */}
                   <div>
                     <label className="text-xs font-medium text-slate-600">Options:</label>
-                    <div className="mt-1 flex flex-wrap gap-1">
+                    <div className="mt-1 flex max-h-40 flex-wrap gap-1 overflow-y-auto">
                       {(field.options ?? []).map((opt) => (
                         <span
                           key={opt.id}
@@ -306,6 +342,7 @@ export const CustomFieldsSection = ({
                           {opt.label.default || opt.label["default"] || ""}
                           <button
                             type="button"
+                            aria-label={`Remove option ${opt.label.default ?? ""}`.trim()}
                             onClick={() => removeOption(field.id, opt.id)}
                             className="text-slate-400 hover:text-red-500">
                             <XIcon className="h-3 w-3" />
@@ -348,7 +385,7 @@ export const CustomFieldsSection = ({
       {/* Field Order Section */}
       {hasCustomFields && (
         <div className="mt-6">
-          <h4 className="text-sm font-semibold text-slate-800">FIELD ORDER</h4>
+          <h4 className="text-sm font-semibold text-slate-800">Field order</h4>
           <p className="mb-2 text-xs text-slate-500">
             Reorder how fields appear in the survey. Only visible fields are shown.
           </p>
@@ -364,6 +401,7 @@ export const CustomFieldsSection = ({
                   type="button"
                   className="h-6 w-6 p-0"
                   disabled={index === 0}
+                  aria-label={`Move ${getFieldLabel(fieldId)} up`}
                   onClick={() => moveField(index, "up")}>
                   <ArrowUpIcon className="h-3.5 w-3.5" />
                 </Button>
@@ -373,6 +411,7 @@ export const CustomFieldsSection = ({
                   type="button"
                   className="h-6 w-6 p-0"
                   disabled={index === effectiveOrder.length - 1}
+                  aria-label={`Move ${getFieldLabel(fieldId)} down`}
                   onClick={() => moveField(index, "down")}>
                   <ArrowDownIcon className="h-3.5 w-3.5" />
                 </Button>
