@@ -4,16 +4,16 @@ import { logger } from "@formbricks/logger";
 import type { TResponse } from "@formbricks/types/responses";
 import {
   deleteSurveyResponseRows,
-  deleteSurveyRows,
   insertSurveyResponseRows,
   isSnowflakeConfigured,
 } from "./client";
 import { type TSnowflakeSurvey, buildSnowflakeRows } from "./response-rows";
 
 /**
- * Every Snowflake write runs one at a time, in call order. A response's replace (DELETE then INSERT) can
- * therefore never interleave with another job's replace or with a cleanup. The sync runs inside the web
- * process, so a process-local queue is enough. A failed task does not stop the queue.
+ * Snowflake writes from one process run one at a time, in call order, over its single connection. A failed
+ * task does not stop the queue. The queue cannot see other processes: web replicas and rolling deploys
+ * each run their own jobs. A per-response Postgres advisory lock (see syncResponseToSnowflake) orders the
+ * replace of one response across all of them.
  */
 let queueTail: Promise<unknown> = Promise.resolve();
 const runSerially = <T>(task: () => Promise<T>): Promise<T> => {
@@ -22,8 +22,8 @@ const runSerially = <T>(task: () => Promise<T>): Promise<T> => {
   return result;
 };
 
-const responseExists = async (responseId: string): Promise<boolean> =>
-  Boolean(await prisma.response.findUnique({ where: { id: responseId }, select: { id: true } }));
+/** The replace holds a database transaction open while it talks to Snowflake, so the budget covers that. */
+const REPLACE_TRANSACTION_OPTIONS = { maxWait: 30_000, timeout: 120_000 };
 
 /**
  * Sends one finished response to Snowflake. Replaces the response's rows, so a retried pipeline job
@@ -39,14 +39,22 @@ export const syncResponseToSnowflake = async (
 ): Promise<void> => {
   if (!isSnowflakeConfigured()) return;
   try {
-    await runSerially(async () => {
-      if (!(await responseExists(response.id))) return;
-      await deleteSurveyResponseRows([response.id]);
-      await insertSurveyResponseRows(buildSnowflakeRows(survey, response));
-      if (!(await responseExists(response.id))) {
+    await runSerially(() =>
+      prisma.$transaction(async (tx) => {
+        // Held until the transaction ends. Another process replacing the same response waits here, so
+        // two replaces never interleave DELETE, DELETE, INSERT, INSERT and leave duplicate rows.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${response.id}))`;
+        const exists = async () =>
+          Boolean(await tx.response.findUnique({ where: { id: response.id }, select: { id: true } }));
+
+        if (!(await exists())) return;
         await deleteSurveyResponseRows([response.id]);
-      }
-    });
+        await insertSurveyResponseRows(buildSnowflakeRows(survey, response));
+        if (!(await exists())) {
+          await deleteSurveyResponseRows([response.id]);
+        }
+      }, REPLACE_TRANSACTION_OPTIONS)
+    );
   } catch (error) {
     logger.error(
       { err: error, surveyId: survey.id, responseId: response.id },
@@ -61,31 +69,19 @@ export const syncResponseToSnowflake = async (
  * Never throws.
  */
 export const deleteResponsesFromSnowflake = async (
-  responses: { id: string; surveyId: string }[]
-): Promise<void> => {
-  if (responses.length === 0 || !isSnowflakeConfigured()) return;
+  responses: { id: string }[]
+): Promise<boolean> => {
+  const ids = responses.map((response) => response.id);
+  if (ids.length === 0 || !isSnowflakeConfigured()) return false;
   try {
-    await runSerially(() => deleteSurveyResponseRows(responses.map((response) => response.id)));
+    await runSerially(() => deleteSurveyResponseRows(ids));
+    return true;
   } catch (error) {
-    logger.error({ err: error, responseCount: responses.length }, "Snowflake response cleanup failed");
+    logger.error({ err: error, responseCount: ids.length }, "Snowflake response cleanup failed");
+    return false;
   }
 };
 
-export const deleteResponseFromSnowflake = (response: Pick<TResponse, "id" | "surveyId">): Promise<void> =>
-  deleteResponsesFromSnowflake([response]);
-
-/**
- * Survey reset: removes every row of the survey, whatever its sync flag says now. The reset calls it
- * before and after the local delete, so a row written by a job in between is removed too. Returns whether
- * the cleanup ran; a failure is logged and the reset goes on.
- */
-export const deleteSurveyFromSnowflake = async (surveyId: string): Promise<boolean> => {
-  if (!isSnowflakeConfigured()) return false;
-  try {
-    await runSerially(() => deleteSurveyRows(surveyId));
-    return true;
-  } catch (error) {
-    logger.error({ err: error, surveyId }, "Snowflake cleanup failed during survey reset");
-    return false;
-  }
+export const deleteResponseFromSnowflake = async (response: Pick<TResponse, "id">): Promise<void> => {
+  await deleteResponsesFromSnowflake([response]);
 };

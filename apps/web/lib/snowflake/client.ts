@@ -107,9 +107,3 @@ export const deleteSurveyResponseRows = async (responseIds: string[]): Promise<v
     await executeQuery(`DELETE FROM SURVEY_RESPONSES WHERE RESPONSE_ID IN (${placeholders})`, batch);
   }
 };
-
-/** Removes every row of a survey (survey reset). */
-export const deleteSurveyRows = async (surveyId: string): Promise<void> => {
-  if (!isSnowflakeConfigured()) return;
-  await executeQuery("DELETE FROM SURVEY_RESPONSES WHERE SURVEY_ID = ?", [surveyId]);
-};

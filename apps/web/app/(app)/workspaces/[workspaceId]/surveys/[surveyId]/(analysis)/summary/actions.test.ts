@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   assertCan: vi.fn(),
   getSurvey: vi.fn(),
   deleteResponsesAndDisplaysForSurvey: vi.fn(),
+  deleteResponsesFromSnowflake: vi.fn(),
 }));
 
 vi.mock("@/lib/utils/action-client", () => ({
@@ -25,6 +26,10 @@ vi.mock("@/lib/utils/helper", () => ({
 }));
 
 vi.mock("@/lib/survey/service", () => ({ getSurvey: mocks.getSurvey, updateSurvey: vi.fn() }));
+
+vi.mock("@/lib/snowflake/sync", () => ({
+  deleteResponsesFromSnowflake: mocks.deleteResponsesFromSnowflake,
+}));
 
 vi.mock("./lib/survey", () => ({
   deleteResponsesAndDisplaysForSurvey: mocks.deleteResponsesAndDisplaysForSurvey,
@@ -74,7 +79,9 @@ describe("resetSurveyAction", () => {
     mocks.deleteResponsesAndDisplaysForSurvey.mockResolvedValue({
       deletedResponsesCount: 3,
       deletedDisplaysCount: 5,
+      deletedResponseIds: ["r1", "r2", "r3"],
     });
+    mocks.deleteResponsesFromSnowflake.mockResolvedValue(true);
   });
 
   test("requires manage access on the survey itself, not write access or workspace manage", async () => {
@@ -109,5 +116,26 @@ describe("resetSurveyAction", () => {
       deletedDisplaysCount: 5,
     });
     expect(mocks.deleteResponsesAndDisplaysForSurvey).toHaveBeenCalledWith("survey1");
+  });
+
+  test("removes only the responses the reset deleted from Snowflake, after the local delete", async () => {
+    await callReset();
+
+    expect(mocks.deleteResponsesFromSnowflake).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteResponsesFromSnowflake).toHaveBeenCalledWith([{ id: "r1" }, { id: "r2" }, { id: "r3" }]);
+    expect(mocks.deleteResponsesAndDisplaysForSurvey.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.deleteResponsesFromSnowflake.mock.invocationCallOrder[0]
+    );
+  });
+
+  test("a response submitted during the reset is not in the cleanup list", async () => {
+    // The reset's DELETE ... RETURNING reported r1 only; a later response (r-new) survives locally.
+    mocks.deleteResponsesAndDisplaysForSurvey.mockResolvedValue({
+      deletedResponsesCount: 1,
+      deletedDisplaysCount: 0,
+      deletedResponseIds: ["r1"],
+    });
+    await callReset();
+    expect(mocks.deleteResponsesFromSnowflake).toHaveBeenCalledWith([{ id: "r1" }]);
   });
 });

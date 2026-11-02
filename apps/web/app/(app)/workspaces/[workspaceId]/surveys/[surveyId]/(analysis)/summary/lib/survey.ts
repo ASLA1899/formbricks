@@ -18,20 +18,18 @@ const SURVEY_RESET_TRANSACTION_TIMEOUT_MS = 120_000;
 
 export const deleteResponsesAndDisplaysForSurvey = async (
   surveyId: string
-): Promise<{ deletedResponsesCount: number; deletedDisplaysCount: number }> => {
+): Promise<{ deletedResponsesCount: number; deletedDisplaysCount: number; deletedResponseIds: string[] }> => {
   try {
     // Read the file-upload answers while the responses still exist (see collectSurveyResponseFileUrls).
     const { fileUrls, workspaceId } = await collectSurveyResponseFileUrls(surveyId);
 
     // Delete all responses for this survey
 
-    const [deletedResponsesCount, deletedDisplaysCount] = await prisma.$transaction(
+    // RETURNING reports exactly the responses this statement removed, so the Snowflake cleanup never
+    // touches a response submitted while the reset was still running.
+    const [deletedResponses, deletedDisplaysCount] = await prisma.$transaction(
       [
-        prisma.response.deleteMany({
-          where: {
-            surveyId: surveyId,
-          },
-        }),
+        prisma.$queryRaw<{ id: string }[]>`DELETE FROM "Response" WHERE "surveyId" = ${surveyId} RETURNING "id"`,
         prisma.display.deleteMany({
           where: {
             surveyId: surveyId,
@@ -47,8 +45,9 @@ export const deleteResponsesAndDisplaysForSurvey = async (
     await deleteSurveyResponseFiles(fileUrls, workspaceId, surveyId);
 
     return {
-      deletedResponsesCount: deletedResponsesCount.count,
+      deletedResponsesCount: deletedResponses.length,
       deletedDisplaysCount: deletedDisplaysCount.count,
+      deletedResponseIds: deletedResponses.map((response) => response.id),
     };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {

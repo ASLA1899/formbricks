@@ -2,25 +2,22 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "@formbricks/database";
 import {
   deleteSurveyResponseRows,
-  deleteSurveyRows,
   insertSurveyResponseRows,
   isSnowflakeConfigured,
 } from "./client";
 import {
   deleteResponseFromSnowflake,
   deleteResponsesFromSnowflake,
-  deleteSurveyFromSnowflake,
   syncResponseToSnowflake,
 } from "./sync";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@formbricks/logger", () => ({ logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() } }));
 vi.mock("@formbricks/database", () => ({
-  prisma: { response: { findUnique: vi.fn() } },
+  prisma: { $transaction: vi.fn(), response: { findUnique: vi.fn() } },
 }));
 vi.mock("./client", () => ({
   deleteSurveyResponseRows: vi.fn(),
-  deleteSurveyRows: vi.fn(),
   insertSurveyResponseRows: vi.fn(),
   isSnowflakeConfigured: vi.fn(),
 }));
@@ -36,10 +33,14 @@ const response = {
   data: { q1: "a" },
 };
 
+const tx = { $executeRaw: vi.fn(), response: prisma.response };
+
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(isSnowflakeConfigured).mockReturnValue(true);
   vi.mocked(prisma.response.findUnique).mockResolvedValue({ id: "r1" } as never);
+  vi.mocked(prisma.$transaction).mockImplementation((async (fn: (tx: unknown) => Promise<unknown>) =>
+    fn(tx)) as never);
 });
 
 describe("syncResponseToSnowflake", () => {
@@ -50,6 +51,48 @@ describe("syncResponseToSnowflake", () => {
     expect(vi.mocked(deleteSurveyResponseRows).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(insertSurveyResponseRows).mock.invocationCallOrder[0]
     );
+  });
+
+  test("takes the per-response advisory lock before touching Snowflake, in one transaction", async () => {
+    await syncResponseToSnowflake(survey, response);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(String(tx.$executeRaw.mock.calls[0][0])).toContain("pg_advisory_xact_lock");
+    expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(deleteSurveyResponseRows).mock.invocationCallOrder[0]
+    );
+  });
+
+  test("two workers on one response run one after the other (lock stands in for the database)", async () => {
+    // Model pg_advisory_xact_lock across processes: the second transaction waits for the first to end.
+    let held: Promise<void> = Promise.resolve();
+    vi.mocked(prisma.$transaction).mockImplementation((async (fn: (tx: unknown) => Promise<unknown>) => {
+      const previous = held;
+      let release!: () => void;
+      held = new Promise<void>((resolve) => (release = resolve));
+      await previous;
+      try {
+        return await fn(tx);
+      } finally {
+        release();
+      }
+    }) as never);
+    const events: string[] = [];
+    vi.mocked(deleteSurveyResponseRows).mockImplementation(async () => {
+      events.push("delete");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    });
+    vi.mocked(insertSurveyResponseRows).mockImplementation(async () => {
+      events.push("insert");
+    });
+    // A second copy of the module has its own in-process queue, like a second web process or replica.
+    vi.resetModules();
+    const otherProcess = await import("./sync");
+    await Promise.all([
+      syncResponseToSnowflake(survey, response),
+      otherProcess.syncResponseToSnowflake(survey, response),
+    ]);
+    expect(events).toEqual(["delete", "insert", "delete", "insert"]);
   });
 
   test("does nothing without credentials", async () => {
@@ -73,6 +116,13 @@ describe("deleteResponsesFromSnowflake", () => {
     expect(deleteSurveyResponseRows).toHaveBeenCalledWith(["r1", "r2"]);
   });
 
+  test("reports whether the cleanup ran", async () => {
+    expect(await deleteResponsesFromSnowflake([{ id: "r1" }])).toBe(true);
+    vi.mocked(deleteSurveyResponseRows).mockRejectedValue(new Error("down"));
+    expect(await deleteResponsesFromSnowflake([{ id: "r1" }])).toBe(false);
+    expect(await deleteResponsesFromSnowflake([])).toBe(false);
+  });
+
   test("does nothing when unconfigured or empty", async () => {
     await deleteResponsesFromSnowflake([]);
     vi.mocked(isSnowflakeConfigured).mockReturnValue(false);
@@ -83,24 +133,6 @@ describe("deleteResponsesFromSnowflake", () => {
   test("never throws", async () => {
     vi.mocked(deleteSurveyResponseRows).mockRejectedValue(new Error("down"));
     await expect(deleteResponseFromSnowflake({ id: "r1", surveyId: "s1" })).resolves.toBeUndefined();
-  });
-});
-
-describe("deleteSurveyFromSnowflake", () => {
-  test("deletes the survey's rows", async () => {
-    expect(await deleteSurveyFromSnowflake("s1")).toBe(true);
-    expect(deleteSurveyRows).toHaveBeenCalledWith("s1");
-  });
-
-  test("does nothing when unconfigured", async () => {
-    vi.mocked(isSnowflakeConfigured).mockReturnValue(false);
-    expect(await deleteSurveyFromSnowflake("s1")).toBe(false);
-    expect(deleteSurveyRows).not.toHaveBeenCalled();
-  });
-
-  test("reports false and does not throw on failure", async () => {
-    vi.mocked(deleteSurveyRows).mockRejectedValue(new Error("down"));
-    expect(await deleteSurveyFromSnowflake("s1")).toBe(false);
   });
 });
 
