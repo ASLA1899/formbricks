@@ -36,7 +36,7 @@ import { displayEmbeddedValue } from "@/modules/embedded-data/lib/value-display"
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
 import { processResponseData } from "../responses";
 import { getTodaysDateTimeFormatted } from "../time";
-import { getFormattedDateTimeString } from "../utils/datetime";
+import { formatDurationClock, getFormattedDateTimeString } from "../utils/datetime";
 import { sanitizeString } from "../utils/strings";
 
 /**
@@ -136,7 +136,7 @@ export const getResponsesFileName = (surveyName: string, extension: string) => {
 
 /**
  * The four catalog entries whose values the export's fixed basic columns already carry — "Response
- * ID", "Survey ID", "Finished" and "Timestamp" (`createdAt`, which is what `startedAt` reads).
+ * ID", "Survey ID", "Finished" and "Started At" (`createdAt`, which is what `startedAt` reads).
  * Skipped from the reserved column set so one fact never gets two columns.
  */
 const EXPORT_BASICS_COVERED_RESERVED_NAMES = new Set(["responseId", "surveyId", "finished", "startedAt"]);
@@ -298,7 +298,9 @@ const exportElementHeadlines = (survey: TSurvey): string[][] => {
 const FIXED_EXPORT_HEADERS = [
   "No.",
   "Response ID",
-  "Timestamp",
+  "Started At",
+  "Completed At",
+  "Duration",
   "Finished",
   "Survey ID",
   "Formbricks ID (internal)",
@@ -397,7 +399,12 @@ export const getResponsesJson = (
       newExportRow({
         "No.": idx + 1,
         "Response ID": response.id,
-        Timestamp: getFormattedDateTimeString(response.createdAt, timeZone),
+        "Started At": getFormattedDateTimeString(response.createdAt, timeZone),
+        "Completed At": response.finished ? getFormattedDateTimeString(response.updatedAt, timeZone) : "",
+        Duration:
+          typeof response.ttc?._total === "number" && response.ttc._total > 0
+            ? formatDurationClock(response.ttc._total)
+            : "",
         Finished: response.finished ? "Yes" : "No",
         "Survey ID": response.surveyId,
         "Formbricks ID (internal)": response.contact?.id || "",

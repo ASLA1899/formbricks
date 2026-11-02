@@ -1661,7 +1661,33 @@ describe("Response Utils", () => {
       expect(result[0]["person.email"]).toBe("linked@example.com");
     });
 
-    test("should format the Timestamp in UTC when no time zone is provided", () => {
+    test("should add Completed At and Duration, and no Timestamp column", () => {
+      const finished = [
+        {
+          ...mockResponses[0],
+          finished: true,
+          createdAt: new Date("2026-06-10T19:15:44.000Z"),
+          updatedAt: new Date("2026-06-10T20:00:04.000Z"),
+          ttc: { q1: 2650411, _total: 2650411 },
+        },
+      ] as TResponse[];
+      const result = getResponsesJson(mockSurvey as TSurvey, finished, [["1. Question 1"]], [], false);
+      expect(result[0]["Started At"]).toBe("2026-06-10 19:15:44 UTC");
+      expect(result[0]["Completed At"]).toBe("2026-06-10 20:00:04 UTC");
+      expect(result[0]["Duration"]).toBe("0:44:10");
+      expect(result[0]["Timestamp"]).toBeUndefined();
+    });
+
+    test("should leave Completed At and Duration empty for an unfinished response without timing", () => {
+      const unfinished = [
+        { ...mockResponses[0], finished: false, ttc: undefined },
+      ] as unknown as TResponse[];
+      const result = getResponsesJson(mockSurvey as TSurvey, unfinished, [["1. Question 1"]], [], false);
+      expect(result[0]["Completed At"]).toBe("");
+      expect(result[0]["Duration"]).toBe("");
+    });
+
+    test("should format Started At in UTC when no time zone is provided", () => {
       const responsesWithFixedDate = [
         { ...mockResponses[0], createdAt: new Date("2026-01-01T20:00:00.000Z") },
       ] as TResponse[];
@@ -1672,10 +1698,10 @@ describe("Response Utils", () => {
         [],
         false
       );
-      expect(result[0]["Timestamp"]).toBe("2026-01-01 20:00:00 UTC");
+      expect(result[0]["Started At"]).toBe("2026-01-01 20:00:00 UTC");
     });
 
-    test("should format the Timestamp in the configured time zone", () => {
+    test("should format Started At in the configured time zone", () => {
       const responsesWithFixedDate = [
         { ...mockResponses[0], createdAt: new Date("2026-01-01T20:00:00.000Z") },
       ] as TResponse[];
@@ -1687,7 +1713,7 @@ describe("Response Utils", () => {
         false,
         "Asia/Manila"
       );
-      expect(result[0]["Timestamp"]).toBe("2026-01-02 04:00:00 GMT+8");
+      expect(result[0]["Started At"]).toBe("2026-01-02 04:00:00 GMT+8");
     });
   });
 
