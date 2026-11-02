@@ -10,6 +10,7 @@ import { assertOrganizationAIConfigured } from "@/lib/ai/service";
 import { assertCan } from "@/lib/authorization";
 import { capturePostHogEvent } from "@/lib/posthog";
 import { getResponseCountBySurveyId } from "@/lib/response/service";
+import { deleteSurveyFromSnowflake } from "@/lib/snowflake/sync";
 import { getSurvey, updateSurvey } from "@/lib/survey/service";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
 import { convertToCsv } from "@/lib/utils/file-conversion";
@@ -91,6 +92,10 @@ export const resetSurveyAction = authenticatedActionClient.inputSchema(ZResetSur
       throw new OperationNotAllowedError("Cannot reset an archived survey.");
     }
 
+    // Snowflake first, so a response that arrives between the two deletes is never wiped from Snowflake
+    // while it still exists here. A failure is logged and the reset goes on.
+    const snowflakeCleanedUp = await deleteSurveyFromSnowflake(parsedInput.surveyId);
+
     const { deletedResponsesCount, deletedDisplaysCount } = await deleteResponsesAndDisplaysForSurvey(
       parsedInput.surveyId
     );
@@ -98,6 +103,7 @@ export const resetSurveyAction = authenticatedActionClient.inputSchema(ZResetSur
     ctx.auditLoggingCtx.newObject = {
       deletedResponsesCount: deletedResponsesCount,
       deletedDisplaysCount: deletedDisplaysCount,
+      snowflakeCleanedUp,
     };
 
     return {

@@ -8,6 +8,7 @@ import { ValidationError } from "@formbricks/types/errors";
 import { TResponse } from "@formbricks/types/responses";
 import { getDisplayForResponseValidation } from "@/lib/display/service";
 import { normalizeResponseLanguage } from "@/lib/response/utils";
+import { deleteResponseFromSnowflake } from "@/lib/snowflake/sync";
 import { deleteDisplay } from "@/modules/api/v2/management/responses/[responseId]/lib/display";
 import { getSurveyQuestions } from "@/modules/api/v2/management/responses/[responseId]/lib/survey";
 import { findAndDeleteUploadedFilesInResponse } from "@/modules/api/v2/management/responses/[responseId]/lib/utils";
@@ -121,6 +122,9 @@ export const deleteResponse = async (responseId: string): Promise<Result<Respons
       deletedResponse.surveyId,
       surveyQuestionsResult.data.workspaceId
     );
+
+    // Best effort and after the commit; it logs and swallows its own failures.
+    await deleteResponseFromSnowflake(deletedResponse);
 
     return ok(deletedResponse);
   } catch (error) {

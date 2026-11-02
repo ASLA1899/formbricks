@@ -159,6 +159,7 @@ export const selectSurvey = {
   archivedAt: true,
   isVerifyEmailEnabled: true,
   isBackButtonHidden: true,
+  snowflakeSync: true,
   isAutoProgressingEnabled: true,
   isCaptureIpEnabled: true,
   isAnonymizeResponsesEnabled: true,

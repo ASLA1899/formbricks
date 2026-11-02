@@ -136,6 +136,9 @@ vi.mock("@/modules/email", () => ({
   sendResponseFinishedEmail: mockSendResponseFinishedEmail,
 }));
 
+const { mockSyncResponseToSnowflake } = vi.hoisted(() => ({ mockSyncResponseToSnowflake: vi.fn() }));
+vi.mock("@/lib/snowflake/sync", () => ({ syncResponseToSnowflake: mockSyncResponseToSnowflake }));
+
 vi.mock("@/modules/survey/follow-ups/lib/follow-ups", () => ({
   sendFollowUpsForResponse: mockSendFollowUpsForResponse,
 }));
@@ -417,6 +420,40 @@ describe("processResponsePipelineJob", () => {
     expect(mockHandleIntegrations).not.toHaveBeenCalled();
     expect(mockSendFollowUpsForResponse).not.toHaveBeenCalled();
     expect(mockEnqueueResponseCompletedWorkflowRuns).not.toHaveBeenCalled();
+  });
+
+  test("syncs a finished response to Snowflake only when the survey opted in", async () => {
+    mockSyncResponseToSnowflake.mockResolvedValue(undefined);
+    const finished = { ...baseData, event: "responseFinished" as const };
+
+    await processResponsePipelineJob(finished, baseContext);
+    expect(mockSyncResponseToSnowflake).not.toHaveBeenCalled();
+
+    mockPrismaSurveyFindUnique.mockResolvedValue({ ...survey, snowflakeSync: true });
+    await processResponsePipelineJob(finished, baseContext);
+    expect(mockSyncResponseToSnowflake).toHaveBeenCalledTimes(1);
+    expect(mockSyncResponseToSnowflake).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "survey_123" }),
+      finished.response
+    );
+
+    await processResponsePipelineJob({ ...baseData, event: "responseCreated" }, baseContext);
+    expect(mockSyncResponseToSnowflake).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not sync a restricted survey to Snowflake", async () => {
+    mockIsSurveyVisibilityReady.mockResolvedValue(true);
+    mockPrismaSurveyFindUnique.mockResolvedValue({
+      ...survey,
+      snowflakeSync: true,
+      visibility: "restricted",
+      visibilityProjectedVersion: 2,
+      visibilityVersion: 2,
+    });
+
+    await processResponsePipelineJob({ ...baseData, event: "responseFinished" }, baseContext);
+
+    expect(mockSyncResponseToSnowflake).not.toHaveBeenCalled();
   });
 
   test("alerts only authorized subscribers for a restricted survey", async () => {

@@ -50,6 +50,7 @@ export const selectSurvey = {
   autoSelectLanguage: true,
   recaptcha: true,
   isBackButtonHidden: true,
+  snowflakeSync: true,
   isAutoProgressingEnabled: true,
   metadata: true,
   slug: true,
