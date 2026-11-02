@@ -10,14 +10,19 @@ import {
   getIngestedEmbeddedFields,
 } from "@formbricks/types/embedded-data-resolver";
 import { TResponseTableData } from "@formbricks/types/responses";
-import { TSurveyElement, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
+import { ADDRESS_DISPLAY_FIELDS } from "@formbricks/types/surveys/address-fields";
+import {
+  TSurveyAddressElement,
+  TSurveyElement,
+  TSurveyElementTypeEnum,
+} from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { getTextContent } from "@formbricks/types/surveys/validation";
 import { TUserLocale } from "@formbricks/types/user";
 import { getLocalizedValue } from "@/lib/i18n/utils";
 import { extractChoiceIdsFromResponse } from "@/lib/response/utils";
 import { getContactIdentifier } from "@/lib/utils/contact";
-import { formatDateTimeForDisplay } from "@/lib/utils/datetime";
+import { formatDateTimeForDisplay, formatDurationClock } from "@/lib/utils/datetime";
 import { recallToHeadline } from "@/lib/utils/recall";
 import { RenderResponse } from "@/modules/analysis/components/SingleResponseCard/components/RenderResponse";
 import { displayEmbeddedValue } from "@/modules/embedded-data/lib/value-display";
@@ -31,6 +36,7 @@ import { cn } from "@/modules/ui/lib/utils";
 import {
   RESERVED_COLUMN_ENTRIES,
   getAddressFieldLabel,
+  getScopedAddressKey,
   getContactInfoFieldLabel,
   getReservedColumnIcon,
   getReservedColumnLabel,
@@ -45,7 +51,11 @@ const getElementColumnsData = (
   t: TFunction
 ): ColumnDef<TResponseTableData>[] => {
   const ELEMENTS_ICON_MAP = getElementIconMap(t);
-  const addressFields = ["addressLine1", "addressLine2", "city", "state", "zip", "country"];
+  // Display order. name/organization are absent on older surveys; only add their columns when shown.
+  const addressElement = element as TSurveyAddressElement;
+  const addressFields = ADDRESS_DISPLAY_FIELDS.filter(
+    (field) => (field !== "name" && field !== "organization") || addressElement[field]?.show
+  );
   const contactInfoFields = ["firstName", "lastName", "email", "phone", "company"];
 
   // Helper function to create consistent column headers
@@ -126,7 +136,7 @@ const getElementColumnsData = (
             );
           },
           cell: ({ row }) => {
-            const responseValue = row.original.responseData[addressField];
+            const responseValue = row.original.responseData[getScopedAddressKey(element.id, addressField)];
             if (typeof responseValue === "string") {
               return <p className="text-slate-900">{responseValue}</p>;
             }
@@ -284,11 +294,35 @@ export const generateResponseTableColumns = (
 
   const dateColumn: ColumnDef<TResponseTableData> = {
     accessorKey: "createdAt",
-    header: () => t("common.date"),
+    header: () => t("common.started"),
     size: 200,
     cell: ({ row }) => {
       const date = new Date(row.original.createdAt);
       return <p className="text-slate-900">{formatDateTimeForDisplay(date, locale)}</p>;
+    },
+  };
+
+  const completedColumn: ColumnDef<TResponseTableData> = {
+    accessorKey: "completedAt",
+    header: () => t("common.completed"),
+    size: 200,
+    cell: ({ row }) => {
+      const completedAt = row.original.completedAt;
+      return (
+        <p className="text-slate-900">
+          {completedAt ? formatDateTimeForDisplay(new Date(completedAt), locale) : "—"}
+        </p>
+      );
+    },
+  };
+
+  const durationColumn: ColumnDef<TResponseTableData> = {
+    accessorKey: "duration",
+    header: () => t("common.duration"),
+    size: 120,
+    cell: ({ row }) => {
+      const duration = row.original.duration;
+      return <p className="text-slate-900">{duration != null ? formatDurationClock(duration) : "—"}</p>;
     },
   };
 
@@ -450,6 +484,8 @@ export const generateResponseTableColumns = (
     singleUseIdColumn,
     responseIdColumn,
     dateColumn,
+    completedColumn,
+    durationColumn,
     ...(showQuotasColumn ? [quotasColumn] : []),
     statusColumn,
     ...(survey.isVerifyEmailEnabled ? [verifiedEmailColumn] : []),

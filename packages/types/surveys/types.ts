@@ -714,6 +714,8 @@ export type TInputFieldConfig = z.infer<typeof ZToggleInputConfig>;
  */
 export const ZSurveyAddressQuestion = ZSurveyQuestionBase.extend({
   type: z.literal(TSurveyQuestionTypeEnum.Address),
+  name: ZToggleInputConfig.optional(),
+  organization: ZToggleInputConfig.optional(),
   addressLine1: ZToggleInputConfig,
   addressLine2: ZToggleInputConfig,
   city: ZToggleInputConfig,
@@ -1448,8 +1450,10 @@ export const surveyRefinement = (rawSurvey: z.infer<typeof ZSurveyBase>, ctx: z.
       }
 
       if (question.type === TSurveyQuestionTypeEnum.Address) {
-        const { addressLine1, addressLine2, city, state, zip, country } = question;
+        const { name, organization, addressLine1, addressLine2, city, state, zip, country } = question;
         const fields = [
+          ...(name ? [{ ...name, label: "Name" }] : []),
+          ...(organization ? [{ ...organization, label: "Organization" }] : []),
           { ...addressLine1, label: "Address Line 1" },
           { ...addressLine2, label: "Address Line 2" },
           { ...city, label: "City" },
@@ -1871,8 +1875,10 @@ export const surveyRefinement = (rawSurvey: z.infer<typeof ZSurveyBase>, ctx: z.
         }
 
         if (element.type === TSurveyElementTypeEnum.Address) {
-          const { addressLine1, addressLine2, city, state, zip, country } = element;
+          const { name, organization, addressLine1, addressLine2, city, state, zip, country } = element;
           const fields = [
+            ...(name ? [{ ...name, label: "Name" }] : []),
+            ...(organization ? [{ ...organization, label: "Organization" }] : []),
             { ...addressLine1, label: "Address Line 1" },
             { ...addressLine2, label: "Address Line 2" },
             { ...city, label: "City" },

@@ -502,6 +502,7 @@ export function Survey({
     return styling.cardArrangement?.appSurveys ?? "straight";
   }, [localSurvey.type, styling.cardArrangement?.linkSurveys, styling.cardArrangement?.appSurveys]);
   const isCardless = cardArrangement === "cardless";
+  const cardSize = styling.cardSize ?? "normal";
   const linkSurveyCardMaxWidth =
     localSurvey.type === "link" ? getLinkSurveyCardMaxWidth(styling.linkSurveyCardWidth) : undefined;
 
@@ -1386,6 +1387,7 @@ export function Survey({
             variablesData={currentVariables}
             isPreviewMode={isPreviewMode}
             fullSizeCards={fullSizeCards}
+            cardSize={cardSize}
             isCardless={isCardless}
           />
         );
@@ -1408,6 +1410,7 @@ export function Survey({
               onOpenExternalURL={onOpenExternalURL}
               isPreviewMode={isPreviewMode}
               fullSizeCards={fullSizeCards}
+              cardSize={cardSize}
               isCardless={isCardless}
               isOfflineWithPending={offlinePersistEnabled && !isOnline && isSurveyFinished}
             />
@@ -1446,6 +1449,7 @@ export function Survey({
               onOpenExternalURL={onOpenExternalURL}
               dir={dir}
               fullSizeCards={fullSizeCards}
+              cardSize={cardSize}
               isCardless={isCardless}
             />
           )

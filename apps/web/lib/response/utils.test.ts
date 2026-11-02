@@ -1729,7 +1729,33 @@ describe("Response Utils", () => {
       expect(result[0]["person.email"]).toBe("linked@example.com");
     });
 
-    test("should format the Timestamp in UTC when no time zone is provided", () => {
+    test("should add Completed At and Duration, and no Timestamp column", () => {
+      const finished = [
+        {
+          ...mockResponses[0],
+          finished: true,
+          createdAt: new Date("2026-06-10T19:15:44.000Z"),
+          updatedAt: new Date("2026-06-10T20:00:04.000Z"),
+          ttc: { q1: 2650411, _total: 2650411 },
+        },
+      ] as TResponse[];
+      const result = getResponsesJson(mockSurvey as TSurvey, finished, [["1. Question 1"]], [], false);
+      expect(result[0]["Started At"]).toBe("2026-06-10 19:15:44 UTC");
+      expect(result[0]["Completed At"]).toBe("2026-06-10 20:00:04 UTC");
+      expect(result[0]["Duration"]).toBe("0:44:10");
+      expect(result[0]["Timestamp"]).toBeUndefined();
+    });
+
+    test("should leave Completed At and Duration empty for an unfinished response without timing", () => {
+      const unfinished = [
+        { ...mockResponses[0], finished: false, ttc: undefined },
+      ] as unknown as TResponse[];
+      const result = getResponsesJson(mockSurvey as TSurvey, unfinished, [["1. Question 1"]], [], false);
+      expect(result[0]["Completed At"]).toBe("");
+      expect(result[0]["Duration"]).toBe("");
+    });
+
+    test("should format Started At in UTC when no time zone is provided", () => {
       const responsesWithFixedDate = [
         { ...mockResponses[0], createdAt: new Date("2026-01-01T20:00:00.000Z") },
       ] as TResponse[];
@@ -1740,10 +1766,10 @@ describe("Response Utils", () => {
         [],
         false
       );
-      expect(result[0]["Timestamp"]).toBe("2026-01-01 20:00:00 UTC");
+      expect(result[0]["Started At"]).toBe("2026-01-01 20:00:00 UTC");
     });
 
-    test("should format the Timestamp in the configured time zone", () => {
+    test("should format Started At in the configured time zone", () => {
       const responsesWithFixedDate = [
         { ...mockResponses[0], createdAt: new Date("2026-01-01T20:00:00.000Z") },
       ] as TResponse[];
@@ -1755,7 +1781,61 @@ describe("Response Utils", () => {
         false,
         "Asia/Manila"
       );
-      expect(result[0]["Timestamp"]).toBe("2026-01-02 04:00:00 GMT+8");
+      expect(result[0]["Started At"]).toBe("2026-01-02 04:00:00 GMT+8");
+    });
+  });
+
+  describe("getResponsesJson address elements", () => {
+    const addressSurvey = {
+      id: "survey1",
+      name: "Address Survey",
+      blocks: [
+        {
+          id: "block1",
+          name: "Block 1",
+          elements: [
+            {
+              id: "addr1",
+              type: TSurveyElementTypeEnum.Address,
+              headline: { default: "Mailing address" },
+              required: false,
+            },
+          ],
+        },
+      ],
+      hiddenFields: { enabled: true, fieldIds: [] },
+    } as unknown as TSurvey;
+
+    const exportAddress = (addressValue: string[]) =>
+      getResponsesJson(
+        addressSurvey,
+        [
+          {
+            id: "response1",
+            data: { addr1: addressValue },
+            meta: {},
+            contactAttributes: {},
+            variables: {},
+            tags: [],
+            finished: true,
+            createdAt: new Date("2026-06-10T19:15:44Z"),
+            updatedAt: new Date("2026-06-10T20:00:04Z"),
+            ttc: {},
+          },
+        ] as unknown as TResponse[],
+        [["1. Mailing address"]],
+        [],
+        false
+      );
+
+    test("exports name and organization first, then the address lines", () => {
+      const result = exportAddress(["1 Main St", "", "Austin", "TX", "78701", "USA", "Jane Doe", "ASLA"]);
+      expect(result[0]["1. Mailing address"]).toBe("Jane Doe; ASLA; 1 Main St; Austin; TX; 78701; USA");
+    });
+
+    test("exports legacy 6-element responses unchanged", () => {
+      const result = exportAddress(["1 Main St", "", "Austin", "TX", "78701", "USA"]);
+      expect(result[0]["1. Mailing address"]).toBe("1 Main St; Austin; TX; 78701; USA");
     });
   });
 

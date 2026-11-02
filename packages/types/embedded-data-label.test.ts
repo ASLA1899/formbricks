@@ -84,7 +84,7 @@ describe("labelEmbeddedFields", () => {
     // rule covering the whole row rather than only this group.
     const labels = labelEmbeddedFields(
       [ingested("Response ID", "resp_id"), ingested("Campaign", "utm_campaign")],
-      new Set(["Response ID", "Timestamp"])
+      new Set(["Response ID", "Started At"])
     ).map(({ label }) => label);
 
     expect(labels).toEqual(["Response ID (resp_id)", "Campaign"]);

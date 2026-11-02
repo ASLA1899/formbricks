@@ -212,7 +212,7 @@ export const extractTranslatableStrings = (survey: TSurvey, t: TFunction): Trans
           break;
         }
         case TSurveyElementTypeEnum.Address: {
-          const addrFields = ["addressLine1", "addressLine2", "city", "state", "zip", "country"] as const;
+          const addrFields = ["name", "organization", "addressLine1", "addressLine2", "city", "state", "zip", "country"] as const;
           addrFields.forEach((f) => {
             const sub = element[f];
             if (sub?.placeholder && isI18nObject(sub.placeholder) && (sub.placeholder.default ?? "").trim()) {
