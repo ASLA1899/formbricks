@@ -33,7 +33,13 @@ const response = {
 
 const currentRow = (overrides: Record<string, unknown> = {}) => ({
   ...response,
-  survey: { ...survey, snowflakeSync: true },
+  survey: {
+    ...survey,
+    snowflakeSync: true,
+    visibility: "workspace",
+    visibilityProjectedVersion: 1,
+    visibilityVersion: 1,
+  },
   ...overrides,
 });
 
@@ -57,12 +63,22 @@ describe("reconcileResponses", () => {
     ]);
   });
 
-  test("does not rewrite when the survey stopped syncing or the response is unfinished", async () => {
+  test("does not rewrite when the survey stopped syncing, the response is unfinished, or the survey is restricted", async () => {
     vi.mocked(prisma.response.findMany).mockResolvedValue([
       currentRow({ survey: { ...survey, snowflakeSync: false } }),
       currentRow({ id: "r2", finished: false }),
+      currentRow({
+        id: "r3",
+        survey: {
+          ...survey,
+          snowflakeSync: true,
+          visibility: "restricted",
+          visibilityProjectedVersion: 1,
+          visibilityVersion: 1,
+        },
+      }),
     ] as never);
-    await reconcileResponses(["r1", "r2"]);
+    await reconcileResponses(["r1", "r2", "r3"]);
     expect(upsertSurveyResponseRows).not.toHaveBeenCalled();
   });
 });

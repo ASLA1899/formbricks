@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
 import type { TResponse } from "@formbricks/types/responses";
+import { isSurveyOutboundAllowed, surveyOutboundVisibilitySelect } from "@/lib/survey/visibility/outbound";
 import { deleteSurveyResponseRows, isSnowflakeConfigured, upsertSurveyResponseRows } from "./client";
 import { type TSnowflakeSurvey, buildSnowflakeRows } from "./response-rows";
 
@@ -46,14 +47,24 @@ export const reconcileResponses = async (responseIds: string[]): Promise<boolean
         meta: true,
         data: true,
         contactAttributes: true,
-        survey: { select: { id: true, name: true, blocks: true, hiddenFields: true, snowflakeSync: true } },
+        survey: {
+          select: {
+            id: true,
+            name: true,
+            blocks: true,
+            hiddenFields: true,
+            snowflakeSync: true,
+            ...surveyOutboundVisibilitySelect,
+          },
+        },
       },
     });
     const present = new Set(existing.map((response) => response.id));
     const gone = responseIds.filter((id) => !present.has(id));
     if (gone.length > 0) await runSerially(() => deleteSurveyResponseRows(gone));
     for (const { survey, ...response } of existing) {
-      if (!survey.snowflakeSync || !response.finished) continue;
+      // Same outbound rule as the pipeline: a restricted survey is never written to the warehouse.
+      if (!survey.snowflakeSync || !response.finished || !isSurveyOutboundAllowed(survey)) continue;
       const current = response as Parameters<typeof buildSnowflakeRows>[1];
       await runSerially(() =>
         upsertSurveyResponseRows(response.id, buildSnowflakeRows(survey as TSnowflakeSurvey, current))
