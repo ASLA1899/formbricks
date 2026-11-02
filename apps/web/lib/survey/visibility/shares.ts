@@ -19,3 +19,9 @@ export const getSurveyShareWorkspaceId = async (userId: string, surveyId: string
   });
   return share?.survey.workspaceId ?? null;
 };
+
+/** The survey a response belongs to, so a read of one response can be judged by its survey's share. */
+export const getResponseSurveyId = async (responseId: string): Promise<string | null> => {
+  const response = await prisma.response.findUnique({ where: { id: responseId }, select: { surveyId: true } });
+  return response?.surveyId ?? null;
+};

@@ -219,8 +219,10 @@ export async function batchDeleteV3Responses({
 
     // ENG-3282: responses of a survey this caller cannot see are scope-filtered out like foreign ids —
     // simply not counted in `deleted` — rather than refused (contract §7).
+    // ASLA (ASL-1880): shares are read-only, so they must not widen what a batch delete may remove.
     const visibleSurveyWhere = buildVisibleSurveyWhere(
-      await resolveV3ResponsesActorContext(authentication, access.organizationId)
+      await resolveV3ResponsesActorContext(authentication, access.organizationId),
+      { includeShares: false }
     );
     const { deleted, deletedIds } = await deleteScopedResponses(ids, { visibleSurveyWhere, workspaceId });
 

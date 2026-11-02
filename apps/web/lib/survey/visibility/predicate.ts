@@ -45,14 +45,19 @@ const sharedWithUserWhere = (userId: string): Prisma.SurveyWhereInput => ({
  *
  * Workspace membership is NOT part of this: callers already scope to a workspace the actor may read.
  */
-export const buildVisibleSurveyWhere = (ctx: TSurveyActorContext): Prisma.SurveyWhereInput => {
+export const buildVisibleSurveyWhere = (
+  ctx: TSurveyActorContext,
+  { includeShares = true }: Readonly<{ includeShares?: boolean }> = {}
+): Prisma.SurveyWhereInput => {
   if (!ctx.enforced) return {};
 
   const sharedAndSettled = effectivelyWorkspaceVisibleWhere;
   if (ctx.kind === "apiKey") return sharedAndSettled;
   if (ctx.isOrganizationAdmin) return {};
 
-  return { OR: [sharedAndSettled, { ownerId: ctx.userId }, sharedWithUserWhere(ctx.userId)] };
+  const clauses = [sharedAndSettled, { ownerId: ctx.userId }];
+  if (includeShares) clauses.push(sharedWithUserWhere(ctx.userId));
+  return { OR: clauses };
 };
 
 /**

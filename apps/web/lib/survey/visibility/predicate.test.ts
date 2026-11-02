@@ -24,6 +24,16 @@ const sqlOf = (ctx: TSurveyActorContext) => {
   return { text: fragment.sql, values: fragment.values };
 };
 
+describe("buildVisibleSurveyWhere without shares (mutations)", () => {
+  test("a read-only share does not widen what a member may change", () => {
+    const withShares = JSON.stringify(buildVisibleSurveyWhere(member));
+    const withoutShares = JSON.stringify(buildVisibleSurveyWhere(member, { includeShares: false }));
+    expect(withShares).toContain("accessUsers");
+    expect(withoutShares).not.toContain("accessUsers");
+    expect(withoutShares).toContain("u-1");
+  });
+});
+
 describe("buildVisibleSurveyWhere", () => {
   test.each([
     ["an unenforced member", { ...member, enforced: false }],

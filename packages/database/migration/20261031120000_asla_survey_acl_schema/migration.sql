@@ -14,7 +14,9 @@
 -- Only "visibility" is written; versions are left as they are, so the projector (or the authzed backfill)
 -- reconciles from the row. Rows already in agreement are not touched. Idempotent.
 
-SET lock_timeout = '1s';
+BEGIN;
+
+SET LOCAL lock_timeout = '1s';
 
 DO $$
 BEGIN
@@ -54,4 +56,4 @@ WHERE "visibility" IS DISTINCT FROM (
   CASE "accessMode" WHEN 'private' THEN 'restricted'::"SurveyVisibility" ELSE 'workspace'::"SurveyVisibility" END
 );
 
-RESET lock_timeout;
+COMMIT;

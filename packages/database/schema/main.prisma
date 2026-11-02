@@ -785,14 +785,6 @@ enum OrganizationRole {
   billing
 }
 
-/// Links users to organizations with specific roles.
-/// Manages organization membership and permissions.
-/// Core model for managing user access within organizations.
-///
-/// @property organization - The organization the user belongs to
-/// @property user - The member user
-/// @property accepted - Whether the user has accepted the membership
-/// @property role - User's role within the organization (owner, manager, member, billing)
 /// ASLA fork (ASL-1880): the fork's per-survey access mode. Created by the 4.9 fork migration
 /// `add_survey_acl` as "SurveyVisibility" and renamed by 20261002115900 (ASL-1863).
 enum SurveyAccessMode {
@@ -812,6 +804,14 @@ model SurveyAccess {
   @@index([userId])
 }
 
+/// Links users to organizations with specific roles.
+/// Manages organization membership and permissions.
+/// Core model for managing user access within organizations.
+///
+/// @property organization - The organization the user belongs to
+/// @property user - The member user
+/// @property accepted - Whether the user has accepted the membership
+/// @property role - User's role within the organization (owner, manager, member, billing)
 model Membership {
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String

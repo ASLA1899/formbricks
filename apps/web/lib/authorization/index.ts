@@ -1,6 +1,10 @@
 import "server-only";
 import { AuthorizationError } from "@formbricks/types/errors";
-import { SURVEY_SHARE_GRANTED_ACTIONS, getSurveyShareWorkspaceId } from "@/lib/survey/visibility/shares";
+import {
+  SURVEY_SHARE_GRANTED_ACTIONS,
+  getResponseSurveyId,
+  getSurveyShareWorkspaceId,
+} from "@/lib/survey/visibility/shares";
 import { recordAuthorizationCheckIssued } from "./context";
 import type { TAuthorizationAction, TAuthorizationActor, TAuthorizationResourceForAction } from "./contract";
 import { authorizationCoordinator } from "./coordinator";
@@ -51,10 +55,17 @@ const isGrantedByAslaSurveyShare = async (
   action: TAuthorizationAction,
   resource: Readonly<{ type: string; id?: string }>
 ): Promise<boolean> => {
-  if (actor.type !== "user" || resource.type !== "survey" || !resource.id) return false;
-  if (!SURVEY_SHARE_GRANTED_ACTIONS.has(action)) return false;
+  if (actor.type !== "user" || !resource.id) return false;
 
-  const workspaceId = await getSurveyShareWorkspaceId(actor.id, resource.id);
+  // A single response is read through its survey: `response.read` is judged as `survey.response_read`.
+  let surveyId: string | null = null;
+  if (resource.type === "survey" && SURVEY_SHARE_GRANTED_ACTIONS.has(action)) surveyId = resource.id;
+  else if (resource.type === "response" && action === "response.read") {
+    surveyId = await getResponseSurveyId(resource.id);
+  }
+  if (!surveyId) return false;
+
+  const workspaceId = await getSurveyShareWorkspaceId(actor.id, surveyId);
   if (!workspaceId) return false;
   return evaluator.can(actor, "workspace.read", { id: workspaceId, type: "workspace" });
 };

@@ -4,7 +4,7 @@ import { reconcileSurveyRelationships } from "@/lib/authzed/survey";
 import { setSurveyAccessMode } from "./access-mode";
 
 vi.mock("server-only", () => ({}));
-vi.mock("@formbricks/database", () => ({ prisma: { $transaction: vi.fn() } }));
+vi.mock("@formbricks/database", () => ({ prisma: { $transaction: vi.fn(), survey: { findUnique: vi.fn() } } }));
 vi.mock("@/lib/authzed/survey", () => ({
   lockSurveyVisibility: vi.fn(),
   reconcileSurveyRelationships: vi.fn(),
@@ -17,7 +17,13 @@ const mockTx = (changedRows: number) => {
 };
 
 describe("setSurveyAccessMode", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.survey.findUnique).mockResolvedValue({
+      visibilityProjectedVersion: 1,
+      visibilityVersion: 1,
+    } as never);
+  });
 
   test("a real change stores mode and visibility together, then projects to SpiceDB", async () => {
     const tx = mockTx(1);
@@ -50,5 +56,16 @@ describe("setSurveyAccessMode", () => {
     mockTx(1);
     vi.mocked(reconcileSurveyRelationships).mockResolvedValue({ status: "failed" } as never);
     await expect(setSurveyAccessMode("s1", "private", "u1")).resolves.toMatchObject({ projection: "failed" });
+  });
+
+  test("a same-mode retry reconciles when the earlier projection was never acknowledged", async () => {
+    mockTx(0);
+    vi.mocked(prisma.survey.findUnique).mockResolvedValue({
+      visibilityProjectedVersion: 0,
+      visibilityVersion: 1,
+    } as never);
+    vi.mocked(reconcileSurveyRelationships).mockResolvedValue({ status: "failed" } as never);
+    await expect(setSurveyAccessMode("s1", "private", "u1")).resolves.toMatchObject({ projection: "failed" });
+    expect(reconcileSurveyRelationships).toHaveBeenCalledWith(["s1"]);
   });
 });

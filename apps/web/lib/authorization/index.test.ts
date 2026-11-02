@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { AuthorizationError } from "@formbricks/types/errors";
-import { getSurveyShareWorkspaceId } from "@/lib/survey/visibility/shares";
+import { getResponseSurveyId, getSurveyShareWorkspaceId } from "@/lib/survey/visibility/shares";
 import { assertCan, can } from ".";
 import type { TAuthorizationActor, TAuthorizationResource } from "./contract";
 import { authorizationCoordinator } from "./coordinator";
@@ -9,6 +9,7 @@ import { authorizationCoordinator } from "./coordinator";
 vi.mock("./coordinator", () => ({ authorizationCoordinator: { can: vi.fn() } }));
 vi.mock("@/lib/survey/visibility/shares", () => ({
   SURVEY_SHARE_GRANTED_ACTIONS: new Set(["survey.read", "survey.response_read"]),
+  getResponseSurveyId: vi.fn().mockResolvedValue(null),
   getSurveyShareWorkspaceId: vi.fn().mockResolvedValue(null),
 }));
 
@@ -80,5 +81,23 @@ describe("ASLA per-person survey shares (ASL-1880)", () => {
     await expect(can(ACTOR, "survey.read", RESOURCE)).resolves.toBe(false);
     vi.mocked(getSurveyShareWorkspaceId).mockResolvedValue("ws1");
     await expect(can({ type: "apiKey", id: "k" }, "survey.read", RESOURCE)).resolves.toBe(false);
+  });
+
+  test("a share lets the user read a single response of the shared survey, and nothing else on responses", async () => {
+    allowOnlyWorkspaceRead();
+    vi.mocked(getResponseSurveyId).mockResolvedValue("survey1");
+    vi.mocked(getSurveyShareWorkspaceId).mockResolvedValue("ws1");
+    const response = { type: "response", id: "r1" } as const;
+    await expect(can(ACTOR, "response.read", response)).resolves.toBe(true);
+    expect(getSurveyShareWorkspaceId).toHaveBeenCalledWith("user1", "survey1");
+    for (const action of ["response.write", "response.manage", "response.export"] as const) {
+      await expect(can(ACTOR, action, response)).resolves.toBe(false);
+    }
+  });
+
+  test("a response whose survey cannot be resolved gets no grant", async () => {
+    allowOnlyWorkspaceRead();
+    vi.mocked(getResponseSurveyId).mockResolvedValue(null);
+    await expect(can(ACTOR, "response.read", { type: "response", id: "r1" })).resolves.toBe(false);
   });
 });
