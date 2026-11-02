@@ -382,22 +382,32 @@ export function Survey({
   const [isSurveyFinished, setIsSurveyFinished] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState(languageCode);
   const [loadingElement, setLoadingElement] = useState(false);
-  const [history, setHistory] = useState<string[]>(() =>
-    // Resuming at the saved block: restore the path that led there so Back returns to it, not to
-    // the previous block in array order (which a jump may have skipped).
-    resumedResponse?.blockId && resumedResponse.blockId === blockId
-      ? getRestorableHistory(localSurvey, resumedResponse.history ?? [])
-      : []
-  );
+  // Resuming at the saved block: restore the path that led there so Back returns to it, not to
+  // the previous block in array order (which a jump may have skipped). The variable stack is kept
+  // in step with it, so Back also undoes the calculations of the blocks it steps over.
+  const [resumedPath] = useState(() => {
+    if (!resumedResponse?.blockId || resumedResponse.blockId !== blockId) {
+      return { history: [] as string[], stack: [] as VariableStackEntry[] };
+    }
+    const saved = resumedResponse.history ?? [];
+    const savedStack = resumedResponse.variableStack ?? [];
+    const history = getRestorableHistory(localSurvey, saved);
+    if (savedStack.length !== saved.length) return { history, stack: [] as VariableStackEntry[] };
+    const restorable = new Set(getRestorableHistory(localSurvey, saved));
+    const stack = savedStack.filter((_, index) => restorable.has(saved[index]));
+    return { history, stack: stack.length === history.length ? stack : [] };
+  });
+  const [history, setHistory] = useState<string[]>(resumedPath.history);
+  const [variableStack, setVariableStack] = useState<VariableStackEntry[]>(resumedPath.stack);
   const isNavigatingBackRef = useRef(false);
 
   // Link-survey resume keeps the exact block in the respondent's browser. Only real blocks count:
   // the welcome card and endings are not resume points.
   useEffect(() => {
     if (onResumeBlockChange && localSurvey.blocks.some((block) => block.id === blockId)) {
-      onResumeBlockChange(blockId, history);
+      onResumeBlockChange(blockId, history, variableStack);
     }
-  }, [blockId, history, localSurvey.blocks, onResumeBlockChange]);
+  }, [blockId, history, variableStack, localSurvey.blocks, onResumeBlockChange]);
   /**
    * The Embedded Data ingest contract (ENG-1845) applied to whatever the host handed us — URL params
    * for a link survey, `track({ hiddenFields })` or `setEmbeddedData` for an app one. Every caller
@@ -445,7 +455,6 @@ export function Survey({
     ...ingestedFieldsRecord,
     ...(resumedResponse?.data ?? {}),
   });
-  const [_variableStack, setVariableStack] = useState<VariableStackEntry[]>([]);
 
   const [ttc, setTtc] = useState<TResponseTtc>(resumedResponse?.ttc ?? {});
   const isOnline = useOnlineStatus();

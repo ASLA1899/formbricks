@@ -5,7 +5,20 @@ export interface StoredResume {
   responseId: string;
   blockId: string | null;
   history: string[];
+  variableStack: StoredVariableEntry[];
 }
+
+export interface StoredVariableEntry {
+  questionId: string;
+  variables: Record<string, string | number>;
+}
+
+const isVariableEntry = (entry: unknown): entry is StoredVariableEntry => {
+  if (!entry || typeof entry !== "object") return false;
+  const { questionId, variables } = entry as Record<string, unknown>;
+  if (typeof questionId !== "string" || !variables || typeof variables !== "object") return false;
+  return Object.values(variables).every((v) => typeof v === "string" || typeof v === "number");
+};
 
 export const readStoredResume = (surveyId: string): StoredResume | null => {
   try {
@@ -16,6 +29,7 @@ export const readStoredResume = (surveyId: string): StoredResume | null => {
       updatedAt?: unknown;
       blockId?: unknown;
       history?: unknown;
+      variableStack?: unknown;
     };
     if (typeof parsed.responseId !== "string" || !parsed.responseId) return null;
     if (typeof parsed.updatedAt !== "number" || Date.now() - parsed.updatedAt > RESUME_MAX_AGE_MS) {
@@ -27,6 +41,7 @@ export const readStoredResume = (surveyId: string): StoredResume | null => {
       history: Array.isArray(parsed.history)
         ? parsed.history.filter((entry): entry is string => typeof entry === "string")
         : [],
+      variableStack: Array.isArray(parsed.variableStack) ? parsed.variableStack.filter(isVariableEntry) : [],
     };
   } catch {
     return null;
@@ -37,13 +52,21 @@ export const readStoredResumeId = (surveyId: string): string | null =>
   readStoredResume(surveyId)?.responseId ?? null;
 
 /** Records the block the respondent is on and the blocks they came through, so Back works after a resume. Only updates an existing record, so it never revives a cleared one. */
-export const writeStoredResumeBlock = (surveyId: string, blockId: string, history: string[] = []): void => {
+export const writeStoredResumeBlock = (
+  surveyId: string,
+  blockId: string,
+  history: string[] = [],
+  variableStack: StoredVariableEntry[] = []
+): void => {
   try {
     const key = RESUME_STORAGE_PREFIX + surveyId;
     const raw = globalThis.localStorage?.getItem(key);
     if (!raw) return;
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    globalThis.localStorage?.setItem(key, JSON.stringify({ ...parsed, blockId, history, updatedAt: Date.now() }));
+    globalThis.localStorage?.setItem(
+      key,
+      JSON.stringify({ ...parsed, blockId, history, variableStack, updatedAt: Date.now() })
+    );
   } catch {
     // ignore
   }
@@ -53,7 +76,7 @@ export const writeStoredResumeBlock = (surveyId: string, blockId: string, histor
 export const writeStoredResumeId = (
   surveyId: string,
   responseId: string,
-  position?: { blockId: string; history: string[] }
+  position?: { blockId: string; history: string[]; variableStack: StoredVariableEntry[] }
 ): void => {
   try {
     globalThis.localStorage?.setItem(

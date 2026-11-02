@@ -23,6 +23,7 @@ import {
 } from "@/modules/survey/link/lib/hidden-fields";
 import { getPrefillValue } from "@/modules/survey/link/lib/prefill";
 import {
+  type StoredVariableEntry,
   clearStoredResumeId,
   readStoredResume,
   writeStoredResumeBlock,
@@ -223,6 +224,7 @@ export const SurveyClientWrapper = ({
               language: body.data.language ?? null,
               blockId: stored?.blockId ?? null,
               history: stored?.history ?? [],
+              variableStack: stored?.variableStack ?? [],
             });
             // Keep the language the respondent was answering in. "default" is the survey's default
             // language and must be restored too, or a Spanish ?lang= link would override it. Codes
@@ -249,7 +251,9 @@ export const SurveyClientWrapper = ({
   // The first response acknowledgment can arrive after the respondent has already moved on, when no
   // stored record exists yet to take the position. Keep the latest position and save it together
   // with the id.
-  const latestPositionRef = useRef<{ blockId: string; history: string[] } | undefined>(undefined);
+  const latestPositionRef = useRef<
+    { blockId: string; history: string[]; variableStack: StoredVariableEntry[] } | undefined
+  >(undefined);
 
   const handleResponseIdReceived = useCallback(
     (responseId: string) => {
@@ -259,9 +263,9 @@ export const SurveyClientWrapper = ({
   );
 
   const handleResumeBlockChange = useCallback(
-    (blockId: string, history: string[]) => {
-      latestPositionRef.current = { blockId, history };
-      if (isResumeEligible) writeStoredResumeBlock(survey.id, blockId, history);
+    (blockId: string, history: string[], variableStack: StoredVariableEntry[]) => {
+      latestPositionRef.current = { blockId, history, variableStack };
+      if (isResumeEligible) writeStoredResumeBlock(survey.id, blockId, history, variableStack);
     },
     [isResumeEligible, survey.id]
   );

@@ -49,19 +49,57 @@ describe("resume-storage", () => {
     expect(readStoredResume("s1")).toBeNull();
     writeStoredResumeId("s1", "r1");
     writeStoredResumeBlock("s1", "b3", ["b1"]);
-    expect(readStoredResume("s1")).toEqual({ responseId: "r1", blockId: "b3", history: ["b1"] });
+    expect(readStoredResume("s1")).toEqual({
+      responseId: "r1",
+      blockId: "b3",
+      history: ["b1"],
+      variableStack: [],
+    });
   });
 
   test("saves the id together with the latest position when the first acknowledgment is late", () => {
     // The respondent jumped b1 -> b3 before the create call returned: no record existed to take it.
     writeStoredResumeBlock("s1", "b3", ["b1"]);
     expect(readStoredResume("s1")).toBeNull();
-    writeStoredResumeId("s1", "r1", { blockId: "b3", history: ["b1"] });
-    expect(readStoredResume("s1")).toEqual({ responseId: "r1", blockId: "b3", history: ["b1"] });
+    writeStoredResumeId("s1", "r1", {
+      blockId: "b3",
+      history: ["b1"],
+      variableStack: [{ questionId: "q1", variables: { score: 1 } }],
+    });
+    expect(readStoredResume("s1")).toEqual({
+      responseId: "r1",
+      blockId: "b3",
+      history: ["b1"],
+      variableStack: [{ questionId: "q1", variables: { score: 1 } }],
+    });
   });
 
   test("a record without history reads as an empty path", () => {
     writeStoredResumeId("s1", "r1");
-    expect(readStoredResume("s1")).toEqual({ responseId: "r1", blockId: null, history: [] });
+    expect(readStoredResume("s1")).toEqual({
+      responseId: "r1",
+      blockId: null,
+      history: [],
+      variableStack: [],
+    });
+  });
+
+  test("stores the variable stack with the history and drops malformed entries", () => {
+    writeStoredResumeId("s1", "r1");
+    writeStoredResumeBlock("s1", "b3", ["b1"], [{ questionId: "q1", variables: { score: 0 } }]);
+    expect(readStoredResume("s1")?.variableStack).toEqual([{ questionId: "q1", variables: { score: 0 } }]);
+    store.set(
+      "formbricks-resume-s1",
+      JSON.stringify({
+        responseId: "r1",
+        updatedAt: Date.now(),
+        variableStack: [
+          { questionId: "q1", variables: { score: {} } },
+          "x",
+          { questionId: "q2", variables: { a: "b" } },
+        ],
+      })
+    );
+    expect(readStoredResume("s1")?.variableStack).toEqual([{ questionId: "q2", variables: { a: "b" } }]);
   });
 });
