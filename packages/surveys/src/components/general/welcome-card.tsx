@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { type TI18nString } from "@formbricks/types/i18n";
 import { type TJsWorkspaceStateSurvey } from "@formbricks/types/js";
 import { type TResponseData, type TResponseTtc, type TResponseVariables } from "@formbricks/types/responses";
+import type { TCardSize } from "@formbricks/types/styling";
 import { SubmitButton } from "@/components/buttons/submit-button";
 import { ScrollableContainer } from "@/components/wrappers/scrollable-container";
 import { getLocalizedValue } from "@/lib/i18n";
@@ -33,6 +34,7 @@ interface WelcomeCardProps {
   responseData: TResponseData;
   variablesData: TResponseVariables;
   fullSizeCards: boolean;
+  cardSize?: TCardSize;
   isCardless?: boolean;
   isPreviewMode?: boolean;
 }
@@ -89,6 +91,7 @@ export function WelcomeCard({
   responseData,
   variablesData,
   fullSizeCards,
+  cardSize,
   isCardless = false,
   isPreviewMode = false,
 }: WelcomeCardProps) {
@@ -153,7 +156,7 @@ export function WelcomeCard({
   }, [isCurrent, isPreviewMode]);
 
   return (
-    <ScrollableContainer fullSizeCards={fullSizeCards} disableInternalScroll={isCardless}>
+    <ScrollableContainer fullSizeCards={fullSizeCards} cardSize={cardSize} disableInternalScroll={isCardless}>
       <div>
         {fileUrl ? (
           <ElementMedia imgUrl={fileUrl} altText={t("common.company_logo")} className="mb-8 min-h-0 w-1/4" />

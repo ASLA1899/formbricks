@@ -133,6 +133,7 @@ const ZSurveyBase = z.object({
       roundness: z.number().nullish(),
       cardArrangement: ZCardArrangement.nullish(),
       linkSurveyCardWidth: ZLinkSurveyCardWidthOptions.nullish(),
+      cardSize: z.enum(["normal", "tall"]).nullish(),
       background: ZSurveyStylingBackground.nullish(),
       hideProgressBar: z.boolean().nullish(),
       isLogoHidden: z.boolean().nullish(),

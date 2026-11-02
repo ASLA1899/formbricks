@@ -263,6 +263,7 @@ export interface TBaseStyling {
     appSurveys: "casual" | "straight" | "simple";
   } | null;
   linkSurveyCardWidth?: "narrow" | "default" | "wide" | null;
+  cardSize?: "normal" | "tall" | null;
   background?: {
     bg?: string | null;
     bgType?: "animation" | "color" | "image" | "upload" | null;

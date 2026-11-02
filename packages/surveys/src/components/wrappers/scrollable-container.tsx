@@ -1,12 +1,14 @@
 import type { JSX, Ref } from "preact";
 import { forwardRef } from "preact/compat";
 import { useEffect, useImperativeHandle, useRef, useState } from "preact/hooks";
+import type { TCardSize } from "@formbricks/types/styling";
 import { ScrollToBottomButton } from "@/components/buttons/scroll-to-bottom-button";
 import { cn } from "@/lib/utils";
 
 interface ScrollableContainerProps {
   children: JSX.Element;
   fullSizeCards: boolean;
+  cardSize?: TCardSize;
   disableInternalScroll?: boolean;
 }
 
@@ -16,7 +18,12 @@ export interface ScrollableContainerHandle {
 
 export const ScrollableContainer = forwardRef<ScrollableContainerHandle, ScrollableContainerProps>(
   (
-    { children, fullSizeCards = false, disableInternalScroll = false }: Readonly<ScrollableContainerProps>,
+    {
+      children,
+      fullSizeCards = false,
+      cardSize = "normal",
+      disableInternalScroll = false,
+    }: Readonly<ScrollableContainerProps>,
     ref: Ref<ScrollableContainerHandle>
   ) => {
     const [isAtBottom, setIsAtBottom] = useState(false);
@@ -74,6 +81,8 @@ export const ScrollableContainer = forwardRef<ScrollableContainerHandle, Scrolla
       maxHeight = "calc(100vh - 6rem)";
     } else if (isSurveyPreview) {
       maxHeight = "42dvh";
+    } else if (cardSize === "tall") {
+      maxHeight = "85dvh";
     } else {
       maxHeight = "60dvh";
     }

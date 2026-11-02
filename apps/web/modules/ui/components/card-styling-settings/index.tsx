@@ -11,6 +11,7 @@ import { cn } from "@/lib/cn";
 import { STYLE_DEFAULTS } from "@/lib/styling/constants";
 import { getDarkDisplayColor } from "@/lib/styling/dark-mode";
 import { CardArrangementTabs } from "@/modules/ui/components/card-arrangement-tabs";
+import { CardHeightTabs } from "@/modules/ui/components/card-height-tabs";
 import { CardWidthTabs } from "@/modules/ui/components/card-width-tabs";
 import { ColorPicker } from "@/modules/ui/components/color-picker";
 import { FormControl, FormDescription, FormField, FormItem, FormLabel } from "@/modules/ui/components/form";
@@ -43,6 +44,7 @@ export const CardStylingSettings = ({
   const linkCardArrangement = form.watch("cardArrangement.linkSurveys") ?? "straight";
   const appCardArrangement = form.watch("cardArrangement.appSurveys") ?? "straight";
   const linkSurveyCardWidth = form.watch("linkSurveyCardWidth") ?? "default";
+  const cardSize = form.watch("cardSize") ?? "normal";
   const hideProgressBar = form.watch("hideProgressBar");
 
   return (
@@ -137,6 +139,27 @@ export const CardStylingSettings = ({
                       } else {
                         form.setValue("cardArrangement.linkSurveys", value);
                       }
+                    }}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="cardSize"
+            render={() => (
+              <FormItem className="col-span-2">
+                <div>
+                  <FormLabel>{t("workspace.surveys.edit.card_height")}</FormLabel>
+                  <FormDescription>{t("workspace.surveys.edit.card_height_description")}</FormDescription>
+                </div>
+                <FormControl>
+                  <CardHeightTabs
+                    activeCardSize={cardSize}
+                    setActiveCardSize={(value) => {
+                      form.setValue("cardSize", value);
                     }}
                   />
                 </FormControl>

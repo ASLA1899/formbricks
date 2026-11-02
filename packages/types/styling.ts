@@ -18,6 +18,9 @@ export const ZCardArrangement = z.object({
   appSurveys: ZAppSurveyCardArrangementOptions,
 });
 
+export const ZCardSize = z.enum(["normal", "tall"]);
+export type TCardSize = z.infer<typeof ZCardSize>;
+
 export const ZLinkSurveyCardWidthOptions = z.enum(["narrow", "default", "wide"]);
 export type TLinkSurveyCardWidthOptions = z.infer<typeof ZLinkSurveyCardWidthOptions>;
 
@@ -122,6 +125,7 @@ export const ZBaseStyling = z.object({
   roundness: z.union([z.number(), z.string()]).nullish(),
   cardArrangement: ZCardArrangement.nullish(),
   linkSurveyCardWidth: ZLinkSurveyCardWidthOptions.nullish(),
+  cardSize: ZCardSize.nullish(),
   background: ZSurveyStylingBackground.nullish(),
   hideProgressBar: z.boolean().nullish(),
   isLogoHidden: z.boolean().nullish(),
