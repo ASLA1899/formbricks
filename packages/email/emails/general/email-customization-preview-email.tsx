@@ -1,4 +1,4 @@
-import { Container, Heading, Text } from "react-email";
+import { Heading, Text } from "react-email";
 import { EmailTemplate } from "../../src/components/email-template";
 import { exampleData } from "../../src/lib/example-data";
 import { t as mockT } from "../../src/lib/mock-translate";
@@ -19,10 +19,10 @@ export function EmailCustomizationPreviewEmail({
 }: EmailCustomizationPreviewEmailProps): React.JSX.Element {
   return (
     <EmailTemplate logoUrl={logoUrl} t={t} {...legalProps}>
-      <Container>
+      <>
         <Heading>{t("emails.email_customization_preview_email_heading", { userName })}</Heading>
         <Text className="text-sm">{t("emails.email_customization_preview_email_text")}</Text>
-      </Container>
+      </>
     </EmailTemplate>
   );
 }

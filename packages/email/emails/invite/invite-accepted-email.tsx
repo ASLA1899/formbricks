@@ -1,4 +1,4 @@
-import { Container, Heading, Text } from "react-email";
+import { Heading, Text } from "react-email";
 import { EmailFooter } from "../../src/components/email-footer";
 import { EmailTemplate } from "../../src/components/email-template";
 import { exampleData } from "../../src/lib/example-data";
@@ -20,11 +20,11 @@ export function InviteAcceptedEmail({
 }: InviteAcceptedEmailProps): React.JSX.Element {
   return (
     <EmailTemplate t={t} {...legalProps}>
-      <Container>
+      <>
         <Heading>{t("emails.invite_accepted_email_heading", { inviterName })}</Heading>
         <Text className="text-sm">{t("emails.invite_accepted_email_text", { inviteeName })}</Text>
         <EmailFooter t={t} />
-      </Container>
+      </>
     </EmailTemplate>
   );
 }

@@ -1,4 +1,4 @@
-import { Container, Heading, Text } from "react-email";
+import { Heading, Text } from "react-email";
 import { EmailButton } from "../../src/components/email-button";
 import { EmailFooter } from "../../src/components/email-footer";
 import { EmailTemplate } from "../../src/components/email-template";
@@ -21,7 +21,7 @@ export function ForgotPasswordEmail({
 }: Readonly<ForgotPasswordEmailProps>): React.JSX.Element {
   return (
     <EmailTemplate t={t} {...legalProps}>
-      <Container>
+      <>
         <Heading>{t("emails.forgot_password_email_heading")}</Heading>
         <Text className="text-sm">{t("emails.forgot_password_email_text")}</Text>
         <EmailButton href={verifyLink} label={t("emails.forgot_password_email_change_password")} />
@@ -32,7 +32,7 @@ export function ForgotPasswordEmail({
         </Text>
         <Text className="mb-0 text-sm">{t("emails.forgot_password_email_did_not_request")}</Text>
         <EmailFooter t={t} />
-      </Container>
+      </>
     </EmailTemplate>
   );
 }

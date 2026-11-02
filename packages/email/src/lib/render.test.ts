@@ -128,6 +128,14 @@ describe.each(renderers)("%s", (_name, renderEmail) => {
     expect(html).toContain("text-align:start");
     expect(html).not.toMatch(/class="[^"]*\bmax-w-[a-z0-9]/);
   });
+
+  test("keeps body copy on the masthead/footer gutter (no inner 37.5em Container cap)", async () => {
+    // The embed preview deliberately renders a survey snippet whose elements use their own Container.
+    if (_name === "renderEmbedSurveyPreviewEmail") return;
+    const html = await renderEmail();
+
+    expect(html).not.toContain("max-width:37.5em");
+  });
 });
 
 describe("translation threading", () => {
@@ -287,7 +295,7 @@ describe("logo masthead", () => {
     });
     const tag = logoTag(html, "logo-image");
 
-    expect(tag).toContain('width="260"');
+    expect(tag).toContain('width="180"');
     expect(tag).not.toContain('height="');
     expect(html).toContain("background-color:#FFFFFF");
   });

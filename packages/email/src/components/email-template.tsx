@@ -63,7 +63,7 @@ export function EmailTemplate({
                 data-testid={isCustomLogo ? "logo-image" : "default-logo-image"}
                 alt={isCustomLogo ? "Logo" : "American Society of Landscape Architects"}
                 src={mastheadLogo}
-                width={isCustomLogo ? 260 : 220}
+                width={isCustomLogo ? 180 : 220}
                 {...(isCustomLogo ? {} : { height: 56 })}
                 style={{
                   display: "block",
@@ -72,6 +72,7 @@ export function EmailTemplate({
                   textDecoration: "none",
                   maxWidth: "100%",
                   height: "auto",
+                  ...(isCustomLogo ? { maxHeight: "80px" } : {}),
                 }}
               />
             </Section>
