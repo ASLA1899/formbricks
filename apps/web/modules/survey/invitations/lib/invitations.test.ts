@@ -177,6 +177,7 @@ describe("enqueueInvitationsForSurvey / upsertInvitation", () => {
     });
 
     expect(res).toEqual({ enqueued: 1, alreadySent: 1 });
+    expect(resolveAudience).toHaveBeenCalledWith(config.audience, "w1");
     expect(prisma.surveyInvitation.create).toHaveBeenCalledTimes(1);
     expect(sendSurveyInvitationEmail).not.toHaveBeenCalled();
   });

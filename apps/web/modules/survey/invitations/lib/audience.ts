@@ -1,5 +1,6 @@
 import "server-only";
-import { OperationNotAllowedError } from "@formbricks/types/errors";
+import { prisma } from "@formbricks/database";
+import { AuthorizationError, OperationNotAllowedError } from "@formbricks/types/errors";
 import type { TInvitationAudience } from "@formbricks/types/surveys/types";
 import { getContactsInSegment } from "@/modules/ee/contacts/lib/contacts";
 
@@ -18,9 +19,15 @@ export type TAudienceMember = {
 // Resolves a survey's configured audience into a flat list of recipient candidates.
 // Email-less rows are filtered out — we can't invite someone without an address.
 // Duplicates by email are collapsed to the first occurrence.
-export async function resolveAudience(audience: TInvitationAudience): Promise<TAudienceMember[]> {
+//
+// `workspaceId` is the survey's workspace. A segment must belong to it: the config is client-supplied, and
+// without the check a survey owner could name another workspace's segment and invite its contacts.
+export async function resolveAudience(
+  audience: TInvitationAudience,
+  workspaceId: string
+): Promise<TAudienceMember[]> {
   if (audience.source === "segment") {
-    return resolveSegmentAudience(audience.segmentId);
+    return resolveSegmentAudience(audience.segmentId, workspaceId);
   }
   if (audience.source === "manualList") {
     return resolveManualListAudience(audience.recipients);
@@ -45,7 +52,14 @@ function resolveManualListAudience(
   return out;
 }
 
-async function resolveSegmentAudience(segmentId: string): Promise<TAudienceMember[]> {
+async function resolveSegmentAudience(segmentId: string, workspaceId: string): Promise<TAudienceMember[]> {
+  const segment = await prisma.segment.findUnique({
+    where: { id: segmentId },
+    select: { workspaceId: true },
+  });
+  if (segment && segment.workspaceId !== workspaceId) {
+    throw new AuthorizationError("Segment is not in this survey's workspace");
+  }
   const contacts = await getContactsInSegment(segmentId);
   if (!contacts) return [];
 

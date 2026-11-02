@@ -158,7 +158,7 @@ export async function enqueueInvitationsForSurvey(args: {
 }): Promise<{ enqueued: number; alreadySent: number }> {
   const { surveyId, workspaceId, config } = args;
 
-  const members = await resolveAudience(config.audience);
+  const members = await resolveAudience(config.audience, workspaceId);
   if (members.length === 0) {
     logger.warn({ surveyId }, "No audience members resolved for invitation enqueue");
     return { enqueued: 0, alreadySent: 0 };
