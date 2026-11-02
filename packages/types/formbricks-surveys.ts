@@ -1,6 +1,12 @@
 import type { TRendererCustomCss } from "./custom-css";
 import type { TJsFileUploadParams, TJsWorkspaceStateSurvey } from "./js";
-import type { TResponseData, TResponseHiddenFieldValue, TResponseUpdate } from "./responses";
+import type {
+  TResponseData,
+  TResponseHiddenFieldValue,
+  TResponseTtc,
+  TResponseUpdate,
+  TResponseVariables,
+} from "./responses";
 import type { TUploadFileConfig } from "./storage";
 import type { TSurveyStyling } from "./surveys/types";
 import type { TWorkspaceStyling } from "./workspace";
@@ -33,6 +39,14 @@ export interface TSurveyCardRect {
   y: number;
   width: number;
   height: number;
+}
+
+/** An unfinished response a link-survey respondent is picking up again (ASLA localStorage resume). */
+export interface TResumedResponse {
+  id: string;
+  data: TResponseData;
+  ttc: TResponseTtc;
+  variables: TResponseVariables;
 }
 
 export interface SurveyBaseProps {
@@ -135,6 +149,8 @@ export interface SurveyContainerProps extends Omit<SurveyBaseProps, "onFileUploa
   recaptchaSiteKey?: string;
   getRecaptchaToken?: () => Promise<string | null>;
   offlineSupport?: boolean;
+  resumedResponse?: TResumedResponse;
+  onResponseIdReceived?: (responseId: string) => void;
   onOfflineStatusChange?: (status: {
     isOnline: boolean;
     isSyncing: boolean;

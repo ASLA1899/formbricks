@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Workspace } from "@formbricks/database/prisma-browser";
 import type { TRendererCustomCss } from "@formbricks/types/custom-css";
 import { getIngestedStorageKeys } from "@formbricks/types/embedded-data-resolver";
+import type { TResumedResponse } from "@formbricks/types/formbricks-surveys";
 import { TResponseData } from "@formbricks/types/responses";
 import { TSurvey, TSurveyStyling } from "@formbricks/types/surveys/types";
 import { TWorkspaceStyling } from "@formbricks/types/workspace";
@@ -20,6 +21,11 @@ import {
   warnOnMissingEmbeddedDataJoin,
 } from "@/modules/survey/link/lib/hidden-fields";
 import { getPrefillValue } from "@/modules/survey/link/lib/prefill";
+import {
+  clearStoredResumeId,
+  readStoredResumeId,
+  writeStoredResumeId,
+} from "@/modules/survey/link/lib/resume-storage";
 import { getUserIdFromSearchParams } from "@/modules/survey/link/lib/user-id";
 import { getSurveyLanguageTag, getWebAppLocale, isRTLLanguage } from "@/modules/survey/link/lib/utils";
 import { SurveyInline } from "@/modules/ui/components/survey";
@@ -175,6 +181,66 @@ export const SurveyClientWrapper = ({
     []
   );
 
+  // Resume for shared-URL link surveys: the response id is kept in localStorage after the first
+  // submit and the unfinished response is fetched on revisit. Skipped for previews, contact surveys
+  // and single-use links (the server already tracks those), and when upstream offline support
+  // (IndexedDB) is on, which restores its own progress.
+  const isResumeEligible = !isPreview && !contactId && !singleUseId && !offlineSupport;
+  const [resumeStatus, setResumeStatus] = useState<"loading" | "ready">(
+    isResumeEligible ? "loading" : "ready"
+  );
+  const [resumedResponse, setResumedResponse] = useState<TResumedResponse | undefined>(undefined);
+
+  useEffect(() => {
+    if (!isResumeEligible) return;
+    const storedId = readStoredResumeId(survey.id);
+    if (!storedId) {
+      setResumeStatus("ready");
+      return;
+    }
+    let cancelled = false;
+    const url = `/api/v2/client/${survey.workspaceId}/responses/${encodeURIComponent(storedId)}?surveyId=${encodeURIComponent(survey.id)}`;
+    fetch(url, { headers: pinAuthToken ? { "x-pin-auth-token": pinAuthToken } : undefined })
+      .then(async (res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          // Gone or finished: start fresh. Other errors keep the id so a later visit can retry.
+          if (res.status === 404) clearStoredResumeId(survey.id);
+        } else {
+          const body = (await res.json()) as { data?: TResumedResponse & { data?: TResponseData } };
+          if (cancelled) return;
+          if (body.data?.id) {
+            setResumedResponse({
+              id: body.data.id,
+              data: body.data.data ?? {},
+              ttc: body.data.ttc ?? {},
+              variables: body.data.variables ?? {},
+            });
+          } else {
+            clearStoredResumeId(survey.id);
+          }
+        }
+        setResumeStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setResumeStatus("ready");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isResumeEligible, survey.id, survey.workspaceId, pinAuthToken]);
+
+  const handleResponseIdReceived = useCallback(
+    (responseId: string) => {
+      if (isResumeEligible) writeStoredResumeId(survey.id, responseId);
+    },
+    [isResumeEligible, survey.id]
+  );
+
+  const handleFinished = useCallback(() => {
+    clearStoredResumeId(survey.id);
+  }, [survey.id]);
+
   const handleResetSurvey = () => {
     if (survey.welcomeCard.enabled) {
       setBlockId("start");
@@ -182,6 +248,7 @@ export const SurveyClientWrapper = ({
       setBlockId(survey.blocks[0].id);
     }
     setResponseData({});
+    clearStoredResumeId(survey.id);
   };
   const jsSurvey = useMemo(() => toJsWorkspaceStateSurvey(survey), [survey]);
   const isCardless = styling.cardArrangement?.linkSurveys === "cardless";
@@ -237,6 +304,9 @@ export const SurveyClientWrapper = ({
     if (baseTitleRef.current === null || !pageLabel) return;
     document.title = buildSurveyDocumentTitle(baseTitleRef.current, pageLabel);
   }, [pageLabel]);
+
+  // Hold the survey back until the resume decision is made, or the runtime starts with empty state.
+  if (resumeStatus === "loading") return null;
 
   return (
     <>
@@ -302,6 +372,9 @@ export const SurveyClientWrapper = ({
           recaptchaSiteKey={recaptchaSiteKey}
           isSpamProtectionEnabled={isSpamProtectionEnabled}
           offlineSupport={offlineSupport}
+          resumedResponse={resumedResponse}
+          onResponseIdReceived={handleResponseIdReceived}
+          onFinished={handleFinished}
           onOfflineStatusChange={offlineSupport ? handleOfflineStatusChange : undefined}
           showCardlessPreviewLogoSlot={isCardless && hasLogo}
         />

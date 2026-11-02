@@ -57,6 +57,7 @@ import {
 } from "@/lib/offline-storage";
 import { parseRecallInformation, replaceRecallInfo } from "@/lib/recall";
 import { ResponseQueue } from "@/lib/response-queue";
+import { getResumeBlockId } from "@/lib/resume";
 import { getPreviousBlockId, getRestorableHistory, isFinishedBlockId } from "@/lib/survey-navigation";
 import { SURVEY_INSTRUCTIONS_ID, getSurveyPagePosition, hasSurveyInstructions } from "@/lib/survey-page";
 import { SurveyState } from "@/lib/survey-state";
@@ -146,6 +147,8 @@ export function Survey({
   onPageChange,
   placement,
   offlineSupport = false,
+  resumedResponse,
+  onResponseIdReceived,
   onOfflineStatusChange,
   showCardlessPreviewLogoSlot = false,
 }: Readonly<SurveyContainerProps>) {
@@ -162,13 +165,32 @@ export function Survey({
 
   const surveyState = useMemo(() => {
     if (appUrl && workspaceId) {
-      if (mode === "inline") {
-        return new SurveyState(survey.id, singleUseId, singleUseResponseId, userId, contactId, pinAuthToken);
+      // A resumed response seeds the state with its id so the next queue write is an update, not a new
+      // response (ASLA link-survey resume). It is captured at mount only.
+      const resumedId = resumedResponse?.id ?? null;
+      const state =
+        mode === "inline"
+          ? new SurveyState(
+              survey.id,
+              singleUseId,
+              resumedId ?? singleUseResponseId,
+              userId,
+              contactId,
+              pinAuthToken
+            )
+          : new SurveyState(survey.id, null, resumedId, userId, contactId, pinAuthToken);
+      if (resumedResponse) {
+        state.responseAcc = {
+          finished: false,
+          data: resumedResponse.data,
+          ttc: resumedResponse.ttc,
+          variables: resumedResponse.variables,
+        };
       }
-
-      return new SurveyState(survey.id, null, null, userId, contactId, pinAuthToken);
+      return state;
     }
     return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resumedResponse is read at mount only
   }, [
     appUrl,
     workspaceId,
@@ -252,6 +274,7 @@ export function Survey({
           },
           onResponseCreated: (responseId) => {
             void persistSurveyStateSnapshot({ responseId });
+            if (responseId) onResponseIdReceived?.(responseId);
             try {
               triggerResponseCreatedOnce(responseId);
             } catch (error) {
@@ -277,6 +300,7 @@ export function Survey({
     offlinePersistEnabled,
     persistSurveyStateSnapshot,
     triggerResponseCreatedOnce,
+    onResponseIdReceived,
     survey.id,
   ]);
 
@@ -301,20 +325,19 @@ export function Survey({
   // ENG-1837: computed fields are seeded from their definitions in the EmbeddedData tables. Only
   // `embeddedFields` is passed (and depended on), since nothing else can change this map.
   useEffect(() => {
-    setCurrentVariables(
-      getComputedEmbeddedFields({ embeddedFields: survey.embeddedFields }).reduce<TResponseVariables>(
-        (acc, { field, link }) => {
-          // Provably the variable's declared value for every field derived from the legacy shape:
-          // ZSurveyVariable pins a number variable to a number and a text one to a string, and both
-          // are pass-throughs here (see the seeding test in embedded-data-mapping.test.ts). Booleans
-          // and dates have no slot in TResponseVariables and no computed field can carry one.
-          const seed = coerceToEmbeddedDataType(field.defaultValue, field.dataType);
-          if (typeof seed === "string" || typeof seed === "number") acc[link.storageKey] = seed;
-          return acc;
-        },
-        {}
-      )
-    );
+    const seeded = getComputedEmbeddedFields({
+      embeddedFields: survey.embeddedFields,
+    }).reduce<TResponseVariables>((acc, { field, link }) => {
+      // Provably the variable's declared value for every field derived from the legacy shape:
+      // ZSurveyVariable pins a number variable to a number and a text one to a string, and both
+      // are pass-throughs here (see the seeding test in embedded-data-mapping.test.ts). Booleans
+      // and dates have no slot in TResponseVariables and no computed field can carry one.
+      const seed = coerceToEmbeddedDataType(field.defaultValue, field.dataType);
+      if (typeof seed === "string" || typeof seed === "number") acc[link.storageKey] = seed;
+      return acc;
+    }, {});
+    setCurrentVariables({ ...seeded, ...(resumedResponse?.variables ?? {}) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resumedResponse is read at mount only
   }, [survey.embeddedFields]);
 
   const autoFocusEnabled = autoFocus ?? window.self === window.top;
@@ -325,7 +348,14 @@ export function Survey({
       // If starting at a specific question, find its parent block
       const startBlock = findBlockByElementId(localSurvey.blocks, startAtQuestionId);
       return startBlock?.id || localSurvey.blocks[0]?.id;
-    } else if (localSurvey.welcomeCard.enabled) {
+    }
+
+    if (resumedResponse) {
+      const resumeId = getResumeBlockId(localSurvey.blocks, localSurvey.endings, resumedResponse.data);
+      if (resumeId) return resumeId;
+    }
+
+    if (localSurvey.welcomeCard.enabled) {
       return "start";
     }
 
@@ -391,10 +421,13 @@ export function Survey({
       })
     );
   });
-  const [responseData, setResponseData] = useState<TResponseData>(ingestedFieldsRecord);
+  const [responseData, setResponseData] = useState<TResponseData>({
+    ...ingestedFieldsRecord,
+    ...(resumedResponse?.data ?? {}),
+  });
   const [_variableStack, setVariableStack] = useState<VariableStackEntry[]>([]);
 
-  const [ttc, setTtc] = useState<TResponseTtc>({});
+  const [ttc, setTtc] = useState<TResponseTtc>(resumedResponse?.ttc ?? {});
   const isOnline = useOnlineStatus();
   const [isSyncing, setIsSyncing] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
