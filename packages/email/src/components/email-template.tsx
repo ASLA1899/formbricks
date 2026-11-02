@@ -70,9 +70,10 @@ export function EmailTemplate({
                   border: 0,
                   outline: "none",
                   textDecoration: "none",
-                  maxWidth: "100%",
                   height: "auto",
-                  ...(isCustomLogo ? { maxHeight: "80px" } : {}),
+                  ...(isCustomLogo
+                    ? { width: "auto", maxWidth: "180px", maxHeight: "80px" }
+                    : { maxWidth: "100%" }),
                 }}
               />
             </Section>

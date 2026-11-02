@@ -297,6 +297,9 @@ describe("logo masthead", () => {
 
     expect(tag).toContain('width="180"');
     expect(tag).not.toContain('height="');
+    expect(tag).toContain("width:auto");
+    expect(tag).toContain("max-width:180px");
+    expect(tag).toContain("max-height:80px");
     expect(html).toContain("background-color:#FFFFFF");
   });
 
