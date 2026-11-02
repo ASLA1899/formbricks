@@ -103,43 +103,21 @@ const ensureConnected = (conn: snowflake.Connection): Promise<void> => {
 };
 
 /**
- * Every statement ends within this time, success or failure. The server cancels it at the shorter limit;
- * the client gives up and drops the connection at the longer one. A write therefore cannot finish after the
- * caller's lock (a Postgres transaction) is gone, as long as the caller's budget covers the deadline.
+ * Every statement ends within this time, success or failure: the server cancels it at the shorter limit, and
+ * the client gives up and drops the connection at the longer one. The driver may still deliver a retried
+ * request after that, so no caller may rely on a statement being finished or not run. Writes are therefore
+ * idempotent (see upsertSurveyResponseRows) and deletes are repeated by a delayed reconcile (see sync.ts).
  */
 export const SNOWFLAKE_STATEMENT_DEADLINE_MS = 45_000;
 
-/**
- * After a client deadline the statement may still be in flight: dropping the session is asynchronous, can fail,
- * and does not cancel driver retries, so the request can still be delivered and run (up to the server
- * timeout after delivery). This is how long a caller must keep its lock after such an error before it may
- * release it: the client deadline's tail, the server timeout, and a margin for delivery delay.
- */
-export const SNOWFLAKE_LATE_WRITE_QUARANTINE_MS = 150_000;
-
-/** The statement's outcome is unknown; it may still run. Hold coordination for the quarantine period. */
-export class SnowflakeLateWriteError extends Error {
-  constructor() {
-    super("Snowflake statement exceeded its client deadline");
-    this.name = "SnowflakeLateWriteError";
-  }
-}
-
-const executeQuery = async (sqlText: string, binds: TBind[], deadlineAt?: number): Promise<void> => {
-  if (deadlineAt !== undefined && Date.now() >= deadlineAt) {
-    throw new Error("Snowflake write budget exhausted before the statement started");
-  }
+const executeQuery = async (sqlText: string, binds: TBind[]): Promise<void> => {
   const conn = getConnection();
   await ensureConnected(conn);
-  // Connecting counts against the caller's budget too.
-  if (deadlineAt !== undefined && Date.now() >= deadlineAt) {
-    throw new Error("Snowflake write budget exhausted before the statement started");
-  }
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
-      // Drop the session so nothing from it can complete later; the next call builds a fresh connection.
+      // Drop the session so nothing from it completes later; the next call builds a fresh connection.
       resetConnection(conn);
-      reject(new SnowflakeLateWriteError());
+      reject(new Error("Snowflake statement exceeded its client deadline"));
     }, SNOWFLAKE_STATEMENT_DEADLINE_MS);
     conn.execute({
       sqlText,
@@ -153,35 +131,56 @@ const executeQuery = async (sqlText: string, binds: TBind[], deadlineAt?: number
   });
 };
 
-/** Inserts rows into SURVEY_RESPONSES. Throws on failure; the caller decides whether that matters. */
-export const insertSurveyResponseRows = async (
-  rows: TSnowflakeResponseRow[],
-  deadlineAt?: number
+/**
+ * Writes the rows of one response with MERGE on (RESPONSE_ID, QUESTION_ID): a matching row is updated, a
+ * missing one inserted. Running it twice, or late, gives the same table, so a retried or delayed statement
+ * cannot create duplicates. Rows of questions no longer in the response are then deleted (also repeatable).
+ * Snowflake queues concurrent DML on one table, so two MERGEs of the same keys do not both insert.
+ * Throws on failure; the caller decides whether that matters.
+ */
+export const upsertSurveyResponseRows = async (
+  responseId: string,
+  rows: TSnowflakeResponseRow[]
 ): Promise<void> => {
-  if (rows.length === 0 || !isSnowflakeConfigured()) return;
+  if (!isSnowflakeConfigured()) return;
+  if (rows.length === 0) return deleteSurveyResponseRows([responseId]);
+
+  const tuple = `(${COLUMNS.map(() => "?").join(", ")})`;
+  const selectList = COLUMNS.map((column, i) => `column${i + 1} AS ${column}`).join(", ");
+  const updates = COLUMNS.filter((c) => c !== "RESPONSE_ID" && c !== "QUESTION_ID")
+    .map((column) => `t.${column} = s.${column}`)
+    .join(", ");
+  const insertValues = COLUMNS.map((c) => `s.${c}`).join(", ");
 
   for (let start = 0; start < rows.length; start += INSERT_BATCH_SIZE) {
     const batch = rows.slice(start, start + INSERT_BATCH_SIZE);
-    const placeholders = batch.map(() => `(${COLUMNS.map(() => "?").join(", ")})`).join(",\n");
     const binds = batch.flatMap((row) => COLUMNS.map((column): TBind => row[column]));
     await executeQuery(
-      `INSERT INTO SURVEY_RESPONSES (${COLUMNS.join(", ")})\nVALUES ${placeholders}`,
-      binds,
-      deadlineAt
+      `MERGE INTO SURVEY_RESPONSES t USING (SELECT ${selectList} FROM VALUES ${batch.map(() => tuple).join(", ")}) s\n` +
+        `ON t.RESPONSE_ID = s.RESPONSE_ID AND t.QUESTION_ID = s.QUESTION_ID\n` +
+        `WHEN MATCHED THEN UPDATE SET ${updates}\n` +
+        `WHEN NOT MATCHED THEN INSERT (${COLUMNS.join(", ")}) VALUES (${insertValues})`,
+      binds
+    );
+  }
+
+  // Drop rows of questions the response no longer has. Skipped when the list is too long to bind: a stale
+  // row is harmless and the next sync of that response removes it.
+  if (rows.length <= INSERT_BATCH_SIZE) {
+    const questionIds = rows.map((row) => row.QUESTION_ID);
+    await executeQuery(
+      `DELETE FROM SURVEY_RESPONSES WHERE RESPONSE_ID = ? AND QUESTION_ID NOT IN (${questionIds.map(() => "?").join(", ")})`,
+      [responseId, ...questionIds]
     );
   }
 };
 
 /** Removes the rows of the given responses. */
-export const deleteSurveyResponseRows = async (responseIds: string[], deadlineAt?: number): Promise<void> => {
+export const deleteSurveyResponseRows = async (responseIds: string[]): Promise<void> => {
   if (responseIds.length === 0 || !isSnowflakeConfigured()) return;
   for (let start = 0; start < responseIds.length; start += INSERT_BATCH_SIZE) {
     const batch = responseIds.slice(start, start + INSERT_BATCH_SIZE);
     const placeholders = batch.map(() => "?").join(", ");
-    await executeQuery(
-      `DELETE FROM SURVEY_RESPONSES WHERE RESPONSE_ID IN (${placeholders})`,
-      batch,
-      deadlineAt
-    );
+    await executeQuery(`DELETE FROM SURVEY_RESPONSES WHERE RESPONSE_ID IN (${placeholders})`, batch);
   }
 };
