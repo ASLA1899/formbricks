@@ -103,8 +103,11 @@ BEGIN
     AND ms.role IS DISTINCT FROM COALESCE(r.role, ${defaultRole}::"OrganizationRole")
     AND COALESCE(r.role, ${defaultRole}::"OrganizationRole") IS NOT NULL;
 
-  IF NOT EXISTS (SELECT 1 FROM "Membership" WHERE "organizationId" = org_id AND role = 'owner') THEN
-    RAISE EXCEPTION 'the organization would have no owner';
+  IF NOT EXISTS (
+    SELECT 1 FROM "Membership" ms JOIN "User" u ON u.id = ms."userId"
+    WHERE ms."organizationId" = org_id AND ms.role = 'owner' AND ms.accepted AND u."isActive"
+  ) THEN
+    RAISE EXCEPTION 'the organization would have no active owner';
   END IF;
 
   -- Team and workspace grant.
@@ -131,14 +134,19 @@ BEGIN
 
   -- Survey owners, only where none is set.
   SELECT string_agg(o.survey_id, ', ') INTO problem FROM _asla_survey_owners o
-  WHERE NOT EXISTS (SELECT 1 FROM "Survey" s WHERE s.id = o.survey_id)
-     OR NOT EXISTS (SELECT 1 FROM "User" u WHERE lower(u.email) = o.email);
+  WHERE NOT EXISTS (SELECT 1 FROM "Survey" s WHERE s.id = o.survey_id AND s."workspaceId" = ws_id)
+     OR NOT EXISTS (
+       SELECT 1 FROM "User" u JOIN "Membership" ms ON ms."userId" = u.id
+       WHERE lower(u.email) = o.email AND ms."organizationId" = org_id AND ms.accepted
+     );
   IF problem IS NOT NULL THEN
-    RAISE EXCEPTION 'unknown survey or owner email: %', problem;
+    RAISE EXCEPTION 'survey not in this workspace, or owner not an accepted member: %', problem;
   END IF;
   UPDATE "Survey" s SET "ownerId" = u.id, updated_at = now()
-  FROM _asla_survey_owners o JOIN "User" u ON lower(u.email) = o.email
-  WHERE s.id = o.survey_id AND s."ownerId" IS NULL;
+  FROM _asla_survey_owners o
+  JOIN "User" u ON lower(u.email) = o.email
+  JOIN "Membership" ms ON ms."userId" = u.id AND ms."organizationId" = org_id AND ms.accepted
+  WHERE s.id = o.survey_id AND s."workspaceId" = ws_id AND s."ownerId" IS NULL;
 END
 $asla$;
 
@@ -147,6 +155,61 @@ UNION ALL SELECT 'team', t.name, count(*) FROM "TeamUser" tu JOIN "Team" t ON t.
 UNION ALL SELECT 'grant', t.name || ':' || wt.permission::text, 1 FROM "WorkspaceTeam" wt JOIN "Team" t ON t.id = wt."teamId"
 UNION ALL SELECT 'surveys without owner', '', count(*) FROM "Survey" WHERE "ownerId" IS NULL
 ORDER BY 1, 2;
+${mode === "apply" ? "COMMIT;" : "ROLLBACK; -- dry run: nothing is saved. Generate with --apply to save."}
+`;
+};
+
+const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** What the mapping will change, recorded before `--apply`. Ids only, no emails. */
+export const ZPreimage = z.object({
+  teamExisted: z.boolean(),
+  memberships: z.array(z.tuple([z.string().regex(ID_PATTERN), z.enum(["owner", "manager", "member", "billing"])])),
+  surveys: z.array(z.tuple([z.string().regex(ID_PATTERN), z.string().regex(ID_PATTERN).nullable()])),
+});
+export type TPreimage = z.infer<typeof ZPreimage>;
+
+/** SQL that prints the pre-image as one JSON line. Read only. Run it before `--apply` and keep the output. */
+export const buildPreimageSql = (input: unknown): string => {
+  const m = ZTeamGrantMapping.parse(input);
+  const ids = m.surveyOwners.map((s) => lit(s.surveyId)).join(", ") || "NULL";
+  return `SELECT json_build_object(
+  'teamExisted', EXISTS (SELECT 1 FROM "Team" t JOIN "Organization" o ON o.id = t."organizationId"
+    WHERE o.name = ${lit(m.organizationName)} AND t.name = ${lit(m.team.name)}),
+  'memberships', COALESCE((SELECT json_agg(json_build_array(ms."userId", ms.role::text)) FROM "Membership" ms
+    JOIN "Organization" o ON o.id = ms."organizationId" WHERE o.name = ${lit(m.organizationName)} AND ms.accepted), '[]'::json),
+  'surveys', COALESCE((SELECT json_agg(json_build_array(s.id, s."ownerId")) FROM "Survey" s WHERE s.id IN (${ids})), '[]'::json)
+);
+`;
+};
+
+/** SQL that puts back what the pre-image recorded. Deleting the team cascades to its members and grants. */
+export const buildRollbackSql = (input: unknown, preimageInput: unknown, mode: "dry_run" | "apply"): string => {
+  const m = ZTeamGrantMapping.parse(input);
+  const pre = ZPreimage.parse(preimageInput);
+  const mRows = pre.memberships.map(([u, r]) => `(${lit(u)}, ${lit(r)})`).join(",\n  ");
+  const sRows = pre.surveys.map(([id, o]) => `(${lit(id)}, ${o === null ? "NULL" : lit(o)})`).join(",\n  ");
+  return `-- ASLA fork (ASL-1883): rollback of the team and role mapping. Mode: ${mode}. Generated; do not edit.
+\\set ON_ERROR_STOP on
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+CREATE TEMP TABLE _asla_before_roles ("userId" text PRIMARY KEY, role "OrganizationRole" NOT NULL) ON COMMIT DROP;
+${mRows ? `INSERT INTO _asla_before_roles VALUES\n  ${mRows};` : "-- no memberships"}
+CREATE TEMP TABLE _asla_before_surveys (id text PRIMARY KEY, "ownerId" text) ON COMMIT DROP;
+${sRows ? `INSERT INTO _asla_before_surveys VALUES\n  ${sRows};` : "-- no surveys"}
+DO $asla$
+DECLARE
+  org_id text;
+BEGIN
+  SELECT id INTO STRICT org_id FROM "Organization" WHERE name = ${lit(m.organizationName)};
+  UPDATE "Membership" ms SET role = b.role
+  FROM _asla_before_roles b
+  WHERE ms."userId" = b."userId" AND ms."organizationId" = org_id AND ms.role IS DISTINCT FROM b.role;
+  ${pre.teamExisted ? "-- the team existed before the mapping: it stays" : `DELETE FROM "Team" WHERE "organizationId" = org_id AND name = ${lit(m.team.name)};`}
+  UPDATE "Survey" s SET "ownerId" = b."ownerId", updated_at = now()
+  FROM _asla_before_surveys b WHERE s.id = b.id AND s."ownerId" IS DISTINCT FROM b."ownerId";
+END
+$asla$;
 ${mode === "apply" ? "COMMIT;" : "ROLLBACK; -- dry run: nothing is saved. Generate with --apply to save."}
 `;
 };
