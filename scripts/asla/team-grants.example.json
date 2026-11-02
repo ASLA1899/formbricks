@@ -1,0 +1,9 @@
+{
+  "organizationName": "Example Organization",
+  "workspaceName": "Example Workspace",
+  "team": { "name": "All staff", "permission": "readWrite" },
+  "owners": ["admin1@example.org", "admin2@example.org"],
+  "members": [],
+  "defaultRole": "member",
+  "surveyOwners": [{ "surveyId": "cmexamplesurveyid000000000", "ownerEmail": "admin1@example.org" }]
+}
