@@ -368,14 +368,6 @@ export function Survey({
     return localSurvey.blocks[0]?.id;
   });
 
-  // Link-survey resume keeps the exact block in the respondent's browser. Only real blocks count:
-  // the welcome card and endings are not resume points.
-  useEffect(() => {
-    if (onResumeBlockChange && localSurvey.blocks.some((block) => block.id === blockId)) {
-      onResumeBlockChange(blockId);
-    }
-  }, [blockId, localSurvey.blocks, onResumeBlockChange]);
-
   // True once the user navigated between cards (Next/Back/auto-progress). Moving focus into
   // the new card is then a response to a user action (safe under WCAG 3.2.x), unlike the
   // initial render of an embedded survey, where stealing focus from the host page is not.
@@ -390,8 +382,22 @@ export function Survey({
   const [isSurveyFinished, setIsSurveyFinished] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState(languageCode);
   const [loadingElement, setLoadingElement] = useState(false);
-  const [history, setHistory] = useState<string[]>([]);
+  const [history, setHistory] = useState<string[]>(() =>
+    // Resuming at the saved block: restore the path that led there so Back returns to it, not to
+    // the previous block in array order (which a jump may have skipped).
+    resumedResponse?.blockId && resumedResponse.blockId === blockId
+      ? getRestorableHistory(localSurvey, resumedResponse.history ?? [])
+      : []
+  );
   const isNavigatingBackRef = useRef(false);
+
+  // Link-survey resume keeps the exact block in the respondent's browser. Only real blocks count:
+  // the welcome card and endings are not resume points.
+  useEffect(() => {
+    if (onResumeBlockChange && localSurvey.blocks.some((block) => block.id === blockId)) {
+      onResumeBlockChange(blockId, history);
+    }
+  }, [blockId, history, localSurvey.blocks, onResumeBlockChange]);
   /**
    * The Embedded Data ingest contract (ENG-1845) applied to whatever the host handed us — URL params
    * for a link survey, `track({ hiddenFields })` or `setEmbeddedData` for an app one. Every caller

@@ -50,6 +50,8 @@ export interface TResumedResponse {
   language?: string | null;
   /** Block the respondent was on when they left, kept in their browser. Optional. */
   blockId?: string | null;
+  /** Blocks the respondent came through to reach `blockId`, oldest first. Lets Back work after a resume. */
+  history?: string[];
 }
 
 export interface SurveyBaseProps {
@@ -154,7 +156,7 @@ export interface SurveyContainerProps extends Omit<SurveyBaseProps, "onFileUploa
   offlineSupport?: boolean;
   resumedResponse?: TResumedResponse;
   onResponseIdReceived?: (responseId: string) => void;
-  onResumeBlockChange?: (blockId: string) => void;
+  onResumeBlockChange?: (blockId: string, history: string[]) => void;
   onOfflineStatusChange?: (status: {
     isOnline: boolean;
     isSyncing: boolean;

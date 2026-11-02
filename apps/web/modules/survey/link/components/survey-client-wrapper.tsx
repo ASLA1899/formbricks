@@ -222,6 +222,7 @@ export const SurveyClientWrapper = ({
               variables: body.data.variables ?? {},
               language: body.data.language ?? null,
               blockId: stored?.blockId ?? null,
+              history: stored?.history ?? [],
             });
             // Keep the language the respondent was answering in. "default" is the survey's default
             // language and must be restored too, or a Spanish ?lang= link would override it. Codes
@@ -245,16 +246,22 @@ export const SurveyClientWrapper = ({
     };
   }, [isResumeEligible, survey.id, survey.workspaceId, pinAuthToken]);
 
+  // The first response acknowledgment can arrive after the respondent has already moved on, when no
+  // stored record exists yet to take the position. Keep the latest position and save it together
+  // with the id.
+  const latestPositionRef = useRef<{ blockId: string; history: string[] } | undefined>(undefined);
+
   const handleResponseIdReceived = useCallback(
     (responseId: string) => {
-      if (isResumeEligible) writeStoredResumeId(survey.id, responseId);
+      if (isResumeEligible) writeStoredResumeId(survey.id, responseId, latestPositionRef.current);
     },
     [isResumeEligible, survey.id]
   );
 
   const handleResumeBlockChange = useCallback(
-    (blockId: string) => {
-      if (isResumeEligible) writeStoredResumeBlock(survey.id, blockId);
+    (blockId: string, history: string[]) => {
+      latestPositionRef.current = { blockId, history };
+      if (isResumeEligible) writeStoredResumeBlock(survey.id, blockId, history);
     },
     [isResumeEligible, survey.id]
   );

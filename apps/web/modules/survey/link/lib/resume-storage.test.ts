@@ -48,7 +48,20 @@ describe("resume-storage", () => {
     writeStoredResumeBlock("s1", "b2");
     expect(readStoredResume("s1")).toBeNull();
     writeStoredResumeId("s1", "r1");
-    writeStoredResumeBlock("s1", "b3");
-    expect(readStoredResume("s1")).toEqual({ responseId: "r1", blockId: "b3" });
+    writeStoredResumeBlock("s1", "b3", ["b1"]);
+    expect(readStoredResume("s1")).toEqual({ responseId: "r1", blockId: "b3", history: ["b1"] });
+  });
+
+  test("saves the id together with the latest position when the first acknowledgment is late", () => {
+    // The respondent jumped b1 -> b3 before the create call returned: no record existed to take it.
+    writeStoredResumeBlock("s1", "b3", ["b1"]);
+    expect(readStoredResume("s1")).toBeNull();
+    writeStoredResumeId("s1", "r1", { blockId: "b3", history: ["b1"] });
+    expect(readStoredResume("s1")).toEqual({ responseId: "r1", blockId: "b3", history: ["b1"] });
+  });
+
+  test("a record without history reads as an empty path", () => {
+    writeStoredResumeId("s1", "r1");
+    expect(readStoredResume("s1")).toEqual({ responseId: "r1", blockId: null, history: [] });
   });
 });
