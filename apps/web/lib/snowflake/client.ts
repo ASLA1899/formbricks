@@ -24,6 +24,9 @@ const INSERT_BATCH_SIZE = 1000;
 type TBind = string | number | boolean | null;
 
 let connection: snowflake.Connection | null = null;
+/** The connect attempt in flight, shared so concurrent callers never call connect() twice. */
+let connecting: Promise<void> | null = null;
+let logConfigured = false;
 
 /** True only when every credential the sync needs is set. Without them the sync is a silent no-op. */
 export const isSnowflakeConfigured = (): boolean =>
@@ -36,6 +39,11 @@ export const isSnowflakeConfigured = (): boolean =>
   );
 
 const getConnection = (): snowflake.Connection => {
+  if (!logConfigured) {
+    // The driver writes snowflake.log into the container's writable layer; keep it to errors.
+    snowflake.configure({ logLevel: "ERROR" });
+    logConfigured = true;
+  }
   connection ??= snowflake.createConnection({
     account: env.SNOWFLAKE_ACCOUNT ?? "",
     username: env.SNOWFLAKE_USERNAME ?? "",
@@ -50,13 +58,11 @@ const getConnection = (): snowflake.Connection => {
   return connection;
 };
 
-const ensureConnected = (conn: snowflake.Connection): Promise<void> =>
-  new Promise((resolve, reject) => {
-    if (conn.isUp()) {
-      resolve();
-      return;
-    }
+const ensureConnected = (conn: snowflake.Connection): Promise<void> => {
+  if (conn.isUp()) return Promise.resolve();
+  connecting ??= new Promise<void>((resolve, reject) => {
     conn.connect((error) => {
+      connecting = null;
       if (error) {
         connection = null; // build a fresh connection next time
         reject(error);
@@ -65,6 +71,8 @@ const ensureConnected = (conn: snowflake.Connection): Promise<void> =>
       }
     });
   });
+  return connecting;
+};
 
 const executeQuery = async (sqlText: string, binds: TBind[]): Promise<void> => {
   const conn = getConnection();
@@ -93,8 +101,11 @@ export const insertSurveyResponseRows = async (rows: TSnowflakeResponseRow[]): P
 /** Removes the rows of the given responses. */
 export const deleteSurveyResponseRows = async (responseIds: string[]): Promise<void> => {
   if (responseIds.length === 0 || !isSnowflakeConfigured()) return;
-  const placeholders = responseIds.map(() => "?").join(", ");
-  await executeQuery(`DELETE FROM SURVEY_RESPONSES WHERE RESPONSE_ID IN (${placeholders})`, responseIds);
+  for (let start = 0; start < responseIds.length; start += INSERT_BATCH_SIZE) {
+    const batch = responseIds.slice(start, start + INSERT_BATCH_SIZE);
+    const placeholders = batch.map(() => "?").join(", ");
+    await executeQuery(`DELETE FROM SURVEY_RESPONSES WHERE RESPONSE_ID IN (${placeholders})`, batch);
+  }
 };
 
 /** Removes every row of a survey (survey reset). */

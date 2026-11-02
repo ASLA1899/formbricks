@@ -92,18 +92,20 @@ export const resetSurveyAction = authenticatedActionClient.inputSchema(ZResetSur
       throw new OperationNotAllowedError("Cannot reset an archived survey.");
     }
 
-    // Snowflake first, so a response that arrives between the two deletes is never wiped from Snowflake
-    // while it still exists here. A failure is logged and the reset goes on.
-    const snowflakeCleanedUp = await deleteSurveyFromSnowflake(parsedInput.surveyId);
+    // Snowflake before and after the local delete: the first call clears the rows, the second removes any
+    // row a queued job wrote in between. A failure is logged and the reset goes on.
+    const snowflakeCleanedUpBefore = await deleteSurveyFromSnowflake(parsedInput.surveyId);
 
     const { deletedResponsesCount, deletedDisplaysCount } = await deleteResponsesAndDisplaysForSurvey(
       parsedInput.surveyId
     );
 
+    const snowflakeCleanedUpAfter = await deleteSurveyFromSnowflake(parsedInput.surveyId);
+
     ctx.auditLoggingCtx.newObject = {
       deletedResponsesCount: deletedResponsesCount,
       deletedDisplaysCount: deletedDisplaysCount,
-      snowflakeCleanedUp,
+      snowflakeCleanedUp: snowflakeCleanedUpBefore && snowflakeCleanedUpAfter,
     };
 
     return {

@@ -16,7 +16,7 @@ import {
 vi.mock("server-only", () => ({}));
 vi.mock("@formbricks/logger", () => ({ logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() } }));
 vi.mock("@formbricks/database", () => ({
-  prisma: { survey: { findMany: vi.fn(), findUnique: vi.fn() } },
+  prisma: { response: { findUnique: vi.fn() } },
 }));
 vi.mock("./client", () => ({
   deleteSurveyResponseRows: vi.fn(),
@@ -39,6 +39,7 @@ const response = {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(isSnowflakeConfigured).mockReturnValue(true);
+  vi.mocked(prisma.response.findUnique).mockResolvedValue({ id: "r1" } as never);
 });
 
 describe("syncResponseToSnowflake", () => {
@@ -64,48 +65,72 @@ describe("syncResponseToSnowflake", () => {
 });
 
 describe("deleteResponsesFromSnowflake", () => {
-  test("only deletes responses of surveys with the sync on", async () => {
-    vi.mocked(prisma.survey.findMany).mockResolvedValue([{ id: "s1" }] as never);
+  test("deletes the rows of every response, whatever the survey's sync flag", async () => {
     await deleteResponsesFromSnowflake([
       { id: "r1", surveyId: "s1" },
       { id: "r2", surveyId: "s2" },
     ]);
-    expect(prisma.survey.findMany).toHaveBeenCalledWith({
-      where: { id: { in: ["s1", "s2"] }, snowflakeSync: true },
-      select: { id: true },
-    });
-    expect(deleteSurveyResponseRows).toHaveBeenCalledWith(["r1"]);
+    expect(deleteSurveyResponseRows).toHaveBeenCalledWith(["r1", "r2"]);
   });
 
-  test("skips the survey lookup when unconfigured or empty", async () => {
+  test("does nothing when unconfigured or empty", async () => {
     await deleteResponsesFromSnowflake([]);
     vi.mocked(isSnowflakeConfigured).mockReturnValue(false);
     await deleteResponseFromSnowflake({ id: "r1", surveyId: "s1" });
-    expect(prisma.survey.findMany).not.toHaveBeenCalled();
+    expect(deleteSurveyResponseRows).not.toHaveBeenCalled();
   });
 
   test("never throws", async () => {
-    vi.mocked(prisma.survey.findMany).mockRejectedValue(new Error("db"));
+    vi.mocked(deleteSurveyResponseRows).mockRejectedValue(new Error("down"));
     await expect(deleteResponseFromSnowflake({ id: "r1", surveyId: "s1" })).resolves.toBeUndefined();
   });
 });
 
 describe("deleteSurveyFromSnowflake", () => {
-  test("deletes the survey's rows when the sync is on", async () => {
-    vi.mocked(prisma.survey.findUnique).mockResolvedValue({ snowflakeSync: true } as never);
+  test("deletes the survey's rows", async () => {
     expect(await deleteSurveyFromSnowflake("s1")).toBe(true);
     expect(deleteSurveyRows).toHaveBeenCalledWith("s1");
   });
 
-  test("does nothing when the sync is off", async () => {
-    vi.mocked(prisma.survey.findUnique).mockResolvedValue({ snowflakeSync: false } as never);
+  test("does nothing when unconfigured", async () => {
+    vi.mocked(isSnowflakeConfigured).mockReturnValue(false);
     expect(await deleteSurveyFromSnowflake("s1")).toBe(false);
     expect(deleteSurveyRows).not.toHaveBeenCalled();
   });
 
   test("reports false and does not throw on failure", async () => {
-    vi.mocked(prisma.survey.findUnique).mockResolvedValue({ snowflakeSync: true } as never);
     vi.mocked(deleteSurveyRows).mockRejectedValue(new Error("down"));
     expect(await deleteSurveyFromSnowflake("s1")).toBe(false);
+  });
+});
+
+describe("ordering and deleted responses", () => {
+  test("skips the write when the response was deleted after the job was queued", async () => {
+    vi.mocked(prisma.response.findUnique).mockResolvedValue(null);
+    await syncResponseToSnowflake(survey, response);
+    expect(deleteSurveyResponseRows).not.toHaveBeenCalled();
+    expect(insertSurveyResponseRows).not.toHaveBeenCalled();
+  });
+
+  test("removes the rows again when the response is deleted during the write", async () => {
+    vi.mocked(prisma.response.findUnique)
+      .mockResolvedValueOnce({ id: "r1" } as never)
+      .mockResolvedValueOnce(null);
+    await syncResponseToSnowflake(survey, response);
+    expect(insertSurveyResponseRows).toHaveBeenCalledTimes(1);
+    expect(deleteSurveyResponseRows).toHaveBeenCalledTimes(2);
+  });
+
+  test("runs two syncs of one response one after the other", async () => {
+    const events: string[] = [];
+    vi.mocked(deleteSurveyResponseRows).mockImplementation(async () => {
+      events.push("delete");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    });
+    vi.mocked(insertSurveyResponseRows).mockImplementation(async () => {
+      events.push("insert");
+    });
+    await Promise.all([syncResponseToSnowflake(survey, response), syncResponseToSnowflake(survey, response)]);
+    expect(events).toEqual(["delete", "insert", "delete", "insert"]);
   });
 });
