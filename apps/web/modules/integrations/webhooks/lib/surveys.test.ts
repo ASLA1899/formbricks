@@ -42,6 +42,7 @@ describe("getWebhookSurveys", () => {
             ],
           },
           { ownerId: memberId },
+          { accessUsers: { some: { userId: memberId } } },
         ],
       },
       200

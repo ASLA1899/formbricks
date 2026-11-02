@@ -592,6 +592,8 @@ describe("copySurveyToOtherWorkspace", () => {
       // Visibility (ENG-3282): the copy gets its own creation facts — owned by the actor, restricted or
       // workspace-visible by who made it — never the source survey's owner, state or history.
       "visibility",
+      // ASLA fork (ASL-1880): follows the copy's own creation facts.
+      "accessMode",
       "ownerId",
       "visibilityVersion",
       "visibilityProjectedVersion",

@@ -99,7 +99,7 @@ export const createSegmentAction = authenticatedActionClient.inputSchema(ZSegmen
     await assertSurveyInteractionSurveyIds(
       parsedFilters.data,
       workspaceId,
-      await getUserVisibleSurveyWhere(userId, organizationId)
+      await getUserVisibleSurveyWhere(userId, organizationId, { includeShares: false })
     );
 
     const segment = await createSegment(parsedInput);
@@ -153,7 +153,10 @@ export const updateSegmentAction = authenticatedActionClient.inputSchema(ZUpdate
         throw new InvalidInputError("Survey and segment are not in the same workspace");
       }
     }
-    const visibleSurveyWhere = await getUserVisibleSurveyWhere(ctx.user.id, organizationId);
+    // Mutation: a read-only share must not let the caller re-point the survey (ASL-1880).
+    const visibleSurveyWhere = await getUserVisibleSurveyWhere(ctx.user.id, organizationId, {
+      includeShares: false,
+    });
     if (parsedInput.data.surveys?.length && Object.keys(visibleSurveyWhere).length > 0) {
       await assertSurveysInWorkspace(parsedInput.data.surveys, segmentWorkspaceId, visibleSurveyWhere);
     }

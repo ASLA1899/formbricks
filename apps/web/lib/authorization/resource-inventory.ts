@@ -54,6 +54,7 @@ export const PRISMA_AUTHORIZATION_RESOURCE_INVENTORY = {
   Segment: "workspace_inherited_resource",
   Session: "authentication_or_application",
   Survey: "direct_authorization_resource",
+  SurveyAccess: "relationship_or_grant_source",
   SurveyAttributeFilter: "parent_derived_or_data_integrity",
   SurveyEmbeddedData: "parent_derived_or_data_integrity",
   SurveyFollowUp: "parent_derived_or_data_integrity",

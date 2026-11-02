@@ -48,6 +48,7 @@ import {
   getOrganizationByWorkspaceId,
   subscribeOrganizationMembersToSurveyResponses,
 } from "@/lib/organization/service";
+import { accessModeForVisibility } from "@/lib/survey/visibility/access-mode-map";
 import type { TSurveyCreationFacts } from "@/lib/survey/visibility/creation";
 import { andVisibleSurveys } from "@/lib/survey/visibility/predicate";
 import {
@@ -991,6 +992,8 @@ const attachSurveyCreationFactsToCreateData = (
 ): Omit<Prisma.SurveyCreateInput, "workspace"> => ({
   ...data,
   visibility,
+  // ASLA fork (ASL-1880): the access mode follows the visibility the survey is created with.
+  accessMode: accessModeForVisibility(visibility),
   ownershipInitialized: true,
   ...(ownerId ? { owner: { connect: { id: ownerId } } } : {}),
 });

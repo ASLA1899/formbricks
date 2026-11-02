@@ -168,6 +168,7 @@ describe("getSurveys", () => {
                   ],
                 },
                 { ownerId: userId },
+                { accessUsers: { some: { userId } } },
               ],
             },
           ],

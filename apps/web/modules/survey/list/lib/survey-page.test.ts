@@ -137,6 +137,7 @@ describe("getSurveyListPage", () => {
                   ],
                 },
                 { ownerId: "user_1" },
+                { accessUsers: { some: { userId: "user_1" } } },
               ],
             },
             {

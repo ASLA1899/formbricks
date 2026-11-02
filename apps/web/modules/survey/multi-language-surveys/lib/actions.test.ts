@@ -68,7 +68,7 @@ describe("deleteLanguageAction (ENG-3282)", () => {
       parsedInput: { languageId: "lang_1", workspaceId: "ws_1" },
     });
 
-    expect(getUserVisibleSurveyWhere).toHaveBeenCalledWith("user_1", "org_1");
+    expect(getUserVisibleSurveyWhere).toHaveBeenCalledWith("user_1", "org_1", { includeShares: false });
     expect(deleteLanguage).toHaveBeenCalledWith("lang_1", "ws_1", visibleSurveyWhere);
   });
 });
