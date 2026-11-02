@@ -57,7 +57,7 @@ import {
 } from "@/lib/offline-storage";
 import { parseRecallInformation, replaceRecallInfo } from "@/lib/recall";
 import { ResponseQueue } from "@/lib/response-queue";
-import { getResumeBlockId } from "@/lib/resume";
+import { resolveResumeBlockId } from "@/lib/resume";
 import { getPreviousBlockId, getRestorableHistory, isFinishedBlockId } from "@/lib/survey-navigation";
 import { SURVEY_INSTRUCTIONS_ID, getSurveyPagePosition, hasSurveyInstructions } from "@/lib/survey-page";
 import { SurveyState } from "@/lib/survey-state";
@@ -149,6 +149,7 @@ export function Survey({
   offlineSupport = false,
   resumedResponse,
   onResponseIdReceived,
+  onResumeBlockChange,
   onOfflineStatusChange,
   showCardlessPreviewLogoSlot = false,
 }: Readonly<SurveyContainerProps>) {
@@ -351,7 +352,12 @@ export function Survey({
     }
 
     if (resumedResponse) {
-      const resumeId = getResumeBlockId(localSurvey.blocks, localSurvey.endings, resumedResponse.data);
+      const resumeId = resolveResumeBlockId(
+        localSurvey.blocks,
+        localSurvey.endings,
+        resumedResponse.data,
+        resumedResponse.blockId
+      );
       if (resumeId) return resumeId;
     }
 
@@ -361,6 +367,14 @@ export function Survey({
 
     return localSurvey.blocks[0]?.id;
   });
+
+  // Link-survey resume keeps the exact block in the respondent's browser. Only real blocks count:
+  // the welcome card and endings are not resume points.
+  useEffect(() => {
+    if (onResumeBlockChange && localSurvey.blocks.some((block) => block.id === blockId)) {
+      onResumeBlockChange(blockId);
+    }
+  }, [blockId, localSurvey.blocks, onResumeBlockChange]);
 
   // True once the user navigated between cards (Next/Back/auto-progress). Moving focus into
   // the new card is then a response to a user action (safe under WCAG 3.2.x), unlike the

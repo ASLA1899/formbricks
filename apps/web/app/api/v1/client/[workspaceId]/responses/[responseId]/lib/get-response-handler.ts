@@ -45,8 +45,9 @@ export const getResponseHandler = async ({
     if (!response || response.surveyId !== surveyId || response.finished) return notFound;
     // Contact and single-use responses are tracked server-side; the client never resumes them.
     if (response.contact?.id || response.singleUseId) return notFound;
-    // The window runs from the last write, so an answer saved today keeps the response resumable.
-    if (Date.now() - new Date(response.updatedAt).getTime() > RESUME_MAX_AGE_MS) return notFound;
+    // The window runs from creation, which no public write can change. updatedAt would let a PUT
+    // renew an expired response.
+    if (Date.now() - new Date(response.createdAt).getTime() > RESUME_MAX_AGE_MS) return notFound;
 
     const survey = await getSurvey(surveyId);
     if (!survey || survey.workspaceId !== resolved.workspaceId || survey.status !== "inProgress") {

@@ -1,18 +1,37 @@
 const RESUME_STORAGE_PREFIX = "formbricks-resume-";
 export const RESUME_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-export const readStoredResumeId = (surveyId: string): string | null => {
+export const readStoredResume = (surveyId: string): { responseId: string; blockId: string | null } | null => {
   try {
     const raw = globalThis.localStorage?.getItem(RESUME_STORAGE_PREFIX + surveyId);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { responseId?: unknown; updatedAt?: unknown };
+    const parsed = JSON.parse(raw) as { responseId?: unknown; updatedAt?: unknown; blockId?: unknown };
     if (typeof parsed.responseId !== "string" || !parsed.responseId) return null;
     if (typeof parsed.updatedAt !== "number" || Date.now() - parsed.updatedAt > RESUME_MAX_AGE_MS) {
       return null;
     }
-    return parsed.responseId;
+    return {
+      responseId: parsed.responseId,
+      blockId: typeof parsed.blockId === "string" && parsed.blockId ? parsed.blockId : null,
+    };
   } catch {
     return null;
+  }
+};
+
+export const readStoredResumeId = (surveyId: string): string | null =>
+  readStoredResume(surveyId)?.responseId ?? null;
+
+/** Records the block the respondent is on. Only updates an existing record, so it never revives a cleared one. */
+export const writeStoredResumeBlock = (surveyId: string, blockId: string): void => {
+  try {
+    const key = RESUME_STORAGE_PREFIX + surveyId;
+    const raw = globalThis.localStorage?.getItem(key);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    globalThis.localStorage?.setItem(key, JSON.stringify({ ...parsed, blockId, updatedAt: Date.now() }));
+  } catch {
+    // ignore
   }
 };
 

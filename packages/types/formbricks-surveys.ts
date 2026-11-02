@@ -48,6 +48,8 @@ export interface TResumedResponse {
   ttc: TResponseTtc;
   variables: TResponseVariables;
   language?: string | null;
+  /** Block the respondent was on when they left, kept in their browser. Optional. */
+  blockId?: string | null;
 }
 
 export interface SurveyBaseProps {
@@ -152,6 +154,7 @@ export interface SurveyContainerProps extends Omit<SurveyBaseProps, "onFileUploa
   offlineSupport?: boolean;
   resumedResponse?: TResumedResponse;
   onResponseIdReceived?: (responseId: string) => void;
+  onResumeBlockChange?: (blockId: string) => void;
   onOfflineStatusChange?: (status: {
     isOnline: boolean;
     isSyncing: boolean;

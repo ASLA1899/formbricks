@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, test } from "vitest";
 import {
   RESUME_MAX_AGE_MS,
   clearStoredResumeId,
+  readStoredResume,
   readStoredResumeId,
+  writeStoredResumeBlock,
   writeStoredResumeId,
 } from "./resume-storage";
 
@@ -40,5 +42,13 @@ describe("resume-storage", () => {
     expect(readStoredResumeId("s1")).toBeNull();
     store.set("formbricks-resume-s1", JSON.stringify({ responseId: 5 }));
     expect(readStoredResumeId("s1")).toBeNull();
+  });
+
+  test("keeps the current block with the response id, and never revives a cleared record", () => {
+    writeStoredResumeBlock("s1", "b2");
+    expect(readStoredResume("s1")).toBeNull();
+    writeStoredResumeId("s1", "r1");
+    writeStoredResumeBlock("s1", "b3");
+    expect(readStoredResume("s1")).toEqual({ responseId: "r1", blockId: "b3" });
   });
 });

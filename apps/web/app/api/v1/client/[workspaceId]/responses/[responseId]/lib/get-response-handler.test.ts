@@ -31,6 +31,7 @@ const partial = {
   ttc: { q1: 3 },
   variables: {},
   language: "en",
+  createdAt: new Date(),
   updatedAt: new Date(),
 };
 
@@ -59,9 +60,13 @@ describe("getResponseHandler", () => {
     ["missing response", () => mocks.getResponse.mockResolvedValue(null)],
     ["surveyId mismatch", () => mocks.getResponse.mockResolvedValue({ ...partial, surveyId: "other" })],
     [
-      "stale response",
+      "response created over 7 days ago, even when just updated",
       () =>
-        mocks.getResponse.mockResolvedValue({ ...partial, updatedAt: new Date(Date.now() - 8 * 86400000) }),
+        mocks.getResponse.mockResolvedValue({
+          ...partial,
+          createdAt: new Date(Date.now() - 8 * 86400000),
+          updatedAt: new Date(),
+        }),
     ],
     [
       "single-use enabled later",

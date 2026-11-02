@@ -9,6 +9,7 @@ import type { TResumedResponse } from "@formbricks/types/formbricks-surveys";
 import { TResponseData } from "@formbricks/types/responses";
 import { TSurvey, TSurveyStyling } from "@formbricks/types/surveys/types";
 import { TWorkspaceStyling } from "@formbricks/types/workspace";
+import { getEnabledLanguages, getLanguageCode } from "@/lib/i18n/utils";
 import { toJsWorkspaceStateSurvey } from "@/lib/survey/client-utils";
 import { getElementsFromBlocks } from "@/modules/survey/lib/client-utils";
 import { CustomScriptsInjector } from "@/modules/survey/link/components/custom-scripts-injector";
@@ -23,7 +24,8 @@ import {
 import { getPrefillValue } from "@/modules/survey/link/lib/prefill";
 import {
   clearStoredResumeId,
-  readStoredResumeId,
+  readStoredResume,
+  writeStoredResumeBlock,
   writeStoredResumeId,
 } from "@/modules/survey/link/lib/resume-storage";
 import { getUserIdFromSearchParams } from "@/modules/survey/link/lib/user-id";
@@ -195,7 +197,8 @@ export const SurveyClientWrapper = ({
 
   useEffect(() => {
     if (!isResumeEligible) return;
-    const storedId = readStoredResumeId(survey.id);
+    const stored = readStoredResume(survey.id);
+    const storedId = stored?.responseId;
     if (!storedId) {
       setResumeStatus("ready");
       return;
@@ -218,11 +221,15 @@ export const SurveyClientWrapper = ({
               ttc: body.data.ttc ?? {},
               variables: body.data.variables ?? {},
               language: body.data.language ?? null,
+              blockId: stored?.blockId ?? null,
             });
-            // Keep the language the respondent was answering in; "default" means the survey default.
-            if (body.data.language && body.data.language !== "default") {
-              setCurrentLanguageCode(body.data.language);
-              setResumedLanguage(body.data.language);
+            // Keep the language the respondent was answering in. "default" is the survey's default
+            // language and must be restored too, or a Spanish ?lang= link would override it. Codes
+            // that are no longer enabled fall back to the default.
+            if (body.data.language) {
+              const restored = getLanguageCode(getEnabledLanguages(survey.languages), body.data.language);
+              setCurrentLanguageCode(restored);
+              setResumedLanguage(restored);
             }
           } else {
             clearStoredResumeId(survey.id);
@@ -241,6 +248,13 @@ export const SurveyClientWrapper = ({
   const handleResponseIdReceived = useCallback(
     (responseId: string) => {
       if (isResumeEligible) writeStoredResumeId(survey.id, responseId);
+    },
+    [isResumeEligible, survey.id]
+  );
+
+  const handleResumeBlockChange = useCallback(
+    (blockId: string) => {
+      if (isResumeEligible) writeStoredResumeBlock(survey.id, blockId);
     },
     [isResumeEligible, survey.id]
   );
@@ -382,6 +396,7 @@ export const SurveyClientWrapper = ({
           offlineSupport={offlineSupport}
           resumedResponse={resumedResponse}
           onResponseIdReceived={handleResponseIdReceived}
+          onResumeBlockChange={handleResumeBlockChange}
           onFinished={handleFinished}
           onOfflineStatusChange={offlineSupport ? handleOfflineStatusChange : undefined}
           showCardlessPreviewLogoSlot={isCardless && hasLogo}
