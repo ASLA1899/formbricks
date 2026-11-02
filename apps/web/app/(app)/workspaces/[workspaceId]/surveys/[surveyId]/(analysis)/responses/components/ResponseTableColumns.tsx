@@ -10,7 +10,12 @@ import {
   getIngestedEmbeddedFields,
 } from "@formbricks/types/embedded-data-resolver";
 import { TResponseTableData } from "@formbricks/types/responses";
-import { TSurveyElement, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
+import { ADDRESS_DISPLAY_FIELDS } from "@formbricks/types/surveys/address-fields";
+import {
+  TSurveyAddressElement,
+  TSurveyElement,
+  TSurveyElementTypeEnum,
+} from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { getTextContent } from "@formbricks/types/surveys/validation";
 import { TUserLocale } from "@formbricks/types/user";
@@ -45,7 +50,11 @@ const getElementColumnsData = (
   t: TFunction
 ): ColumnDef<TResponseTableData>[] => {
   const ELEMENTS_ICON_MAP = getElementIconMap(t);
-  const addressFields = ["addressLine1", "addressLine2", "city", "state", "zip", "country"];
+  // Display order. name/organization are absent on older surveys; only add their columns when shown.
+  const addressElement = element as TSurveyAddressElement;
+  const addressFields = ADDRESS_DISPLAY_FIELDS.filter(
+    (field) => (field !== "name" && field !== "organization") || addressElement[field]?.show
+  );
   const contactInfoFields = ["firstName", "lastName", "email", "phone", "company"];
 
   // Helper function to create consistent column headers

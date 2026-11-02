@@ -6,6 +6,8 @@ import { useTranslation } from "react-i18next";
 import { getComputedEmbeddedFields, getIngestedStorageKeys } from "@formbricks/types/embedded-data-resolver";
 import { TSurveyQuota } from "@formbricks/types/quota";
 import { TResponseDataValue, TResponseTableData, TResponseWithQuotas } from "@formbricks/types/responses";
+import { ADDRESS_FIELDS } from "@formbricks/types/surveys/address-fields";
+import type { TSurveyAddressElement } from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { TTag } from "@formbricks/types/tags";
 import { TUser, TUserLocale } from "@formbricks/types/user";
@@ -40,9 +42,20 @@ const formatArrayToRecord = (responseValue: TResponseDataValue, keys: string[]):
   return result;
 };
 
-const formatAddressData = (responseValue: TResponseDataValue): Record<string, string> => {
-  const addressKeys = ["addressLine1", "addressLine2", "city", "state", "zip", "country"];
-  return formatArrayToRecord(responseValue, addressKeys);
+// Export for testing
+export const formatAddressData = (
+  responseValue: TResponseDataValue,
+  element?: TSurveyAddressElement
+): Record<string, string> => {
+  // Storage order; arrays from before name/organization existed are shorter and leave them unset.
+  const result = formatArrayToRecord(responseValue, [...ADDRESS_FIELDS]);
+  // These keys are flattened into one shared record, so only emit name/organization when the survey
+  // shows them. Otherwise an empty value could shadow another element whose id is "name"/"organization".
+  if (element) {
+    if (!element.name?.show) delete result.name;
+    if (!element.organization?.show) delete result.organization;
+  }
+  return result;
 };
 
 const formatContactInfoData = (responseValue: TResponseDataValue): Record<string, string> => {
@@ -50,7 +63,8 @@ const formatContactInfoData = (responseValue: TResponseDataValue): Record<string
   return formatArrayToRecord(responseValue, contactInfoKeys);
 };
 
-const extractResponseData = (response: TResponseWithQuotas, survey: TSurvey): Record<string, any> => {
+// Export for testing
+export const extractResponseData = (response: TResponseWithQuotas, survey: TSurvey): Record<string, any> => {
   const responseData: Record<string, any> = {};
 
   const elements = getElementsFromBlocks(survey.blocks);
@@ -64,7 +78,7 @@ const extractResponseData = (response: TResponseWithQuotas, survey: TSurvey): Re
         }
         break;
       case "address":
-        Object.assign(responseData, formatAddressData(responseValue));
+        Object.assign(responseData, formatAddressData(responseValue, element as TSurveyAddressElement));
         break;
       case "contactInfo":
         Object.assign(responseData, formatContactInfoData(responseValue));

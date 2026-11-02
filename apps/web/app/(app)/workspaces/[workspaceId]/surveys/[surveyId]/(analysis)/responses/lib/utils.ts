@@ -10,6 +10,10 @@ import { RESERVED_FIELD_ICONS, getReservedFieldLabel } from "@/modules/embedded-
 
 export const getAddressFieldLabel = (field: string, t: TFunction) => {
   switch (field) {
+    case "name":
+      return t("common.name");
+    case "organization":
+      return t("common.organization");
     case "addressLine1":
       return t("workspace.surveys.responses.address_line_1");
     case "addressLine2":
