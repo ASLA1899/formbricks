@@ -306,6 +306,8 @@ export const getElementTypes = (t: TFunction): TElement[] => [
       email: { show: true, required: true, placeholder: { default: "Email" } },
       phone: { show: true, required: true, placeholder: { default: "Phone" } },
       company: { show: true, required: true, placeholder: { default: "Company" } },
+      customFields: [],
+      fieldOrder: undefined,
     },
   },
 ];

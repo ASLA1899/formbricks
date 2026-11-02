@@ -364,7 +364,7 @@ export const ElementFormInput = ({
     }
 
     if (currentElement.type === TSurveyElementTypeEnum.ContactInfo) {
-      const allFieldsAreOptional = [
+      const builtInFieldsOptional = [
         currentElement.firstName,
         currentElement.lastName,
         currentElement.email,
@@ -374,11 +374,13 @@ export const ElementFormInput = ({
         .filter((field) => field.show)
         .every((field) => !field.required);
 
-      if (allFieldsAreOptional) {
+      const customHasRequired = (currentElement.customFields ?? []).some((cf) => cf.show && cf.required);
+
+      if (builtInFieldsOptional && !customHasRequired) {
         return true;
       }
 
-      return [
+      const builtInHasRequired = [
         currentElement.firstName,
         currentElement.lastName,
         currentElement.email,
@@ -387,6 +389,8 @@ export const ElementFormInput = ({
       ]
         .filter((field) => field.show)
         .some((condition) => condition.required === true);
+
+      return builtInHasRequired || customHasRequired;
     }
 
     return false;

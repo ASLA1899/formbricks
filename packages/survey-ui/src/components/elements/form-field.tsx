@@ -1,4 +1,5 @@
 import * as React from "react";
+import { SingleSelect } from "@/components/elements/single-select";
 import { ElementError, getElementErrorAria } from "@/components/general/element-error";
 import { ElementHeader } from "@/components/general/element-header";
 import { Input } from "@/components/general/input";
@@ -14,12 +15,14 @@ export interface FormFieldConfig {
   label: string;
   /** Placeholder text for the input */
   placeholder?: string;
-  /** Input type (text, email, tel, number, url, etc.) */
-  type?: "text" | "email" | "tel" | "number" | "url";
+  /** Input type (text, email, tel, number, url, date, dropdown) */
+  type?: "text" | "email" | "tel" | "number" | "url" | "date" | "dropdown";
   /** Whether this field is required */
   required?: boolean;
   /** Whether this field should be shown */
   show?: boolean;
+  /** Options for dropdown type fields */
+  options?: { id: string; label: string }[];
 }
 
 interface FormFieldProps {
@@ -133,8 +136,10 @@ function FormField({
             const fieldValue = currentValues[field.id] ?? "";
             const fieldInputId = `${elementId}-${field.id}`;
 
-            // Determine input type
-            let inputType: "text" | "email" | "tel" | "number" | "url" = field.type ?? "text";
+            // Determine input type (dropdown is handled separately; date falls back to text)
+            const rawType = field.type ?? "text";
+            let inputType: "text" | "email" | "tel" | "number" | "url" =
+              rawType === "date" || rawType === "dropdown" ? "text" : rawType;
             if (field.id === "email" && !field.type) {
               inputType = "email";
             } else if (field.id === "phone" && !field.type) {
@@ -146,18 +151,72 @@ function FormField({
                 <Label htmlFor={fieldInputId} variant="default">
                   {fieldRequired ? `${field.label}*` : field.label}
                 </Label>
-                <Input
-                  id={fieldInputId}
-                  type={inputType}
-                  value={fieldValue}
-                  onChange={(e) => {
-                    handleFieldChange(field.id, e.target.value);
-                  }}
-                  required={fieldRequired}
-                  disabled={disabled}
-                  dir={dir}
-                  aria-invalid={errorAria.ariaInvalid || undefined}
-                />
+                {field.type === "dropdown" && field.options ? (
+                  <>
+                    <SingleSelect
+                      elementId={fieldInputId}
+                      headline=""
+                      inputId={`${fieldInputId}-select`}
+                      options={field.options}
+                      value={
+                        // Value may be stored as label (human-readable), so resolve back to option ID
+                        field.options.find((opt) => opt.id === fieldValue)?.id ??
+                        field.options.find((opt) => opt.label === fieldValue)?.id ??
+                        undefined
+                      }
+                      onChange={(val) => {
+                        // Store the display label, not the option ID — contact info
+                        // fields store human-readable values (e.g. "Mr." not an opaque ID)
+                        const selectedOption = field.options?.find((opt) => opt.id === val);
+                        handleFieldChange(field.id, selectedOption?.label ?? val ?? "");
+                      }}
+                      required={fieldRequired}
+                      disabled={disabled}
+                      dir={dir}
+                      variant="dropdown"
+                      placeholder="Select..."
+                    />
+                    {/* Hidden input for native browser required validation on dropdown fields */}
+                    {fieldRequired && (
+                      <input
+                        type="text"
+                        required
+                        value={fieldValue}
+                        onChange={() => {}}
+                        className="sr-only"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </>
+                ) : (
+                  <Input
+                    id={fieldInputId}
+                    type={inputType}
+                    value={fieldValue}
+                    onChange={(e) => {
+                      handleFieldChange(field.id, e.target.value);
+                    }}
+                    required={fieldRequired}
+                    disabled={disabled}
+                    dir={dir}
+                    aria-invalid={errorAria.ariaInvalid || undefined}
+                    {...(inputType === "number"
+                      ? {
+                          min: 0,
+                          inputMode: "numeric" as const,
+                          onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+                            if (["-", "+", "e", "E"].includes(e.key)) {
+                              e.preventDefault();
+                            }
+                          },
+                          onWheel: (e: React.WheelEvent<HTMLInputElement>) => {
+                            (e.target as HTMLInputElement).blur();
+                          },
+                        }
+                      : {})}
+                  />
+                )}
               </div>
             );
           })}

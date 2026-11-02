@@ -304,6 +304,19 @@ export function BlockConditional({
       element.type === TSurveyElementTypeEnum.Address ||
       element.type === TSurveyElementTypeEnum.ContactInfo
     ) {
+      // Required dropdown custom fields are not native inputs, so checkValidity misses them
+      if (element.type === TSurveyElementTypeEnum.ContactInfo) {
+        const responseObj: Record<string, string> =
+          response && typeof response === "object" && !Array.isArray(response)
+            ? (response as Record<string, string>)
+            : {};
+        const hasEmptyRequiredDropdown = element.customFields.some(
+          (cf) => cf.show && cf.required && cf.type === "dropdown" && !responseObj[cf.id]?.trim()
+        );
+        if (hasEmptyRequiredDropdown) {
+          return false;
+        }
+      }
       return true;
     }
 

@@ -1466,6 +1466,50 @@ describe("Response Utils", () => {
       expect(result[0]["person.email"]).toBe("test@example.com");
     });
 
+    test("maps contact info custom field IDs to labels in the export", () => {
+      const survey = asRead({
+        ...mockSurvey,
+        blocks: [
+          {
+            id: "block1",
+            name: "Block 1",
+            elements: [
+              {
+                id: "contact1",
+                type: TSurveyElementTypeEnum.ContactInfo,
+                headline: { default: "Contact" },
+                required: false,
+                isDraft: false,
+                firstName: { show: true, required: false, placeholder: { default: "" } },
+                lastName: { show: false, required: false, placeholder: { default: "" } },
+                email: { show: true, required: false, placeholder: { default: "" } },
+                phone: { show: false, required: false, placeholder: { default: "" } },
+                company: { show: false, required: false, placeholder: { default: "" } },
+                customFields: [
+                  {
+                    id: "cf_title",
+                    label: "Title",
+                    type: "dropdown",
+                    show: true,
+                    required: false,
+                    placeholder: { default: "" },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }) as TSurvey;
+      const responses = [
+        {
+          ...mockResponses[0],
+          data: { contact1: { firstName: "Ada", email: "", cf_title: "Dr." } },
+        },
+      ] as TResponse[];
+      const result = getResponsesJson(survey, responses, [["1. Contact"]], [], false);
+      expect(result[0]["1. Contact"]).toBe("First Name: Ada\nTitle: Dr.");
+    });
+
     test("a computed field named `__proto__` keeps its value, and reaches both writers", async () => {
       // `ZEmbeddedDataName` is a non-blank string, so `__proto__` is a legal variable name. On an
       // ordinary row object, assigning that key runs Object.prototype's inherited setter instead of

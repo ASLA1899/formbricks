@@ -14,6 +14,7 @@ import {
   TResponseTtc,
   ZResponseFilterCriteria,
 } from "@formbricks/types/responses";
+import { normalizeContactInfoResponse } from "@formbricks/types/surveys/contact-info-response";
 import { TSurveyElement, TSurveyElementTypeEnum } from "@formbricks/types/surveys/elements";
 import {
   TSurvey,
@@ -890,11 +891,16 @@ export const getElementSummary = async (
         let values: TSurveyElementSummaryContactInfo["samples"] = [];
         responses.forEach((response) => {
           const answer = response.data[element.id];
-          if (Array.isArray(answer) && answer.length > 0) {
+          // Legacy responses are positional arrays; new responses are objects keyed by field ID
+          // (built-in and custom fields). Keep the legacy array shape as is.
+          const sampleValue = Array.isArray(answer)
+            ? answer
+            : Object.values(normalizeContactInfoResponse(answer) ?? {}).filter((v) => Boolean(v));
+          if (sampleValue.length > 0) {
             values.push({
               id: response.id,
               updatedAt: response.updatedAt,
-              value: answer,
+              value: sampleValue,
               contact: response.contact,
               contactAttributes: response.contactAttributes,
             });

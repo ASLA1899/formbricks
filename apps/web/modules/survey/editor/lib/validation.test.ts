@@ -862,6 +862,7 @@ describe("validation.validateElement", () => {
       ...baseElementFields,
       type: TSurveyElementTypeEnum.ContactInfo,
       headline: { default: "Contact", en: "Contact", de: "Kontakt" },
+      customFields: [],
       firstName: {
         show: true,
         required: false,
@@ -911,6 +912,30 @@ describe("validation.validateElement", () => {
         },
       };
       expect(validation.validateElement(q, surveyLanguagesEnabled)).toBe(true);
+    });
+
+    const customField = {
+      id: "cf_title",
+      label: "Title",
+      type: "text" as const,
+      show: true,
+      required: false,
+    };
+
+    test("should return true when a shown custom field has an empty placeholder", () => {
+      const q = {
+        ...contactInfoElementBase,
+        customFields: [{ ...customField, placeholder: { default: "" } }],
+      };
+      expect(validation.validateElement(q, surveyLanguagesEnabled)).toBe(true);
+    });
+
+    test("should return false when a shown custom field placeholder misses a language", () => {
+      const q = {
+        ...contactInfoElementBase,
+        customFields: [{ ...customField, placeholder: { default: "Title", en: "Title", de: "" } }],
+      };
+      expect(validation.validateElement(q, surveyLanguagesEnabled)).toBe(false);
     });
   });
 

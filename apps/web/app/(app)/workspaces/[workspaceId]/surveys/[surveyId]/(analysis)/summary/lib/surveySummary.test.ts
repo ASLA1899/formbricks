@@ -1881,7 +1881,7 @@ describe("Address and ContactInfo question types", () => {
       },
       {
         id: "response-2",
-        data: { "contact-q1": { name: "John" } }, // Object instead of array
+        data: { "contact-q1": {} }, // Empty object has no values
         updatedAt: new Date(),
         contact: null,
         contactAttributes: {},
@@ -5390,5 +5390,37 @@ describe("CES question type tests", () => {
     expect(summary[0].responseCount).toBe(0);
     expect(summary[0].average).toBe(0);
     expect(summary[0].choices.every((c: any) => c.count === 0)).toBe(true);
+  });
+});
+
+describe("ContactInfo summary with custom fields (object-format responses)", () => {
+  test("counts object-format responses and drops empty values", async () => {
+    const question = {
+      id: "contact-q2",
+      type: TSurveyElementTypeEnum.ContactInfo,
+      headline: { default: "Your contact information" },
+      required: true,
+      customFields: [{ id: "cf_title", label: "Title", type: "dropdown", show: true, required: false }],
+    };
+    const survey = {
+      id: "survey-1",
+      blocks: [{ id: "block1", name: "Block 1", elements: [question] }],
+      questions: [],
+      languages: [],
+      welcomeCard: { enabled: false },
+    } as unknown as TSurvey;
+    const base = { updatedAt: new Date(), contact: null, contactAttributes: {}, language: null, ttc: {} };
+    const responses = [
+      { ...base, id: "r1", data: { "contact-q2": { firstName: "Ada", email: "", cf_title: "Dr." } } },
+      { ...base, id: "r2", data: { "contact-q2": { firstName: "", cf_title: "" } } },
+    ] as any;
+    const dropOff = [
+      { elementId: "contact-q2", impressions: 2, dropOffCount: 0, dropOffPercentage: 0 },
+    ] as unknown as TSurveySummary["dropOff"];
+
+    const summary = await getElementSummary(survey, getElementsFromBlocks(survey.blocks), responses, dropOff);
+
+    expect((summary[0] as any).responseCount).toBe(1);
+    expect((summary[0] as any).samples[0].value).toEqual(["Ada", "Dr."]);
   });
 });
