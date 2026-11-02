@@ -201,7 +201,8 @@ export type ResolveRecipientResult = { ok: true; email: string } | { ok: false; 
  *  - if `to` is itself a valid email, use it directly (teammate/user address);
  *  - otherwise treat `to` as a question / hidden-field id and read `response.data[to]`:
  *      - a string is parsed as an email,
- *      - an array (contact-info element) uses index `[2]` as the email,
+ *      - an array (legacy contact-info answer) uses index `[2]` as the email,
+ *      - an object (contact-info answer with custom fields) uses its `email` key,
  *  - anything missing/invalid returns `{ ok: false }` with a clear reason.
  */
 export const resolveResponseRecipient = (to: string, response: TResponse): ResolveRecipientResult => {
@@ -226,6 +227,18 @@ export const resolveResponseRecipient = (to: string, response: TResponse): Resol
   if (Array.isArray(toValueFromResponse)) {
     const emailAddress = toValueFromResponse[2];
     if (!emailAddress) {
+      return { ok: false, error: "Email address not found in response data" };
+    }
+    const parsedResult = z.email().safeParse(emailAddress);
+    if (parsedResult.success) {
+      return { ok: true, email: parsedResult.data };
+    }
+    return { ok: false, error: "Resolved email recipient is not a valid address" };
+  }
+
+  if (typeof toValueFromResponse === "object") {
+    const emailAddress = (toValueFromResponse as Record<string, unknown>).email;
+    if (typeof emailAddress !== "string" || !emailAddress) {
       return { ok: false, error: "Email address not found in response data" };
     }
     const parsedResult = z.email().safeParse(emailAddress);
