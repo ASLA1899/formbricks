@@ -24,7 +24,7 @@ export function EmailTemplate({
 }: EmailTemplateProps): React.JSX.Element {
   // Per ASLA email guide: web fonts unreliable in email — system cascade only.
   // Org-level custom logos still override the ASLA wordmark when configured.
-  const mastheadLogo = logoUrl ?? aslaWordmarkUrl;
+  const mastheadLogo = logoUrl || aslaWordmarkUrl;
   const isCustomLogo = Boolean(logoUrl) && logoUrl !== aslaWordmarkUrl;
 
   return (
@@ -43,11 +43,12 @@ export function EmailTemplate({
       )}
       <Tailwind>
         <Body
-          className="m-0 h-full w-full p-0 text-sm"
+          className="m-0 h-full w-full p-0"
           style={{
             backgroundColor: "#FBF8F1",
             fontFamily: emailFontStack,
             color: "#1A1A1A",
+            fontSize: "14px",
             ...(forceLightMode ? { colorScheme: "only light" } : {}),
           }}>
           <Container
@@ -55,7 +56,7 @@ export function EmailTemplate({
             style={{ maxWidth: "640px", width: "100%", backgroundColor: "#FFFFFF" }}>
             <Section
               style={{
-                backgroundColor: "#003A49",
+                backgroundColor: isCustomLogo ? "#FFFFFF" : "#003A49",
                 padding: "24px 36px",
               }}>
               <Img
@@ -63,7 +64,7 @@ export function EmailTemplate({
                 alt={isCustomLogo ? "Logo" : "American Society of Landscape Architects"}
                 src={mastheadLogo}
                 width={isCustomLogo ? 260 : 220}
-                height={isCustomLogo ? 60 : 56}
+                {...(isCustomLogo ? {} : { height: 56 })}
                 style={{
                   display: "block",
                   border: 0,
@@ -75,7 +76,9 @@ export function EmailTemplate({
               />
             </Section>
 
-            <Container style={{ padding: "32px 36px 8px", backgroundColor: "#FFFFFF" }}>{children}</Container>
+            <Section className="text-start" style={{ padding: "32px 36px", backgroundColor: "#FFFFFF" }}>
+              {children}
+            </Section>
 
             <Section
               style={{
@@ -101,7 +104,7 @@ export function EmailTemplate({
                 <Text
                   className="m-0"
                   style={{
-                    color: "rgba(255,255,255,0.6)",
+                    color: "#A3A3A3",
                     fontFamily: emailFontStack,
                     fontSize: "11px",
                     lineHeight: 1.6,
@@ -114,7 +117,7 @@ export function EmailTemplate({
                 <Text
                   className="m-0"
                   style={{
-                    color: "rgba(255,255,255,0.6)",
+                    color: "#A3A3A3",
                     fontFamily: emailFontStack,
                     fontSize: "11px",
                     lineHeight: 1.6,
@@ -125,7 +128,7 @@ export function EmailTemplate({
                       href={imprintUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ color: "#81BC00", textDecoration: "none", marginRight: "12px" }}>
+                      style={{ color: "#81BC00", textDecoration: "underline", marginRight: "12px" }}>
                       {t("emails.imprint")}
                     </Link>
                   ) : null}
@@ -134,7 +137,7 @@ export function EmailTemplate({
                       href={privacyUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ color: "#81BC00", textDecoration: "none" }}>
+                      style={{ color: "#81BC00", textDecoration: "underline" }}>
                       {t("emails.privacy_policy")}
                     </Link>
                   ) : null}
