@@ -43,6 +43,17 @@ export function parseInlineMarkdown(text: string): InlineSegment[] {
 }
 
 /**
+ * Plain-text form of a string: recognized `[label](url)` links become their label.
+ * Used where a link cannot render (for example a dropdown trigger).
+ */
+export function stripInlineMarkdown(text: string): string {
+  if (!text?.includes("](")) return text;
+  return parseInlineMarkdown(text)
+    .map((seg) => (seg.type === "link" ? seg.label : seg.value))
+    .join("");
+}
+
+/**
  * Render a string with inline `[label](url)` links. Anchor clicks call stopPropagation
  * so they don't toggle the surrounding radio/checkbox or close a dropdown.
  */

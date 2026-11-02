@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { parseInlineMarkdown } from "./inline-markdown";
+import { parseInlineMarkdown, stripInlineMarkdown } from "./inline-markdown";
 
 describe("parseInlineMarkdown", () => {
   test("returns empty array for empty input", () => {
@@ -60,5 +60,16 @@ describe("parseInlineMarkdown", () => {
     expect(parseInlineMarkdown("[a\nb](https://x.test)")).toEqual([
       { type: "text", value: "[a\nb](https://x.test)" },
     ]);
+  });
+});
+
+describe("stripInlineMarkdown", () => {
+  test("replaces safe links with their label", () => {
+    expect(stripInlineMarkdown("See [terms](https://x.test) now")).toBe("See terms now");
+  });
+
+  test("keeps unsafe links and plain text unchanged", () => {
+    expect(stripInlineMarkdown("[x](javascript:alert(1))")).toBe("[x](javascript:alert(1))");
+    expect(stripInlineMarkdown("Plain")).toBe("Plain");
   });
 });

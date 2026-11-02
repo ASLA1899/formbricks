@@ -16,7 +16,7 @@ import {
 import { ElementError, getElementErrorAria } from "@/components/general/element-error";
 import { ElementHeader } from "@/components/general/element-header";
 import { Input } from "@/components/general/input";
-import { renderInlineMarkdown } from "@/lib/inline-markdown";
+import { renderInlineMarkdown, stripInlineMarkdown } from "@/lib/inline-markdown";
 import { FB_PART } from "@/lib/parts";
 import { useRovingRadioGroup } from "@/lib/use-roving-radio-group";
 import { cn } from "@/lib/utils";
@@ -220,7 +220,7 @@ function SingleSelectDropdownVariant({
     isOtherSelected,
     otherValue,
     otherOptionLabel,
-    selectedOptionLabel: selectedOption?.label,
+    selectedOptionLabel: selectedOption ? stripInlineMarkdown(selectedOption.label) : undefined,
     placeholder,
   });
 
