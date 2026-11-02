@@ -35,9 +35,17 @@ export const resolveSurveyActorContext = (
   organizationId: string
 ): Promise<TSurveyActorContext> => resolveSurveyActorContextCached(actor.type, actor.id, organizationId);
 
-/** The `Survey` clause for a signed-in user's pickers and lists in one organization. */
+/**
+ * The `Survey` clause for a signed-in user's pickers and lists in one organization. Server actions that
+ * mutate (connect a survey to a segment, delete a language) pass `includeShares: false`: a read-only
+ * `SurveyAccess` share widens what a user may see, never what they may change (ASL-1880).
+ */
 export const getUserVisibleSurveyWhere = async (
   userId: string,
-  organizationId: string
+  organizationId: string,
+  options: Readonly<{ includeShares?: boolean }> = {}
 ): Promise<Prisma.SurveyWhereInput> =>
-  buildVisibleSurveyWhere(await resolveSurveyActorContext({ id: userId, type: "user" }, organizationId));
+  buildVisibleSurveyWhere(
+    await resolveSurveyActorContext({ id: userId, type: "user" }, organizationId),
+    options
+  );

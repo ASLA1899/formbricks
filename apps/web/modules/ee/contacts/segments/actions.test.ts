@@ -220,6 +220,18 @@ describe("segment mutations authorize every referenced survey (ENG-3282)", () =>
     expect(mocks.updateSegment).toHaveBeenCalledOnce();
   });
 
+  test("segment create and update ask for the visibility clause without shares (ASL-1880)", async () => {
+    actAs(true);
+
+    await run(updateSegmentAction, { segmentId: "seg1", data: { surveys: ["s1"] } });
+    await run(createSegmentAction, { workspaceId: "ws1", title: "Seg", filters: [], isPrivate: true });
+
+    expect(mocks.getUserVisibleSurveyWhere).toHaveBeenCalledTimes(2);
+    for (const call of mocks.getUserVisibleSurveyWhere.mock.calls) {
+      expect(call[2]).toEqual({ includeShares: false });
+    }
+  });
+
   test("interaction filters are checked against the caller's visibility on create and update", async () => {
     actAs(true);
 

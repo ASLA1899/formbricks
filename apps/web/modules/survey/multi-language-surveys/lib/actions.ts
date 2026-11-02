@@ -81,7 +81,7 @@ export const deleteLanguageAction = authenticatedActionClient.inputSchema(ZDelet
     const result = await deleteLanguage(
       parsedInput.languageId,
       parsedInput.workspaceId,
-      await getUserVisibleSurveyWhere(ctx.user.id, organizationId)
+      await getUserVisibleSurveyWhere(ctx.user.id, organizationId, { includeShares: false })
     );
     ctx.auditLoggingCtx.oldObject = result;
     return result;
