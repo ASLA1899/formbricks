@@ -334,6 +334,70 @@ export const ZSurveyMetadata = z
 
 export type TSurveyMetadata = z.infer<typeof ZSurveyMetadata>;
 
+// ----- Survey invitation & reminder configuration (ASLA fork) -----
+
+export const ZInvitationAudience = z.discriminatedUnion("source", [
+  z.object({
+    source: z.literal("segment"),
+    segmentId: z.cuid2(),
+  }),
+  z.object({
+    source: z.literal("snowflake"),
+    queryId: z.string(),
+    emailColumn: z.string(),
+    nameColumn: z.string().optional(),
+  }),
+  // Ad-hoc list of recipients typed/pasted into the editor. Unlike segments,
+  // this doesn't require the Formbricks EE Contacts license. Unlike Snowflake,
+  // it works without any data-warehouse integration. First/last name are
+  // optional per recipient — available as merge fields in email templates.
+  z.object({
+    source: z.literal("manualList"),
+    recipients: z
+      .array(
+        z.object({
+          email: z.email(),
+          firstName: z.string().optional(),
+          lastName: z.string().optional(),
+        })
+      )
+      .min(1),
+  }),
+]);
+
+export type TInvitationAudience = z.infer<typeof ZInvitationAudience>;
+
+export const ZReminderSchedule = z.object({
+  enabled: z.boolean(),
+  daysAfterInvite: z.array(z.number().int().min(0).max(365)),
+  maxReminders: z.number().int().min(0).max(20),
+});
+
+export type TReminderSchedule = z.infer<typeof ZReminderSchedule>;
+
+export const ZInvitationEmailTemplate = z.object({
+  subject: z.string().min(1).max(500),
+  body: z.string(),
+  buttonLabel: z.string().max(100).optional(),
+  headingText: z.string().max(200).optional(),
+});
+
+export const ZInvitationEmailTemplates = z.object({
+  invitation: ZInvitationEmailTemplate,
+  reminder: ZInvitationEmailTemplate,
+});
+
+export type TInvitationEmailTemplates = z.infer<typeof ZInvitationEmailTemplates>;
+
+export const ZSurveyInvitationConfig = z.object({
+  audience: ZInvitationAudience,
+  reminderSchedule: ZReminderSchedule,
+  emailTemplates: ZInvitationEmailTemplates,
+  fromName: z.string().max(100).optional(),
+});
+
+export type TSurveyInvitationConfig = z.infer<typeof ZSurveyInvitationConfig>;
+
 export const ZSurveyQuestionChoice = z.object({
   id: z.string(),
   label: ZI18nString,

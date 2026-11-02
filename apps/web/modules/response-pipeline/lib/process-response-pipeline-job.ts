@@ -29,6 +29,7 @@ import { sendResponseFinishedEmail } from "@/modules/email";
 import { captureSurveyResponsePostHogEvent } from "@/modules/response-pipeline/lib/posthog";
 import { sendFollowUpsForResponse } from "@/modules/survey/follow-ups/lib/follow-ups";
 import { FollowUpSendError } from "@/modules/survey/follow-ups/types/follow-up";
+import { linkResponseToInvitation } from "@/modules/survey/invitations/lib/invitations";
 import { getFinishedResponseCountBySurveyId } from "@/modules/survey/lib/response";
 import { handleIntegrations } from "./handle-integrations";
 import { recordSurveyOutboundSkipped } from "./outbound-visibility-metrics";
@@ -62,6 +63,8 @@ const pipelineSurveySelect = {
   embeddedDataLinks: selectSurveyEmbeddedDataLinks,
   followUps: true,
   autoComplete: true,
+  // ASLA fork: surveys with no invitation config skip the invitation lookup on responseFinished.
+  invitationConfig: true,
   languages: {
     select: {
       default: true,
@@ -690,6 +693,16 @@ const runResponseFinishedSideEffects = async ({
   outboundAllowed: boolean;
   workspaceId: string;
 }) => {
+  // ASLA fork: stop reminders for a person who finished. This is internal bookkeeping, not an outbound
+  // effect, so it runs whether or not the survey is workspace-visible. A failure never blocks the rest.
+  if (survey.invitationConfig) {
+    try {
+      await linkResponseToInvitation(data.response.id);
+    } catch (error) {
+      logger.error({ ...logContext, err: error }, "Response pipeline invitation linking failed");
+    }
+  }
+
   const [integrations, usersWithNotifications] = await Promise.all([
     outboundAllowed ? loadIntegrationsSafely({ logContext, workspaceId }) : Promise.resolve([]),
     getUsersWithNotifications({

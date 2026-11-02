@@ -11,6 +11,7 @@ import { InviteAcceptedEmail } from "../../emails/invite/invite-accepted-email";
 import { InviteEmail } from "../../emails/invite/invite-email";
 import { EmbedSurveyPreviewEmail } from "../../emails/survey/embed-survey-preview-email";
 import { FollowUpEmail, FollowUpEmailProps } from "../../emails/survey/follow-up-email";
+import { InvitationEmail, InvitationEmailProps } from "../../emails/survey/invitation-email";
 import { LinkSurveyEmail } from "../../emails/survey/link-survey-email";
 import {
   ResponseFinishedEmail,
@@ -149,4 +150,10 @@ export async function renderFollowUpEmail(
   props: FollowUpEmailProps & TEmailTemplateLegalProps
 ): Promise<string> {
   return await render(FollowUpEmail(props));
+}
+
+export async function renderInvitationEmail(
+  props: InvitationEmailProps & TEmailTemplateLegalProps
+): Promise<string> {
+  return await render(InvitationEmail(props));
 }

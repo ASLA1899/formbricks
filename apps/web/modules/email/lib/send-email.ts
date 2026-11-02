@@ -36,6 +36,7 @@ export type TEmailType =
   | "customization_preview"
   | "verified_survey_link"
   | "survey_follow_up"
+  | "survey_invitation"
   | "workflow_email";
 
 interface SendEmailDataProps {

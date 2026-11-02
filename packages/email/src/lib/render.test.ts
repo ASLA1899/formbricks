@@ -14,6 +14,7 @@ import {
   renderEmbedSurveyPreviewEmail,
   renderFollowUpEmail,
   renderForgotPasswordEmail,
+  renderInvitationEmail,
   renderInviteAcceptedEmail,
   renderInviteEmail,
   renderLinkSurveyEmail,
@@ -36,6 +37,12 @@ const responseFinishedElements = [
     type: TSurveyElementTypeEnum.OpenText,
   },
 ];
+
+const invitationProps = {
+  subject: "Please take our survey",
+  body: "Hi Jane,\n\nThank you!",
+  surveyLink: "https://surveys.example.org/c/abc",
+};
 
 // Render every email with the legal props supplied. The imprint/privacy footer is a
 // conditional branch of the shared chrome, so leaving them out would hide anything that
@@ -102,6 +109,7 @@ const renderers: [string, () => Promise<string>][] = [
       renderEmailCustomizationPreviewEmail({ ...exampleData.emailCustomizationPreviewEmail, ...legal, t }),
   ],
   ["renderFollowUpEmail", () => renderFollowUpEmail({ ...exampleData.followUpEmail, ...legal, t })],
+  ["renderInvitationEmail", () => renderInvitationEmail({ ...invitationProps, ...legal, t })],
 ];
 
 describe.each(renderers)("%s", (_name, renderEmail) => {
@@ -393,5 +401,38 @@ describe("Tailwind render engine", () => {
 
     expect(html).toContain("text-shadow:");
     expect(html).toContain("box-shadow:inset");
+  });
+});
+
+describe("renderInvitationEmail", () => {
+  test("shows the body, the link button and a plain-text fallback link", async () => {
+    const html = await renderInvitationEmail({ ...invitationProps, t });
+
+    expect(html).toContain("Hi Jane,");
+    expect(html).toContain("Take the survey");
+    expect(html.match(/https:\/\/surveys\.example\.org\/c\/abc/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("an undefined heading shows the default, text overrides it, and empty text removes it", async () => {
+    expect(await renderInvitationEmail({ ...invitationProps, t })).toContain("We’d value your input.");
+    expect(await renderInvitationEmail({ ...invitationProps, heading: "Custom heading", t })).toContain(
+      "Custom heading"
+    );
+    const none = await renderInvitationEmail({ ...invitationProps, heading: "  ", t });
+    expect(none).not.toContain("We’d value your input.");
+    expect(none).not.toContain("<h1");
+  });
+
+  test("uses the button label when given", async () => {
+    const html = await renderInvitationEmail({ ...invitationProps, buttonLabel: "Start now", t });
+
+    expect(html).toContain("Start now");
+    expect(html).not.toContain("Take the survey");
+  });
+
+  test("does not render the body as HTML", async () => {
+    const html = await renderInvitationEmail({ ...invitationProps, body: "<script>alert(1)</script>", t });
+
+    expect(html).not.toContain("<script>alert(1)</script>");
   });
 });

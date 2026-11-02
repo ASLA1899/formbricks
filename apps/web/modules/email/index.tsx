@@ -3,6 +3,7 @@ import {
   renderEmailCustomizationPreviewEmail,
   renderEmbedSurveyPreviewEmail,
   renderForgotPasswordEmail,
+  renderInvitationEmail,
   renderInviteAcceptedEmail,
   renderInviteEmail,
   renderLinkSurveyEmail,
@@ -470,5 +471,42 @@ export const sendLinkSurveyToVerifiedEmail = async (data: TLinkSurveyEmailData):
     to: data.email,
     subject: t("emails.verified_link_survey_email_subject"),
     html,
+  });
+};
+
+/** Strips characters that could break out of a quoted display name. */
+const toQuotedDisplayName = (name: string): string => `"${name.replace(/["\\\r\n]/g, "").trim()}"`;
+
+export const sendSurveyInvitationEmail = async (data: {
+  to: string;
+  subject: string;
+  body: string;
+  surveyLink: string;
+  logoUrl?: string;
+  buttonLabel?: string;
+  heading?: string;
+  fromName?: string;
+}): Promise<boolean> => {
+  const t = await getTranslate();
+  const html = await renderInvitationEmail({
+    subject: data.subject,
+    body: data.body,
+    surveyLink: data.surveyLink,
+    logoUrl: data.logoUrl ? resolveStorageUrl(data.logoUrl) : undefined,
+    buttonLabel: data.buttonLabel?.trim() || undefined,
+    // Pass through as-is: undefined = use the default heading, "" = no heading, text = override.
+    heading: data.heading,
+    t,
+    ...legalProps,
+  });
+  const fromName = data.fromName?.trim();
+  return await sendEmail({
+    emailType: "survey_invitation",
+    to: data.to,
+    subject: data.subject,
+    html,
+    ...(fromName
+      ? { from: `${toQuotedDisplayName(fromName)} <${MAIL_FROM ?? "noreply@formbricks.com"}>` }
+      : {}),
   });
 };
