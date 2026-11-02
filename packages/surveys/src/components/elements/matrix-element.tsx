@@ -37,26 +37,30 @@ export function MatrixElement({
   const { t } = useTranslation();
   useTtc(element.id, ttc, setTtc, startTime, setStartTime, isCurrent);
 
+  // Separate "other" row from regular rows
+  const otherRow = useMemo(() => element.rows.find((r) => r.id === "other"), [element.rows]);
+  const regularRows = useMemo(() => element.rows.filter((r) => r.id !== "other"), [element.rows]);
+
   const rowShuffleIdx = useMemo(() => {
     if (element.shuffleOption !== "none") {
-      return getShuffledRowIndices(element.rows.length, element.shuffleOption);
+      return getShuffledRowIndices(regularRows.length, element.shuffleOption);
     }
-    return element.rows.map((_, id) => id);
+    return regularRows.map((_, id) => id);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- We only want to recompute when the shuffleOption changes
-  }, [element.shuffleOption, element.rows.length]);
+  }, [element.shuffleOption, regularRows.length]);
 
   const elementRows = useMemo(() => {
-    if (!element.rows.length) {
+    if (!regularRows.length) {
       return [];
     }
     if (element.shuffleOption === "none") {
-      return element.rows;
+      return regularRows;
     }
     return rowShuffleIdx.map((shuffledIdx) => {
-      return element.rows[shuffledIdx];
+      return regularRows[shuffledIdx];
     });
-  }, [element.shuffleOption, element.rows, rowShuffleIdx]);
+  }, [element.shuffleOption, regularRows, rowShuffleIdx]);
 
   // Convert rows to MatrixOption format
   const rows: MatrixOption[] = useMemo(() => {
@@ -74,53 +78,76 @@ export function MatrixElement({
     }));
   }, [element.columns, languageCode]);
 
+  // Set of known regular row labels for detecting "other" responses
+  const knownRowLabels = useMemo(() => {
+    return new Set(rows.map((r) => r.label));
+  }, [rows]);
+
+  // Recover the "other" row's typed text and column from a stored response (hydration only)
+  const recoverOther = (valueObj: Record<string, string>) => {
+    if (otherRow) {
+      for (const [rowLabel, columnLabel] of Object.entries(valueObj)) {
+        if (columnLabel && rowLabel && !knownRowLabels.has(rowLabel)) {
+          return { text: rowLabel, columnId: columns.find((col) => col.label === columnLabel)?.id };
+        }
+      }
+    }
+    return { text: "", columnId: undefined as string | undefined };
+  };
+
+  const [otherValue, setOtherValue] = useState(() => recoverOther(value).text);
+  // The "other" row's selected column is tracked locally so the selection survives while the text is empty
+  const [otherColumnId, setOtherColumnId] = useState<string | undefined>(() => recoverOther(value).columnId);
+
   // Convert value from row label -> column label mapping to row id -> column id mapping
   const convertValueToIds = (valueObj: Record<string, string>): Record<string, string> => {
     const result: Record<string, string> = {};
 
     Object.entries(valueObj).forEach(([rowLabel, columnLabel]) => {
-      if (columnLabel) {
-        // Find the row ID that corresponds to this row label
-        const rowId = rows.find((row) => row.label === rowLabel)?.id;
-        // Find the column ID that corresponds to this column label
-        const columnId = columns.find((col) => col.label === columnLabel)?.id;
-
-        if (rowId && columnId) {
-          result[rowId] = columnId;
-        }
+      const rowId = rows.find((row) => row.label === rowLabel)?.id;
+      const columnId = columns.find((col) => col.label === columnLabel)?.id;
+      if (rowId && columnId) {
+        result[rowId] = columnId;
       }
     });
+
+    if (otherRow && otherColumnId) {
+      result["other"] = otherColumnId;
+    }
 
     return result;
   };
 
-  // Convert value from row id -> column id mapping to row label -> column label mapping
-  const convertValueFromIds = (valueObj: Record<string, string>): Record<string, string> => {
+  // Build the row label -> column label response. The "other" row is only emitted when it has text that
+  // does not collide with a regular row label.
+  const buildLabelValue = (idValue: Record<string, string>, text: string): Record<string, string> => {
     const result: Record<string, string> = {};
 
-    Object.entries(valueObj).forEach(([rowId, columnId]) => {
-      // Find the row label that corresponds to this row ID
-      const rowLabel = rows.find((row) => row.id === rowId)?.label;
-      // Find the column label that corresponds to this column ID
+    Object.entries(idValue).forEach(([rowId, columnId]) => {
       const columnLabel = columns.find((col) => col.id === columnId)?.label;
-
-      if (rowLabel && columnLabel) {
-        result[rowLabel] = columnLabel;
+      if (!columnLabel) return;
+      if (rowId === "other") {
+        const trimmed = text.trim();
+        if (trimmed && !knownRowLabels.has(trimmed)) {
+          result[trimmed] = columnLabel;
+        }
+        return;
       }
+      const rowLabel = rows.find((row) => row.id === rowId)?.label;
+      if (rowLabel) result[rowLabel] = columnLabel;
     });
 
     return result;
   };
 
   const handleChange = (newValue: Record<string, string>) => {
-    const labelValue = convertValueFromIds(newValue);
+    setOtherColumnId(newValue["other"]);
+    onChange({ [element.id]: buildLabelValue(newValue, otherValue) });
+  };
 
-    // Check if all values are empty and if so, make it an empty object
-    if (Object.values(labelValue).every((val) => val === "")) {
-      onChange({ [element.id]: {} });
-    } else {
-      onChange({ [element.id]: labelValue });
-    }
+  const handleOtherValueChange = (newText: string) => {
+    setOtherValue(newText);
+    onChange({ [element.id]: buildLabelValue(convertValueToIds(value), newText) });
   };
 
   const handleSubmit = (e: Event) => {
@@ -129,6 +156,11 @@ export function MatrixElement({
     const updatedTtc = getUpdatedTtc(ttc, element.id, performance.now() - startTime);
     setTtc(updatedTtc);
   };
+
+  const otherRowLabel = otherRow ? getLocalizedValue(otherRow.label, languageCode) : undefined;
+  const otherRowPlaceholder = element.otherOptionPlaceholder
+    ? getLocalizedValue(element.otherOptionPlaceholder, languageCode)
+    : undefined;
 
   return (
     <form
@@ -152,6 +184,11 @@ export function MatrixElement({
         imageUrl={element.imageUrl}
         imageAltText={getLocalizedValue(element.imageAltText, languageCode)}
         videoUrl={element.videoUrl}
+        otherRowId={otherRow ? "other" : undefined}
+        otherRowLabel={otherRowLabel}
+        otherRowPlaceholder={otherRowPlaceholder}
+        otherRowValue={otherValue}
+        onOtherRowValueChange={handleOtherValueChange}
       />
     </form>
   );

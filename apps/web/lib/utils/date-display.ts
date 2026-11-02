@@ -1,5 +1,5 @@
 import type { TSurveyDateElement, TSurveyElement } from "@formbricks/types/surveys/elements";
-import { formatDateWithOrdinal } from "./datetime";
+import { formatDateWithOrdinal, formatMonthYear, isMonthYearString } from "./datetime";
 
 export type TSurveyDateFormatMap = Partial<Record<string, TSurveyDateElement["format"]>>;
 
@@ -65,6 +65,11 @@ export const formatStoredDateForDisplay = (
   format: TSurveyDateElement["format"] | undefined,
   locale: string = "en-US"
 ): string | null => {
+  // "Month & Year" questions store YYYY-MM
+  if (isMonthYearString(value)) {
+    return formatMonthYear(value, locale);
+  }
+
   const parsedDate = parseStoredDateValue(value, format);
 
   if (!parsedDate) {

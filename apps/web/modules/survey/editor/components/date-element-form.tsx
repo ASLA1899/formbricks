@@ -11,6 +11,8 @@ import { createI18nString, extractLanguageCodes } from "@/lib/i18n/utils";
 import { ElementFormInput } from "@/modules/survey/components/element-form-input";
 import { ValidationRulesEditor } from "@/modules/survey/editor/components/validation-rules-editor";
 import { Button } from "@/modules/ui/components/button";
+import { Label } from "@/modules/ui/components/label";
+import { OptionsSwitch } from "@/modules/ui/components/options-switch";
 
 interface IDateElementFormProps {
   localSurvey: TSurvey;
@@ -22,6 +24,17 @@ interface IDateElementFormProps {
   isStorageConfigured: boolean;
   isExternalUrlsAllowed?: boolean;
 }
+
+const dateKindOptions = [
+  {
+    value: "full",
+    label: "Full Date",
+  },
+  {
+    value: "monthYear",
+    label: "Month & Year",
+  },
+];
 
 export const DateElementForm = ({
   element,
@@ -88,6 +101,19 @@ export const DateElementForm = ({
             {t("workspace.surveys.edit.add_description")}
           </Button>
         )}
+      </div>
+
+      <div className="mt-3">
+        <Label htmlFor="dateKind">{t("workspace.surveys.edit.date_selection")}</Label>
+        <div className="mt-2 flex items-center">
+          <OptionsSwitch
+            options={dateKindOptions}
+            currentOption={element.dateKind ?? "full"}
+            handleOptionChange={(value: string) =>
+              updateElement(elementIdx, { dateKind: value === "monthYear" ? "monthYear" : "full" })
+            }
+          />
+        </div>
       </div>
 
       <ValidationRulesEditor

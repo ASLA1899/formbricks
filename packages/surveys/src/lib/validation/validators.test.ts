@@ -449,6 +449,41 @@ describe("validators", () => {
     });
   });
 
+  describe("month/year answers against date rules", () => {
+    const el = {} as TSurveyElement;
+
+    test("a month inside a May window passes isBetween (fixed, exclusive bounds)", () => {
+      const params = { startDate: "2026-04-30", endDate: "2026-06-01" };
+      expect(validators.isBetween.check("2026-05", params, el).valid).toBe(true);
+      expect(validators.isBetween.check("2026-06", params, el).valid).toBe(false);
+    });
+
+    test("isLaterThan / isEarlierThan compare the month span", () => {
+      expect(validators.isLaterThan.check("2026-05", { date: "2026-05-15" }, el).valid).toBe(true);
+      expect(validators.isLaterThan.check("2026-04", { date: "2026-05-15" }, el).valid).toBe(false);
+      expect(validators.isEarlierThan.check("2026-05", { date: "2026-05-15" }, el).valid).toBe(true);
+      expect(validators.isEarlierThan.check("2026-06", { date: "2026-05-15" }, el).valid).toBe(false);
+    });
+  });
+
+  describe("month/year answers use the real last day of the month", () => {
+    const el = {} as TSurveyElement;
+
+    test("isNotBetween rejects February against a Feb 1-28 window", () => {
+      const params = { startDate: "2026-01-31", endDate: "2026-03-01" };
+      expect(validators.isNotBetween.check("2026-02", params, el).valid).toBe(false);
+    });
+
+    test("isLaterThan rejects February against Feb 28 but accepts March", () => {
+      expect(validators.isLaterThan.check("2026-02", { date: "2026-02-28" }, el).valid).toBe(false);
+      expect(validators.isLaterThan.check("2026-03", { date: "2026-02-28" }, el).valid).toBe(true);
+    });
+
+    test("leap-year February ends on the 29th", () => {
+      expect(validators.isLaterThan.check("2028-02", { date: "2028-02-29" }, el).valid).toBe(false);
+    });
+  });
+
   describe("isLaterThan", () => {
     test("should return valid true when date is later", () => {
       const result = validators.isLaterThan.check("2024-12-31", { date: "2024-01-01" }, {} as TSurveyElement);

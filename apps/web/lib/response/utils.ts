@@ -279,9 +279,16 @@ const exportElementHeadlines = (survey: TSurvey): string[][] => {
   return modifiedElements.map((element, idx) => {
     const headline = getTextContent(getLocalizedValue(element.headline, "default")) ?? element.id;
     if (element.type === "matrix") {
-      return element.rows.map((row) => {
+      // Exclude "other" row from fixed columns — other responses are collected separately
+      const regularRows = element.rows.filter((row) => row.id !== "other");
+      const hasOtherRow = element.rows.some((row) => row.id === "other");
+      const headers = regularRows.map((row) => {
         return `${idx + 1}. ${headline} - ${getTextContent(getLocalizedValue(row.label, "default"))}`;
       });
+      if (hasOtherRow) {
+        headers.push(`${idx + 1}. ${headline} - Other`);
+      }
+      return headers;
     } else if (
       element.type === "multipleChoiceMulti" ||
       element.type === "multipleChoiceSingle" ||
@@ -427,17 +434,33 @@ export const getResponsesJson = (
 
       if (element.type === "matrix") {
         // For matrix elements, we need to handle each row separately
+        const matrixAnswer = answer as Record<string, string> | undefined;
+        const regularRows = element.rows.filter((row) => row.id !== "other");
+        const hasOtherRow = element.rows.some((row) => row.id === "other");
+        // Classify rows in the language the respondent saw, the same way the renderer does: a key that
+        // is another language's label for a row is Other text here, not that row's answer.
+        const surveyLanguage = survey.languages?.find((l) => l.language.code === response.language);
+        // A language the survey no longer configures falls back to default labels, as the renderer does.
+        const responseLanguageCode =
+          !response.language || !surveyLanguage || surveyLanguage.default ? "default" : response.language;
+        const rowLabelFor = (row: (typeof regularRows)[number]) =>
+          getLocalizedValue(row.label, responseLanguageCode);
+        const knownRowLabels = new Set(regularRows.map(rowLabelFor).filter((label) => label !== ""));
+
         elementHeadline.forEach((headline, index) => {
           if (answer) {
-            const row = element.rows[index];
-            if (
-              row &&
-              row.label.default &&
-              (answer as Record<string, string>)[row.label.default] !== undefined
-            ) {
-              jsonData[idx][headline] = (answer as Record<string, string>)[row.label.default];
+            if (hasOtherRow && index === regularRows.length) {
+              // Last column is the "Other" row — find the response key not matching any known row
+              const otherEntry = Object.entries(matrixAnswer ?? {}).find(([key]) => !knownRowLabels.has(key));
+              jsonData[idx][headline] = otherEntry ? `${otherEntry[0]}: ${otherEntry[1]}` : "";
             } else {
-              jsonData[idx][headline] = "";
+              const row = regularRows[index];
+              const answerKey = row ? rowLabelFor(row) : "";
+              if (answerKey !== "" && matrixAnswer?.[answerKey] !== undefined) {
+                jsonData[idx][headline] = matrixAnswer[answerKey];
+              } else {
+                jsonData[idx][headline] = "";
+              }
             }
           }
         });
