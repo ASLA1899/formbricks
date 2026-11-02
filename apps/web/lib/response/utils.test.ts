@@ -1519,6 +1519,19 @@ describe("Response Utils", () => {
         expect(row["1. Rate - Comfort"]).toBe("");
         expect(row["1. Rate - Other"]).toBe("Tempo: Good");
       });
+
+      test("a response language the survey does not configure uses the default labels", () => {
+        const row = exportRow("fr-FR", { Speed: "Good", Comfort: "Good" });
+        expect(row["1. Rate - Speed"]).toBe("Good");
+        expect(row["1. Rate - Comfort"]).toBe("Good");
+        expect(row["1. Rate - Other"]).toBe("");
+      });
+
+      test("an unconfigured response language still keeps Other text in Other", () => {
+        const row = exportRow("fr-FR", { Speed: "Good", Portability: "Good" });
+        expect(row["1. Rate - Speed"]).toBe("Good");
+        expect(row["1. Rate - Other"]).toBe("Portability: Good");
+      });
     });
 
     test("a computed field named `__proto__` keeps its value, and reaches both writers", async () => {

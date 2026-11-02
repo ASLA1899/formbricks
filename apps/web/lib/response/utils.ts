@@ -440,8 +440,9 @@ export const getResponsesJson = (
         // Classify rows in the language the respondent saw, the same way the renderer does: a key that
         // is another language's label for a row is Other text here, not that row's answer.
         const surveyLanguage = survey.languages?.find((l) => l.language.code === response.language);
+        // A language the survey no longer configures falls back to default labels, as the renderer does.
         const responseLanguageCode =
-          !response.language || surveyLanguage?.default ? "default" : response.language;
+          !response.language || !surveyLanguage || surveyLanguage.default ? "default" : response.language;
         const rowLabelFor = (row: (typeof regularRows)[number]) =>
           getLocalizedValue(row.label, responseLanguageCode);
         const knownRowLabels = new Set(regularRows.map(rowLabelFor).filter((label) => label !== ""));
