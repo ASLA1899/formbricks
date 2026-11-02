@@ -109,6 +109,22 @@ const ensureConnected = (conn: snowflake.Connection): Promise<void> => {
  */
 export const SNOWFLAKE_STATEMENT_DEADLINE_MS = 45_000;
 
+/**
+ * After a client deadline the statement may still be in flight: dropping the session is asynchronous, can fail,
+ * and does not cancel driver retries, so the request can still be delivered and run (up to the server
+ * timeout after delivery). This is how long a caller must keep its lock after such an error before it may
+ * release it: the client deadline's tail, the server timeout, and a margin for delivery delay.
+ */
+export const SNOWFLAKE_LATE_WRITE_QUARANTINE_MS = 150_000;
+
+/** The statement's outcome is unknown; it may still run. Hold coordination for the quarantine period. */
+export class SnowflakeLateWriteError extends Error {
+  constructor() {
+    super("Snowflake statement exceeded its client deadline");
+    this.name = "SnowflakeLateWriteError";
+  }
+}
+
 const executeQuery = async (sqlText: string, binds: TBind[], deadlineAt?: number): Promise<void> => {
   if (deadlineAt !== undefined && Date.now() >= deadlineAt) {
     throw new Error("Snowflake write budget exhausted before the statement started");
@@ -123,7 +139,7 @@ const executeQuery = async (sqlText: string, binds: TBind[], deadlineAt?: number
     const timer = setTimeout(() => {
       // Drop the session so nothing from it can complete later; the next call builds a fresh connection.
       resetConnection(conn);
-      reject(new Error("Snowflake statement exceeded its client deadline"));
+      reject(new SnowflakeLateWriteError());
     }, SNOWFLAKE_STATEMENT_DEADLINE_MS);
     conn.execute({
       sqlText,

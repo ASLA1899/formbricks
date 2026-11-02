@@ -2,7 +2,14 @@ import "server-only";
 import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
 import type { TResponse } from "@formbricks/types/responses";
-import { deleteSurveyResponseRows, insertSurveyResponseRows, isSnowflakeConfigured } from "./client";
+import {
+  SNOWFLAKE_LATE_WRITE_QUARANTINE_MS,
+  SNOWFLAKE_STATEMENT_DEADLINE_MS,
+  SnowflakeLateWriteError,
+  deleteSurveyResponseRows,
+  insertSurveyResponseRows,
+  isSnowflakeConfigured,
+} from "./client";
 import { type TSnowflakeSurvey, buildSnowflakeRows } from "./response-rows";
 
 /**
@@ -19,12 +26,17 @@ const runSerially = <T>(task: () => Promise<T>): Promise<T> => {
 };
 
 /**
- * The replace holds a database transaction (and its lock) open while it talks to Snowflake. Every Snowflake
- * statement is bounded by SNOWFLAKE_STATEMENT_DEADLINE_MS and no statement starts after REPLACE_WRITE_BUDGET_MS,
- * so all writes have ended before the transaction can expire and release the lock.
+ * The replace holds a database transaction (and its lock) open while it talks to Snowflake. No statement
+ * starts after REPLACE_WRITE_BUDGET_MS, each ends or is abandoned within SNOWFLAKE_STATEMENT_DEADLINE_MS, and
+ * an abandoned one may still run, so the lock is then held for the quarantine too. The three together stay
+ * under the transaction timeout, so the lock never goes while a write of this replace can still land.
  */
-const REPLACE_WRITE_BUDGET_MS = 480_000;
+const REPLACE_WRITE_BUDGET_MS = 360_000;
 const REPLACE_TRANSACTION_OPTIONS = { maxWait: 30_000, timeout: 600_000 };
+export const REPLACE_WORST_CASE_MS =
+  REPLACE_WRITE_BUDGET_MS + SNOWFLAKE_STATEMENT_DEADLINE_MS + SNOWFLAKE_LATE_WRITE_QUARANTINE_MS;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
  * Sends one finished response to Snowflake. Replaces the response's rows, so a retried pipeline job
@@ -52,10 +64,17 @@ export const syncResponseToSnowflake = async (
 
         if (!(await exists())) return;
         wroteRows = true;
-        await deleteSurveyResponseRows([response.id], deadlineAt);
-        await insertSurveyResponseRows(buildSnowflakeRows(survey, response), deadlineAt);
-        if (!(await exists())) {
+        try {
           await deleteSurveyResponseRows([response.id], deadlineAt);
+          await insertSurveyResponseRows(buildSnowflakeRows(survey, response), deadlineAt);
+          if (!(await exists())) {
+            await deleteSurveyResponseRows([response.id], deadlineAt);
+          }
+        } catch (error) {
+          // The abandoned statement may still be delivered and run. Keep the lock until it cannot, so no
+          // other replace is interleaved with it; the cleanup below then runs after it has settled.
+          if (error instanceof SnowflakeLateWriteError) await sleep(SNOWFLAKE_LATE_WRITE_QUARANTINE_MS);
+          throw error;
         }
       }, REPLACE_TRANSACTION_OPTIONS)
     );

@@ -1,7 +1,17 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "@formbricks/database";
-import { deleteSurveyResponseRows, insertSurveyResponseRows, isSnowflakeConfigured } from "./client";
-import { deleteResponseFromSnowflake, deleteResponsesFromSnowflake, syncResponseToSnowflake } from "./sync";
+import {
+  SnowflakeLateWriteError,
+  deleteSurveyResponseRows,
+  insertSurveyResponseRows,
+  isSnowflakeConfigured,
+} from "./client";
+import {
+  REPLACE_WORST_CASE_MS,
+  deleteResponseFromSnowflake,
+  deleteResponsesFromSnowflake,
+  syncResponseToSnowflake,
+} from "./sync";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@formbricks/logger", () => ({ logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() } }));
@@ -9,6 +19,9 @@ vi.mock("@formbricks/database", () => ({
   prisma: { $transaction: vi.fn(), response: { findUnique: vi.fn() } },
 }));
 vi.mock("./client", () => ({
+  SNOWFLAKE_LATE_WRITE_QUARANTINE_MS: 150_000,
+  SNOWFLAKE_STATEMENT_DEADLINE_MS: 45_000,
+  SnowflakeLateWriteError: class SnowflakeLateWriteError extends Error {},
   deleteSurveyResponseRows: vi.fn(),
   insertSurveyResponseRows: vi.fn(),
   isSnowflakeConfigured: vi.fn(),
@@ -177,8 +190,48 @@ describe("ordering and deleted responses", () => {
     const [, deleteDeadline] = vi.mocked(deleteSurveyResponseRows).mock.calls[0];
     const [, insertDeadline] = vi.mocked(insertSurveyResponseRows).mock.calls[0];
     expect(deleteDeadline).toBe(insertDeadline);
-    // budget (480s) + one statement deadline (45s) is under the 600s transaction timeout.
-    expect((deleteDeadline as number) - Date.now()).toBeLessThanOrEqual(480_000);
+    expect((deleteDeadline as number) - Date.now()).toBeLessThanOrEqual(360_000);
+  });
+
+  test("budget, last statement deadline and late-write quarantine fit in the 600s transaction", () => {
+    expect(REPLACE_WORST_CASE_MS).toBeLessThan(600_000);
+  });
+
+  test("after a client deadline it keeps the lock through the quarantine, then cleans up", async () => {
+    vi.useFakeTimers();
+    try {
+      let lockHeld = true;
+      vi.mocked(prisma.response.findUnique).mockResolvedValue(null);
+      vi.mocked(insertSurveyResponseRows).mockRejectedValue(new SnowflakeLateWriteError());
+      vi.mocked(prisma.$transaction).mockImplementation((async (fn: (tx: unknown) => Promise<unknown>) => {
+        try {
+          return await fn({
+            $executeRaw: vi.fn(),
+            response: { findUnique: vi.fn().mockResolvedValue({ id: "r1" }) },
+          });
+        } finally {
+          lockHeld = false;
+        }
+      }) as never);
+      const done = syncResponseToSnowflake(survey, response);
+      await vi.advanceTimersByTimeAsync(149_000);
+      expect(lockHeld).toBe(true);
+      expect(deleteSurveyResponseRows).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(2_000);
+      await done;
+      expect(lockHeld).toBe(false);
+      // Cleanup runs only after the quarantine, once the response is confirmed gone.
+      expect(deleteSurveyResponseRows).toHaveBeenLastCalledWith(["r1"]);
+      expect(deleteSurveyResponseRows).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("other failures release the lock at once (no quarantine)", async () => {
+    vi.mocked(insertSurveyResponseRows).mockRejectedValue(new Error("auth failed"));
+    await syncResponseToSnowflake(survey, response);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
   test("runs two syncs of one response one after the other", async () => {
