@@ -1514,8 +1514,8 @@ describe("Response Utils", () => {
       const matrixSurvey = asRead({
         ...mockSurvey,
         languages: [
-          { default: true, enabled: true, language: { id: "l1", code: "en" } },
-          { default: false, enabled: true, language: { id: "l2", code: "de" } },
+          { default: true, enabled: true, language: { id: "l1", code: "en", alias: null, workspaceId: "ws1", createdAt: new Date(), updatedAt: new Date() } },
+          { default: false, enabled: true, language: { id: "l2", code: "de", alias: null, workspaceId: "ws1", createdAt: new Date(), updatedAt: new Date() } },
         ],
         blocks: [
           {
