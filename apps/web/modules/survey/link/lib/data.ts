@@ -112,23 +112,6 @@ export const getSurveyWithMetadata = reactCache(async (surveyId: string): Promis
             },
           },
         },
-        segment: {
-          select: {
-            id: true,
-            createdAt: true,
-            updatedAt: true,
-            workspaceId: true,
-            title: true,
-            description: true,
-            isPrivate: true,
-            filters: true,
-            surveys: {
-              select: {
-                id: true,
-              },
-            },
-          },
-        },
         followUps: true,
 
         // ENG-1837: the definitions the renderer's recall and logic engines resolve through, and
@@ -145,16 +128,16 @@ export const getSurveyWithMetadata = reactCache(async (surveyId: string): Promis
 
     // This survey object is handed to a client component on the *public* link-survey page, so every
     // field in it ends up in the page payload for anonymous visitors. Follow-up configuration carries
-    // internal recipient addresses, subjects and email bodies, and segment filters carry targeting
-    // rules built from contact attributes — none of which the survey renderer reads. They are selected
-    // above only because `TSurvey` requires the keys, so blank them out before they leave the server.
+    // internal recipient addresses, subjects and email bodies, and the attached segment carries the
+    // internal audience title, privacy flag, timestamps, workspace id, targeting filters and the ids of
+    // other surveys — none of which the survey renderer reads. The segment is not selected at all (so
+    // `transformPrismaSurvey` yields `null`) and `followUps` is blanked: `TSurvey` requires the keys,
+    // but nothing internal leaves the server.
     return {
       ...transformedSurvey,
       archivedAt: survey.archivedAt,
       followUps: [],
-      ...(transformedSurvey.segment
-        ? { segment: { ...transformedSurvey.segment, filters: [], description: null } }
-        : {}),
+      segment: null,
     };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
