@@ -150,7 +150,10 @@ describe("data", () => {
         surveys: ["other-survey-id-1", "other-survey-id-2"],
       };
       vi.mocked(prisma.survey.findUnique).mockResolvedValue({ ...mockSurveyData, segment } as any);
-      vi.mocked(transformPrismaSurvey).mockReturnValue({ ...mockTransformedSurvey, segment } as TSurvey);
+      vi.mocked(transformPrismaSurvey).mockReturnValue({
+        ...mockTransformedSurvey,
+        segment,
+      } as unknown as TSurvey);
 
       const result = await getSurveyWithMetadata("survey-1");
 
