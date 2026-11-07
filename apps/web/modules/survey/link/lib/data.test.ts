@@ -135,6 +135,43 @@ describe("data", () => {
      * workspace-library row id, so swapping this for the write-path selector is a regression even
      * though every field the renderer reads would still be there.
      */
+    // Public link pages hand this survey to client components, so it lands in the RSC payload for
+    // anonymous visitors. The renderer reads nothing from the attached segment.
+    test("never selects the attached segment and serializes no segment metadata", async () => {
+      const segment = {
+        id: "seg-secret-id",
+        title: "Internal VIP audience",
+        description: "internal notes",
+        isPrivate: true,
+        filters: [{ id: "f1", value: "secret-filter-value" }],
+        workspaceId: "ws-internal-1",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-02T00:00:00.000Z"),
+        surveys: ["other-survey-id-1", "other-survey-id-2"],
+      };
+      vi.mocked(prisma.survey.findUnique).mockResolvedValue({ ...mockSurveyData, segment } as any);
+      vi.mocked(transformPrismaSurvey).mockReturnValue({ ...mockTransformedSurvey, segment } as TSurvey);
+
+      const result = await getSurveyWithMetadata("survey-1");
+
+      expect(vi.mocked(prisma.survey.findUnique).mock.calls[0][0].select).not.toHaveProperty("segment");
+      expect(result.segment).toBeNull();
+
+      const serialized = JSON.stringify(result);
+      for (const leaked of [
+        "Internal VIP audience",
+        "internal notes",
+        "seg-secret-id",
+        "secret-filter-value",
+        "ws-internal-1",
+        "other-survey-id-1",
+        "other-survey-id-2",
+        "isPrivate",
+      ]) {
+        expect(serialized).not.toContain(leaked);
+      }
+    });
+
     test("carries the Embedded Data join, which is the renderer's ingest allow-list", async () => {
       const surveyId = "survey-1";
       vi.mocked(prisma.survey.findUnique).mockResolvedValue(mockSurveyData as any);
