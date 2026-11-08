@@ -198,6 +198,9 @@ const ELEMENT_I18N_KEYS = [
   "html",
 ] as const;
 const TOGGLE_INPUT_I18N_KEYS = [
+  // ASLA fork: address Name and Organization lines (ASL-1871).
+  "name",
+  "organization",
   "addressLine1",
   "addressLine2",
   "city",
@@ -260,8 +263,32 @@ function normalizeElement(
       normalizeChoice(column, defaultLanguage, options)
     );
   }
+  if (Array.isArray(normalized.customFields)) {
+    normalized.customFields = normalized.customFields.map((customField) =>
+      normalizeCustomField(customField, defaultLanguage, options)
+    );
+  }
 
   return normalized;
+}
+
+// ASLA fork: contact-info custom fields carry a translatable placeholder, and dropdown fields carry
+// options whose labels are translatable.
+function normalizeCustomField(
+  value: unknown,
+  defaultLanguage: string,
+  options?: TV3LanguageNormalizationOptions
+): unknown {
+  const normalized = normalizeToggleInput(value, defaultLanguage, options);
+  if (!isPlainObject(normalized) || !Array.isArray(normalized.options)) {
+    return normalized;
+  }
+  return {
+    ...normalized,
+    options: normalized.options.map((option) =>
+      normalizePublicI18nFields(option, defaultLanguage, ["label"], options)
+    ),
+  };
 }
 
 function normalizeBlock(
@@ -503,8 +530,11 @@ const ALL_ELEMENT_EXTRA_KEYS = new Set([
   "company",
   "country",
   "ctaButtonLabel",
+  "customFields",
+  "dateKind",
   "displayType",
   "email",
+  "fieldOrder",
   "firstName",
   "format",
   "html",
@@ -516,9 +546,12 @@ const ALL_ELEMENT_EXTRA_KEYS = new Set([
   "longAnswer",
   "lowerLabel",
   "maxSizeInMB",
+  "name",
+  "organization",
   "otherOptionPlaceholder",
   "phone",
   "placeholder",
+  "prefillFrom",
   "rows",
   "shuffleOption",
   "state",
@@ -528,8 +561,12 @@ const ALL_ELEMENT_EXTRA_KEYS = new Set([
 ]);
 const ELEMENT_KEYS = new Set([...ELEMENT_BASE_KEYS, ...ALL_ELEMENT_EXTRA_KEYS]);
 const ELEMENT_KEYS_BY_TYPE = {
+  // ASLA fork fields (PRD Must 13): address name/organization, contact-info custom fields and field
+  // order, date month/year, multiple-choice columns, matrix Other row, open-text pre-fill.
   address: new Set([
     ...ELEMENT_BASE_KEYS,
+    "name",
+    "organization",
     "addressLine1",
     "addressLine2",
     "city",
@@ -548,11 +585,13 @@ const ELEMENT_KEYS_BY_TYPE = {
     "email",
     "phone",
     "company",
+    "customFields",
+    "fieldOrder",
     "validation",
   ]),
   csat: new Set([...ELEMENT_BASE_KEYS, "scale", "range", "lowerLabel", "upperLabel", "isColorCodingEnabled"]),
   cta: new Set([...ELEMENT_BASE_KEYS, "buttonExternal", "buttonUrl", "ctaButtonLabel"]),
-  date: new Set([...ELEMENT_BASE_KEYS, "html", "format", "validation"]),
+  date: new Set([...ELEMENT_BASE_KEYS, "html", "format", "dateKind", "validation"]),
   fileUpload: new Set([
     ...ELEMENT_BASE_KEYS,
     "allowMultipleFiles",
@@ -560,7 +599,14 @@ const ELEMENT_KEYS_BY_TYPE = {
     "allowedFileExtensions",
     "validation",
   ]),
-  matrix: new Set([...ELEMENT_BASE_KEYS, "rows", "columns", "shuffleOption", "validation"]),
+  matrix: new Set([
+    ...ELEMENT_BASE_KEYS,
+    "rows",
+    "columns",
+    "shuffleOption",
+    "otherOptionPlaceholder",
+    "validation",
+  ]),
   multipleChoiceMulti: new Set([
     ...ELEMENT_BASE_KEYS,
     "choices",
@@ -568,6 +614,7 @@ const ELEMENT_KEYS_BY_TYPE = {
     "otherOptionPlaceholder",
     "validation",
     "displayType",
+    "columns",
   ]),
   multipleChoiceSingle: new Set([
     ...ELEMENT_BASE_KEYS,
@@ -575,6 +622,7 @@ const ELEMENT_KEYS_BY_TYPE = {
     "shuffleOption",
     "otherOptionPlaceholder",
     "displayType",
+    "columns",
   ]),
   nps: new Set([...ELEMENT_BASE_KEYS, "lowerLabel", "upperLabel", "isColorCodingEnabled"]),
   openText: new Set([
@@ -584,6 +632,7 @@ const ELEMENT_KEYS_BY_TYPE = {
     "inputType",
     "insightsEnabled",
     "charLimit",
+    "prefillFrom",
     "validation",
   ]),
   pictureSelection: new Set([...ELEMENT_BASE_KEYS, "allowMulti", "choices", "validation"]),
@@ -610,7 +659,19 @@ function isElementTypeWithStrictKeys(type: string): type is ElementTypeWithStric
 }
 const LABEL_CHOICE_KEYS = new Set(["id", "label"]);
 const PICTURE_CHOICE_KEYS = new Set(["id", "imageUrl", "imageAltText"]);
-const TOGGLE_INPUT_KEYS = new Set(["show", "required", "placeholder"]);
+const TOGGLE_INPUT_KEYS = new Set(["show", "required", "placeholder", "prefillFrom"]);
+const CUSTOM_FIELD_KEYS = new Set([
+  "id",
+  "label",
+  "type",
+  "show",
+  "required",
+  "placeholder",
+  "prefillFrom",
+  "options",
+  "presetId",
+]);
+const CUSTOM_FIELD_OPTION_KEYS = new Set(["id", "label"]);
 const CHAR_LIMIT_KEYS = new Set(["enabled", "min", "max"]);
 const VALIDATION_KEYS = new Set(["rules", "logic"]);
 const VALIDATION_RULE_KEYS = new Set(["id", "type", "params", "field"]);
@@ -917,6 +978,35 @@ function validateElement(
     value.columns.forEach((column, index) =>
       validateChoice(column, `${path}.columns.${index}`, issues, defaultLanguage, LABEL_CHOICE_KEYS, options)
     );
+  }
+
+  if (Array.isArray(value.customFields)) {
+    value.customFields.forEach((customField, index) =>
+      validateCustomField(customField, `${path}.customFields.${index}`, issues, defaultLanguage, options)
+    );
+  }
+}
+
+function validateCustomField(
+  value: unknown,
+  path: string,
+  issues: InvalidParam[],
+  defaultLanguage: string | null,
+  options?: TV3LanguageCompatibilityOptions
+): void {
+  addUnknownKeyIssues(value, CUSTOM_FIELD_KEYS, path, issues, "contactInfo custom field");
+  if (!isPlainObject(value)) {
+    return;
+  }
+  validateTranslatableField(value.placeholder, `${path}.placeholder`, issues, defaultLanguage, options);
+  if (Array.isArray(value.options)) {
+    value.options.forEach((option, index) => {
+      const optionPath = `${path}.options.${index}`;
+      addUnknownKeyIssues(option, CUSTOM_FIELD_OPTION_KEYS, optionPath, issues, "custom field option");
+      if (isPlainObject(option)) {
+        validateTranslatableField(option.label, `${optionPath}.label`, issues, defaultLanguage, options);
+      }
+    });
   }
 }
 
