@@ -15,6 +15,7 @@ import {
   SMTP_PASSWORD,
   SMTP_PORT,
   SMTP_REJECT_UNAUTHORIZED_TLS,
+  SMTP_REQUIRE_TLS,
   SMTP_SECURE_ENABLED,
   SMTP_USER,
 } from "@/lib/constants";
@@ -103,6 +104,7 @@ export const sendEmail = async ({ emailType, ...emailData }: SendEmailDataProps)
       host: SMTP_HOST,
       port: Number.parseInt(SMTP_PORT ?? "", 10),
       secure: SMTP_SECURE_ENABLED,
+      requireTLS: SMTP_REQUIRE_TLS && !SMTP_SECURE_ENABLED,
       ...(SMTP_AUTHENTICATED
         ? {
             auth: {
