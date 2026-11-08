@@ -103,7 +103,7 @@ catalog:
   i18next-icu: 2.4.3
   react-i18next: 16.5.8
   # --- server runtime ---
-  zod: 4.3.6
+  zod: 4.6.6
   zod-openapi: 5.4.6
   "@prisma/client": 7.10.0
   # redis 5.x. apps/web was on 4.7.1 while @formbricks/cache was on 5.11.0, and because
@@ -238,8 +238,9 @@ overrides:
   # fe80::/10. Both are patched in 10.5.1.
   # GHSA-h3mg-xc3c-68pw and GHSA-j6r3-76f7-8jcv: further ip-address findings, affecting <=10.7.0 and patched
   # in 10.7.1, which is the lowest version that closes every advisory (raises the pin from 10.3.1).
+  # ENG-6679 / GHSA-rxp7-6hxx-x8q5: Address6 matches a zone identifier in quadratic time; patched in 10.7.4.
   # load-bearing: socks and express-rate-limit resolve vulnerable 10.x versions.
-  ip-address@10: 10.7.1
+  ip-address@10: 10.7.5
   # ENG-2403 / GHSA-2v37-7h3g-55p8 (CVE-2026-67213): nanoid <3.3.18 customAlphabet/customRandom loop
   # indefinitely when called with size 0 (DoS). Raises the 3.x pin from 3.3.17 to 3.3.18 (still <4).
   # load-bearing: postcss resolves 3.3.17.
@@ -297,13 +298,15 @@ overrides:
   # GHSA-4cwx-7wf7-3272, GHSA-8xcm-r25x-g524, GHSA-jr45-8vmc-qm54,
   # GHSA-m8rv-5g2x-5cg5 and GHSA-v3r7-h72x-cjcm: undici request handling findings are patched
   # in 6.28.0 and 7.29.0 respectively.
+  # ENG-6717 / GHSA-xjj6-f33q-929c, GHSA-2m5v-pch6-74hx, GHSA-qrxm-fqhp-jwvm, GHSA-9fm3-97px-rjf6 and
+  # GHSA-4w7w-5xrc-9h26: content-encoding, TLS-option, renegotiation, WebSocket PONG and cross-origin
+  # redirect cache findings; patched in 6.29.1 and 7.30.1.
   # ENG-3440 / ENG-3441 / GHSA-3wwx-pv8p-q78v (CVE-2026-85024): undici >=7.28.0 <7.29.1 crashes the process
   # on a malformed permessage-deflate WebSocket message after the size limit is crossed; patched in 7.29.1
   # (7.x). The same advisory also covers 6.x from 6.25.0, together with GHSA-rfgv-xxqx-mfg5 and
   # GHSA-r53p-7pc4-xj5r (<6.28.1), so the 6.x pin rises from 6.28.0 to 6.28.1.
   # load-bearing: @redocly resolves the vulnerable 6.x line; apps/web uses the 7.x line directly.
   undici@6: 6.29.1
-  # undici >=7.0.0 <7.30.1: 2 high + 2 moderate request-handling advisories (pnpm audit), patched in 7.30.1 (fb-bm6-ud7).
   undici@7: 7.30.1
   # === Dependabot security batch (ENG-1988..ENG-1999) ===
   # ENG-1999 / ENG-1989 / GHSA-f88m-g3jw-g9cj: sharp <0.35.0 inherits libvips vulnerabilities
@@ -465,7 +468,7 @@ overrides:
   # === Closed by ENG-2343 (kept as a record, like the section above) ===
   # GHSA-p2fr-6hmx-4528 (@better-auth/oauth-provider RFC 8707 resource-indicator confusion) was carried
   # here as an accepted risk for as long as the only patched line was a pre-release. It is fixed as of
-  # better-auth 1.7.0 stable, which this workspace now pins, so `pnpm audit` no longer reports it and
+  # better-auth 1.7.0 stable (the workspace is on 1.7.7 now), so `pnpm audit` no longer reports it and
   # the ~50 lines of justification that used to sit here are gone with it. What replaced them is real
   # enforcement: the AS binds each token to the resources the authorization actually approved.
   #
@@ -514,10 +517,10 @@ minimumReleaseAgeExclude:
 # finish (including the provider's database hooks); its existing lazy resource lookup retries the seed.
 # Remove this version-pinned patch once upstream defers or safely handles eager seed failures.
 patchedDependencies:
-  "@better-auth/oauth-provider@1.7.0": patches/@better-auth__oauth-provider@1.7.0.patch
+  "@better-auth/oauth-provider@1.7.7": patches/@better-auth__oauth-provider@1.7.7.patch
   # ENG-2559: a failed secondary-storage session read bypasses Better Auth's configured database
   # fallback. Remove this version-pinned patch once upstream handles Redis read failures here.
-  "better-auth@1.7.0": patches/better-auth@1.7.0.patch
+  "better-auth@1.7.7": patches/better-auth@1.7.7.patch
   # ENG-3972 / ENG-3248: for every non-GET request the proxy matches, and for every external rewrite (the
   # PostHog /ingest proxy), Next clones the body. The clone reads the whole upload off the socket, keeps up
   # to proxyClientMaxBodySize in memory and holds the request until the client's last byte, so any
