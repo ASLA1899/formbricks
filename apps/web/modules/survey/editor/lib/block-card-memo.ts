@@ -85,7 +85,7 @@ const getCandidateIds = (value: object): readonly string[] => {
   const cached = candidateIdsCache.get(value);
   if (cached) return cached;
   const ids = [...getNestedStrings(value)].flatMap((text) =>
-    text.includes("#recall:") ? extractIds(text) : [text]
+    text.includes("#recall:") ? extractIds(text).map((id) => id.split(".")[0]) : [text]
   );
   candidateIdsCache.set(value, ids);
   return ids;

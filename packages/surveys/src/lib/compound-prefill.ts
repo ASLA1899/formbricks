@@ -95,3 +95,16 @@ export function getBlockPrefill(
   if (Object.keys(configured).length === 0) return urlPrefill;
   return { ...configured, ...urlPrefill };
 }
+
+/**
+ * Whether every element in a block has a URL pre-fill value, which is what lets `skipPrefilled`
+ * auto-submit the block. Configured (`prefillFrom`) values are deliberately not counted: they are
+ * suggestions for the respondent to confirm, and counting them would skip required fields unseen.
+ */
+export function isBlockFullyUrlPrefilled(
+  blockElements: TSurveyElement[],
+  urlPrefill: TResponseData | undefined
+): boolean {
+  if (!urlPrefill || blockElements.length === 0) return false;
+  return blockElements.every((element) => urlPrefill[element.id] !== undefined);
+}

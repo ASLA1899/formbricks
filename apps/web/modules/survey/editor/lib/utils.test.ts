@@ -12,6 +12,7 @@ import {
   getConditionOperatorOptions,
   getConditionValueOptions,
   getMatchValueProps,
+  isUsedInRecall,
 } from "./utils";
 
 /**
@@ -580,5 +581,32 @@ describe("operators that take no right-hand side", () => {
     expect(getMatchValueProps(condition({ type: "hiddenField", value: "plan" }, operator), typed, t)).toEqual(
       { show: false, options: [] }
     );
+  });
+});
+
+describe("isUsedInRecall", () => {
+  const surveyRecalling = (headline: string) =>
+    ({
+      welcomeCard: { enabled: false },
+      blocks: [
+        {
+          id: "b1",
+          name: "Block",
+          elements: [
+            { id: "ci", type: "contactInfo", headline: { default: "Contact" } },
+            { id: "q2", type: "openText", headline: { default: headline } },
+          ],
+        },
+      ],
+      endings: [],
+    }) as unknown as TSurvey;
+
+  test("finds a sub-field recall of a compound element (ASLA fork)", () => {
+    expect(isUsedInRecall(surveyRecalling("Hi #recall:ci.firstName/fallback:there#"), "ci")).toBe(1);
+  });
+
+  test("finds a plain recall and ignores an id that only shares a prefix", () => {
+    expect(isUsedInRecall(surveyRecalling("Hi #recall:ci/fallback:there#"), "ci")).toBe(1);
+    expect(isUsedInRecall(surveyRecalling("Hi #recall:ci2.firstName/fallback:there#"), "ci")).toBe(-1);
   });
 });

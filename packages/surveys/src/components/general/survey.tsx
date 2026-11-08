@@ -1443,6 +1443,7 @@ export function Survey({
                 recallValues,
                 offset === 0 ? prefillResponseData : undefined
               )}
+              urlPrefilledResponseData={offset === 0 ? prefillResponseData : undefined}
               isLastBlock={block.id === localSurvey.blocks[localSurvey.blocks.length - 1].id}
               languageCode={selectedLanguage}
               autoFocusEnabled={autoFocusEnabled}

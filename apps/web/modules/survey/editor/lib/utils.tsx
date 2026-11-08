@@ -1320,9 +1320,7 @@ const checkEndingCardsForRecall = (endings: TSurveyEndings | undefined, recallPa
   });
 };
 
-export const isUsedInRecall = (survey: TSurvey, id: string): number => {
-  const recallPattern = `#recall:${id}/fallback:`;
-
+const findRecallUsage = (survey: TSurvey, recallPattern: string): number => {
   // Check welcome card
   if (checkWelcomeCardForRecall(survey.welcomeCard, recallPattern)) {
     return -2; // Special index for welcome card
@@ -1341,6 +1339,12 @@ export const isUsedInRecall = (survey: TSurvey, id: string): number => {
   }
 
   return -1; // Not found
+};
+
+export const isUsedInRecall = (survey: TSurvey, id: string): number => {
+  // ASLA fork: a sub-field token (`#recall:<id>.firstName/fallback:`) also depends on the element.
+  const plain = findRecallUsage(survey, `#recall:${id}/fallback:`);
+  return plain === -1 ? findRecallUsage(survey, `#recall:${id}.`) : plain;
 };
 
 /**

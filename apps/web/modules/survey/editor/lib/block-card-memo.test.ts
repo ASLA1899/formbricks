@@ -100,6 +100,17 @@ describe("areBlockCardPropsEqual", () => {
     expect(areBlockCardPropsEqual(propsFor(survey, "b"), propsFor(next, "b"))).toBe(false);
   });
 
+  test("re-renders a block that recalls a sub-field of the edited element (ASLA fork)", () => {
+    const survey = makeSurvey([
+      block("a", [element("qa1", "Contact?")]),
+      block("b", [element("qb1", "Hi #recall:qa1.firstName/fallback:you#")]),
+    ]);
+    const next = typeHeadline(survey, "a", "qa1", "Your contact details?");
+
+    expect(getReferencedElementIds(survey, survey.blocks[1])).toContain("qa1");
+    expect(areBlockCardPropsEqual(propsFor(survey, "b"), propsFor(next, "b"))).toBe(false);
+  });
+
   test("re-renders every block when an ending card recalls the edited element", () => {
     const survey = makeSurvey(base.blocks, [
       { id: "end", headline: { default: "Thanks #recall:qa1/fallback:x#" } },

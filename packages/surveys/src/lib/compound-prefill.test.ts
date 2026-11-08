@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 import { TSurveyElement } from "@formbricks/types/surveys/elements";
-import { computeConfiguredPrefill, getBlockPrefill, resolvePrefillSource } from "./compound-prefill";
+import {
+  computeConfiguredPrefill,
+  getBlockPrefill,
+  isBlockFullyUrlPrefilled,
+  resolvePrefillSource,
+} from "./compound-prefill";
 
 const toggle = (prefillFrom?: string) => ({
   show: true,
@@ -111,5 +116,19 @@ describe("getBlockPrefill", () => {
     const url = { x: "1" };
     expect(getBlockPrefill([], data, url)).toBe(url);
     expect(getBlockPrefill([], data, undefined)).toBeUndefined();
+  });
+});
+
+describe("isBlockFullyUrlPrefilled", () => {
+  test("a block filled only by configured pre-fill is never auto-skipped", () => {
+    const merged = getBlockPrefill([openText], data, undefined);
+    expect(merged).toEqual({ ot: "Lovelace" });
+    expect(isBlockFullyUrlPrefilled([openText], undefined)).toBe(false);
+    expect(isBlockFullyUrlPrefilled([openText, contactInfo], { ot: "from-url" })).toBe(false);
+  });
+
+  test("skips only when the URL pre-fills every element", () => {
+    expect(isBlockFullyUrlPrefilled([openText], { ot: "from-url" })).toBe(true);
+    expect(isBlockFullyUrlPrefilled([], { ot: "from-url" })).toBe(false);
   });
 });
