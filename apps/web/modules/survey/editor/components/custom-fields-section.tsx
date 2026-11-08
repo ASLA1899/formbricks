@@ -3,6 +3,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { type JSX, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CONTACT_FIELD_PRESETS } from "@formbricks/types/surveys/contact-field-presets";
 import { resolveContactInfoFieldOrder } from "@formbricks/types/surveys/contact-info-response";
 import { TCustomField, TSurveyContactInfoElement } from "@formbricks/types/surveys/elements";
@@ -10,6 +11,7 @@ import { TSurvey } from "@formbricks/types/surveys/types";
 import { TUserLocale } from "@formbricks/types/user";
 import { createI18nString, extractLanguageCodes } from "@/lib/i18n/utils";
 import { ElementFormInput } from "@/modules/survey/components/element-form-input";
+import { PrefillFromSelect } from "@/modules/survey/editor/components/prefill-from-select";
 import { Button } from "@/modules/ui/components/button";
 import { Input } from "@/modules/ui/components/input";
 import {
@@ -59,6 +61,7 @@ export const CustomFieldsSection = ({
   locale,
   isStorageConfigured,
 }: CustomFieldsSectionProps): JSX.Element => {
+  const { t } = useTranslation();
   const surveyLanguageCodes = extractLanguageCodes(localSurvey.languages ?? []);
   const customFields = element.customFields ?? [];
   const [newOptionTexts, setNewOptionTexts] = useState<Record<string, string>>({});
@@ -293,6 +296,20 @@ export const CustomFieldsSection = ({
                   }}
                   locale={locale}
                   isStorageConfigured={isStorageConfigured}
+                />
+              </div>
+
+              {/* Row 3: Pre-fill from an earlier answer or hidden field */}
+              <div className="mt-2">
+                <p className="mb-1 text-xs font-medium text-slate-600">
+                  {t("workspace.surveys.edit.prefill_from")}
+                </p>
+                <PrefillFromSelect
+                  localSurvey={localSurvey}
+                  elementId={element.id}
+                  value={field.prefillFrom}
+                  onChange={(prefillFrom) => updateCustomField(field.id, { prefillFrom })}
+                  className="h-8 text-xs"
                 />
               </div>
 

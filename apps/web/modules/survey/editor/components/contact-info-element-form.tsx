@@ -44,26 +44,31 @@ export const ContactInfoElementForm = ({
       id: "firstName",
       label: t("workspace.surveys.edit.first_name"),
       ...element.firstName,
+      prefillFrom: element.firstName.prefillFrom,
     },
     {
       id: "lastName",
       label: t("workspace.surveys.edit.last_name"),
       ...element.lastName,
+      prefillFrom: element.lastName.prefillFrom,
     },
     {
       id: "email",
       label: t("common.email"),
       ...element.email,
+      prefillFrom: element.email.prefillFrom,
     },
     {
       id: "phone",
       label: t("common.phone"),
       ...element.phone,
+      prefillFrom: element.phone.prefillFrom,
     },
     {
       id: "company",
       label: t("workspace.surveys.edit.company"),
       ...element.company,
+      prefillFrom: element.company.prefillFrom,
     },
   ];
 
@@ -146,6 +151,7 @@ export const ContactInfoElementForm = ({
         )}
 
         <ElementToggleTable
+          elementId={element.id}
           type="contact"
           fields={fields}
           localSurvey={localSurvey}

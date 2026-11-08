@@ -17,6 +17,7 @@ import {
   shouldHideSubmitButtonForAutoProgress,
   shouldTriggerAutoProgress,
 } from "@/lib/auto-progress";
+import { isBlockFullyUrlPrefilled } from "@/lib/compound-prefill";
 import { getLocalizedValue } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { getFirstErrorMessage, validateBlockResponses } from "@/lib/validation/evaluator";
@@ -73,6 +74,8 @@ interface BlockConditionalProps {
   isLastBlock: boolean;
   languageCode: string;
   prefilledResponseData?: TResponseData;
+  /** URL pre-fill only; decides the `skipPrefilled` auto-submit. Configured pre-fill never skips a block. */
+  urlPrefilledResponseData?: TResponseData;
   skipPrefilled?: boolean;
   ttc: TResponseTtc;
   setTtc: (ttc: TResponseTtc) => void;
@@ -104,6 +107,7 @@ export function BlockConditional({
   isLastBlock,
   languageCode,
   prefilledResponseData,
+  urlPrefilledResponseData,
   skipPrefilled,
   ttc,
   setTtc,
@@ -239,11 +243,7 @@ export function BlockConditional({
 
         // If skipPrefilled and ALL elements are prefilled, auto-submit
         if (skipPrefilled) {
-          const allElementsPrefilled = block.elements.every(
-            (element) => prefilledResponseData[element.id] !== undefined
-          );
-
-          if (allElementsPrefilled) {
+          if (isBlockFullyUrlPrefilled(block.elements, urlPrefilledResponseData)) {
             const prefilledTtc: TResponseTtc = {};
             block.elements.forEach((element) => {
               prefilledTtc[element.id] = 0; // 0 TTC for prefilled/skipped questions

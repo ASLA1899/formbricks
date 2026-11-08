@@ -13,9 +13,11 @@ import { TSurvey } from "@formbricks/types/surveys/types";
 import { TUserLocale } from "@formbricks/types/user";
 import { createI18nString, extractLanguageCodes } from "@/lib/i18n/utils";
 import { ElementFormInput } from "@/modules/survey/components/element-form-input";
+import { PrefillFromSelect } from "@/modules/survey/editor/components/prefill-from-select";
 import { ValidationRulesEditor } from "@/modules/survey/editor/components/validation-rules-editor";
 import { AdvancedOptionToggle } from "@/modules/ui/components/advanced-option-toggle";
 import { Button } from "@/modules/ui/components/button";
+import { Label } from "@/modules/ui/components/label";
 
 interface OpenElementFormProps {
   localSurvey: TSurvey;
@@ -112,6 +114,18 @@ export const OpenElementForm = ({
           label={t("common.placeholder")}
           locale={locale}
           isStorageConfigured={isStorageConfigured}
+        />
+      </div>
+
+      <div className="mt-3">
+        <Label htmlFor={`prefillFrom-${element.id}`}>{t("workspace.surveys.edit.prefill_from")}</Label>
+        <PrefillFromSelect
+          id={`prefillFrom-${element.id}`}
+          localSurvey={localSurvey}
+          elementId={element.id}
+          value={element.prefillFrom}
+          onChange={(prefillFrom) => updateElement(elementIdx, { prefillFrom })}
+          className="mt-1"
         />
       </div>
 

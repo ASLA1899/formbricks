@@ -6,6 +6,7 @@ import {
 import { type TI18nString } from "@formbricks/types/i18n";
 import { TResponseData, TResponseDataValue, TResponseVariables } from "@formbricks/types/responses";
 import { formatFieldNameToTitleCase } from "@formbricks/types/safe-identifier";
+import { COMPOUND_FIELD_LABELS, getCompoundSubFieldValue } from "@formbricks/types/surveys/compound-fields";
 import { TSurveyElement } from "@formbricks/types/surveys/elements";
 import { TSurvey, TSurveyRecallItem } from "@formbricks/types/surveys/types";
 import { getTextContent } from "@formbricks/types/surveys/validation";
@@ -20,7 +21,7 @@ export interface fallbacks {
 
 // Extracts the ID of recall question from a string containing the "recall" pattern.
 export const extractId = (text: string): string | null => {
-  const pattern = /#recall:([A-Za-z0-9_-]+)/;
+  const pattern = /#recall:([A-Za-z0-9_.-]+)/;
   const match = text.match(pattern);
   if (match && match[1]) {
     return match[1];
@@ -36,7 +37,7 @@ const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // token still names the element it points at. Callers that need the id of a token the rest of the
 // codebase will actually render want `extractCompleteRecallIds` instead.
 export const extractIds = (text: string): string[] => {
-  const pattern = /#recall:([A-Za-z0-9_-]+)/g;
+  const pattern = /#recall:([A-Za-z0-9_.-]+)/g;
   const matches = Array.from(text.matchAll(pattern));
   return matches.map((match) => match[1]).filter((id) => id !== null);
 };
@@ -52,7 +53,7 @@ export const extractIds = (text: string): string[] => {
  * the rendered text and re-entered its own effect without bound.
  */
 export const extractCompleteRecallIds = (text: string): string[] => {
-  const pattern = /#recall:([A-Za-z0-9_-]+)\/fallback:[^#]*#/g;
+  const pattern = /#recall:([A-Za-z0-9_.-]+)\/fallback:[^#]*#/g;
   return Array.from(text.matchAll(pattern), (match) => match[1]);
 };
 
@@ -74,7 +75,7 @@ export const extractFallbackValue = (text: string): string => {
 
 // Extracts the complete recall information (ID and fallback) from a headline string.
 export const extractRecallInfo = (headline: string, id?: string): string | null => {
-  const idPattern = id ? escapeRegExp(id) : "[A-Za-z0-9_-]+";
+  const idPattern = id ? escapeRegExp(id) : "[A-Za-z0-9_.-]+";
   const pattern = new RegExp(`#recall:(${idPattern})\\/fallback:([^#]*)#`);
   const match = headline.match(pattern);
   return match ? match[0] : null;
@@ -119,6 +120,16 @@ const resolveRecallItemLabel = (
   languageCode: string,
   embeddedFields: TLinkedEmbeddedField[]
 ): string | undefined => {
+  // Sub-field recall IDs (e.g. "questionId.firstName") label as "Question > Field".
+  if (recallItemId.includes(".")) {
+    const [baseId, fieldName] = recallItemId.split(".", 2);
+    const baseElement = elements.find((question) => question.id === baseId);
+    if (!baseElement) return undefined;
+    const headline = getLocalizedValue(baseElement.headline, languageCode);
+    const questionLabel = headline ? getTextContent(headline) : baseId;
+    return `${questionLabel} > ${COMPOUND_FIELD_LABELS[fieldName] || fieldName}`;
+  }
+
   // Precedence is load-bearing and unchanged: ingested first, then elements, then computed — so a
   // storage key that also matches an element id keeps resolving the way it does today.
   const ingestedField = findEmbeddedField(embeddedFields, recallItemId, "ingested");
@@ -248,9 +259,13 @@ export const getRecallItems = (text: string, survey: TSurvey, languageCode: stri
   const elements = getElementsFromBlocks(survey.blocks);
   let recallItems: TSurveyRecallItem[] = [];
   ids.forEach((recallItemId) => {
-    const isHiddenField = findEmbeddedField(embeddedFields, recallItemId, "ingested");
-    const isSurveyQuestion = elements.some((question) => question.id === recallItemId);
-    const isVariable = findEmbeddedField(embeddedFields, recallItemId, "computed");
+    // Sub-field recall IDs look like "questionId.firstName"; type them by their base element.
+    const isSubField = recallItemId.includes(".");
+    const baseId = isSubField ? recallItemId.split(".", 2)[0] : recallItemId;
+
+    const isHiddenField = !isSubField && findEmbeddedField(embeddedFields, recallItemId, "ingested");
+    const isSurveyQuestion = elements.some((question) => question.id === baseId);
+    const isVariable = !isSubField && findEmbeddedField(embeddedFields, recallItemId, "computed");
 
     const recallItemLabel = resolveRecallItemLabel(recallItemId, elements, languageCode, embeddedFields);
 
@@ -283,7 +298,7 @@ export const getRecallItems = (text: string, survey: TSurvey, languageCode: stri
 // Constructs a fallbacks object from a text containing multiple recall and fallback patterns.
 export const getFallbackValues = (text: string): fallbacks => {
   if (!text.includes("#recall:")) return {};
-  const pattern = /#recall:([A-Za-z0-9_-]+)\/fallback:([^#]*)#/g;
+  const pattern = /#recall:([A-Za-z0-9_.-]+)\/fallback:([^#]*)#/g;
   let match;
   const fallbacks: fallbacks = {};
 
@@ -386,8 +401,13 @@ export const parseRecallInfo = (
     const fallback = extractFallbackValue(recallInfo).replaceAll("nbsp", " ");
     let value: TResponseDataValue | undefined;
 
+    // Handle sub-field recall IDs (e.g., "questionId.firstName")
+    if (recallItemId.includes(".")) {
+      const [baseId, fieldName] = recallItemId.split(".", 2);
+      value = getCompoundSubFieldValue(responseData?.[baseId], fieldName);
+    }
     // First check if it matches a variable
-    if (variables && variableIds.includes(recallItemId)) {
+    else if (variables && variableIds.includes(recallItemId)) {
       value = variables[recallItemId];
     }
     // Then check if it matches response data

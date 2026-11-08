@@ -63,31 +63,37 @@ export const AddressElementForm = ({
       id: "addressLine1",
       label: t("workspace.surveys.edit.address_line_1"),
       ...element.addressLine1,
+      prefillFrom: element.addressLine1.prefillFrom,
     },
     {
       id: "addressLine2",
       label: t("workspace.surveys.edit.address_line_2"),
       ...element.addressLine2,
+      prefillFrom: element.addressLine2.prefillFrom,
     },
     {
       id: "city",
       label: t("workspace.surveys.edit.city"),
       ...element.city,
+      prefillFrom: element.city.prefillFrom,
     },
     {
       id: "state",
       label: t("workspace.surveys.edit.state"),
       ...element.state,
+      prefillFrom: element.state.prefillFrom,
     },
     {
       id: "zip",
       label: t("workspace.surveys.edit.zip"),
       ...element.zip,
+      prefillFrom: element.zip.prefillFrom,
     },
     {
       id: "country",
       label: t("workspace.surveys.edit.country"),
       ...element.country,
+      prefillFrom: element.country.prefillFrom,
     },
   ];
 
@@ -173,6 +179,7 @@ export const AddressElementForm = ({
         )}
 
         <ElementToggleTable
+          elementId={element.id}
           type="address"
           fields={fields}
           localSurvey={localSurvey}

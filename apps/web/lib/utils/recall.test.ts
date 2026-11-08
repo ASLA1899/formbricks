@@ -707,6 +707,23 @@ describe("recall utility functions", () => {
   });
 
   describe("parseRecallInfo", () => {
+    test("pipes contact-info (object, custom field) and address (array) sub-fields", () => {
+      const responseData: TResponseData = {
+        ci: { firstName: "Ada", cf_city: "Chicago" },
+        addr: ["1 Main", "", "Denver", "CO", "80202", "US", "Ada", "ASLA"],
+      };
+      expect(parseRecallInfo("#recall:ci.firstName/fallback:x#", responseData)).toBe("Ada");
+      expect(parseRecallInfo("#recall:ci.cf_city/fallback:x#", responseData)).toBe("Chicago");
+      expect(parseRecallInfo("#recall:addr.city/fallback:x#", responseData)).toBe("Denver");
+      expect(parseRecallInfo("#recall:addr.organization/fallback:x#", responseData)).toBe("ASLA");
+    });
+
+    test("uses the fallback for an empty or unknown sub-field", () => {
+      const responseData: TResponseData = { ci: { firstName: "" } };
+      expect(parseRecallInfo("#recall:ci.firstName/fallback:friend#", responseData)).toBe("friend");
+      expect(parseRecallInfo("#recall:ci.lastName/fallback:friend#", responseData)).toBe("friend");
+    });
+
     test("replaces recall info with response data", () => {
       const text = "Your answer was #recall:q1/fallback:not-provided#";
       const responseData: TResponseData = {

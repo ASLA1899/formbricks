@@ -46,6 +46,7 @@ import { StackedCardsContainer } from "@/components/wrappers/stacked-cards-conta
 import { ApiClient } from "@/lib/api-client";
 import { advanceFromBlock } from "@/lib/block-flow";
 import { type TWebSurveyMeta, createWebSurveyMetaSnapshot } from "@/lib/browser-context";
+import { getBlockPrefill } from "@/lib/compound-prefill";
 import { getLocalizedValue } from "@/lib/i18n";
 import { INGEST_DROP_MESSAGES, logIngestResult } from "@/lib/ingest-logging";
 import {
@@ -232,9 +233,7 @@ export function Survey({
       })),
     };
   };
-  const [localSurvey, setlocalSurvey] = useState<TJsWorkspaceStateSurvey>(() =>
-    applyResumedRequired(survey)
-  );
+  const [localSurvey, setlocalSurvey] = useState<TJsWorkspaceStateSurvey>(() => applyResumedRequired(survey));
   const [currentVariables, setCurrentVariables] = useState<TResponseVariables>({});
 
   const isLinkSurvey = survey.type === "link";
@@ -1439,7 +1438,12 @@ export function Survey({
               onFileUpload={onFileUpload}
               isFirstBlock={block.id === localSurvey.blocks[0]?.id}
               skipPrefilled={skipPrefilled && !isNavigatingBackRef.current}
-              prefilledResponseData={offset === 0 ? prefillResponseData : undefined}
+              prefilledResponseData={getBlockPrefill(
+                block.elements,
+                recallValues,
+                offset === 0 ? prefillResponseData : undefined
+              )}
+              urlPrefilledResponseData={offset === 0 ? prefillResponseData : undefined}
               isLastBlock={block.id === localSurvey.blocks[localSurvey.blocks.length - 1].id}
               languageCode={selectedLanguage}
               autoFocusEnabled={autoFocusEnabled}

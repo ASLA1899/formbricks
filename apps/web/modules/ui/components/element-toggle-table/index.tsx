@@ -6,6 +6,7 @@ import { TSurveyElement } from "@formbricks/types/surveys/elements";
 import { TSurvey } from "@formbricks/types/surveys/types";
 import { TUserLocale } from "@formbricks/types/user";
 import { ElementFormInput } from "@/modules/survey/components/element-form-input";
+import { PrefillFromSelect } from "@/modules/survey/editor/components/prefill-from-select";
 import { Switch } from "@/modules/ui/components/switch";
 
 interface ElementToggleTableProps {
@@ -16,8 +17,10 @@ interface ElementToggleTableProps {
     id: string;
     label: string;
     placeholder: TI18nString;
+    prefillFrom?: string;
   }[];
   localSurvey: TSurvey;
+  elementId: string;
   elementIdx: number;
   isInvalid: boolean;
   updateElement: (elementIdx: number, updatedAttributes: Partial<TSurveyElement>) => void;
@@ -29,6 +32,7 @@ export const ElementToggleTable = ({
   type,
   fields,
   localSurvey,
+  elementId,
   elementIdx,
   isInvalid,
   updateElement,
@@ -36,7 +40,7 @@ export const ElementToggleTable = ({
   isStorageConfigured,
 }: ElementToggleTableProps) => {
   const onShowToggle = (
-    field: { id: string; show: boolean; required: boolean; placeholder: TI18nString },
+    field: { id: string; show: boolean; required: boolean; placeholder: TI18nString; prefillFrom?: string },
     show: boolean
   ) => {
     updateElement(elementIdx, {
@@ -44,12 +48,13 @@ export const ElementToggleTable = ({
         show,
         required: field.required,
         placeholder: field.placeholder,
+        prefillFrom: field.prefillFrom,
       },
     });
   };
 
   const onRequiredToggle = (
-    field: { id: string; show: boolean; required: boolean; placeholder: TI18nString },
+    field: { id: string; show: boolean; required: boolean; placeholder: TI18nString; prefillFrom?: string },
     required: boolean
   ) => {
     updateElement(elementIdx, {
@@ -57,6 +62,21 @@ export const ElementToggleTable = ({
         show: field.show,
         required,
         placeholder: field.placeholder,
+        prefillFrom: field.prefillFrom,
+      },
+    });
+  };
+
+  const onPrefillFromChange = (
+    field: { id: string; show: boolean; required: boolean; placeholder: TI18nString },
+    prefillFrom: string | undefined
+  ) => {
+    updateElement(elementIdx, {
+      [field.id]: {
+        show: field.show,
+        required: field.required,
+        placeholder: field.placeholder,
+        prefillFrom,
       },
     });
   };
@@ -74,6 +94,7 @@ export const ElementToggleTable = ({
           <th className="w-1/6 text-sm font-semibold">{t("common.show")}</th>
           <th className="w-1/6 text-sm font-semibold">{t("workspace.surveys.edit.required")}</th>
           <th className="text-sm font-semibold">{t("common.label")}</th>
+          <th className="w-1/4 text-sm font-semibold">{t("workspace.surveys.edit.prefill_from")}</th>
         </tr>
       </thead>
       <tbody>
@@ -113,6 +134,19 @@ export const ElementToggleTable = ({
                 locale={locale}
                 isStorageConfigured={isStorageConfigured}
               />
+            </td>
+            <td className="py-2">
+              {field.show ? (
+                <PrefillFromSelect
+                  localSurvey={localSurvey}
+                  elementId={elementId}
+                  value={field.prefillFrom}
+                  onChange={(prefillFrom) => onPrefillFromChange(field, prefillFrom)}
+                  className="h-8 text-xs"
+                />
+              ) : (
+                <span className="text-xs text-slate-400">-</span>
+              )}
             </td>
           </tr>
         ))}
