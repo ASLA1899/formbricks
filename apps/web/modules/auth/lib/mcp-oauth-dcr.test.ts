@@ -617,10 +617,30 @@ describe("LibreChat connector registration vs. the real plugin (ASLA Must 1)", (
     await expect(response.json()).resolves.toMatchObject({ error: "invalid_redirect_uri" });
   });
 
-  test("a registered LibreChat client completes consent → code → token for the MCP resource", async () => {
+  // LibreChat registers as a confidential client and sends its secret in a Basic header
+  // (`token_exchange_method: basic_auth_header` in librechat.yaml); the public shape is kept as a guard.
+  test.each([
+    ["a confidential client with a Basic secret, as LibreChat runs", "client_secret_basic"],
+    ["a public client", "none"],
+  ])("a registered LibreChat client completes consent → code → token as %s", async (_label, authMethod) => {
     const auth = createAuthInstance({ withEmailPassword: true });
-    const registration = await throughRoute(auth, registrationRequest(REGISTER_PATH, LIBRECHAT_REGISTRATION));
-    const { client_id: clientId } = (await registration.json()) as { client_id: string };
+    const registration = await throughRoute(
+      auth,
+      registrationRequest(
+        REGISTER_PATH,
+        JSON.stringify({ ...JSON.parse(LIBRECHAT_REGISTRATION), token_endpoint_auth_method: authMethod })
+      )
+    );
+    expect(registration.status).toBe(201);
+    const { client_id: clientId, client_secret: clientSecret } = (await registration.json()) as {
+      client_id: string;
+      client_secret?: string;
+    };
+    if (authMethod === "none") expect(clientSecret).toBeUndefined();
+    else expect(clientSecret).toBeTruthy();
+    const clientAuthHeaders: Record<string, string> = clientSecret
+      ? { authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}` }
+      : {};
 
     const signUp = await auth.api.signUpEmail({
       body: { email: "connector-user@example.com", password: "a-long-test-password-1", name: "User" },
@@ -671,12 +691,12 @@ describe("LibreChat connector registration vs. the real plugin (ASLA Must 1)", (
     const token = await auth.handler(
       new Request(`${BASE_URL}/api/auth/oauth2/token`, {
         method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
+        headers: { "content-type": "application/x-www-form-urlencoded", ...clientAuthHeaders },
         body: new URLSearchParams({
           grant_type: "authorization_code",
           code: callback.searchParams.get("code") ?? "",
           redirect_uri: LIBRECHAT,
-          client_id: clientId,
+          ...(clientSecret ? {} : { client_id: clientId }),
           code_verifier: verifier,
           resource,
         }),
