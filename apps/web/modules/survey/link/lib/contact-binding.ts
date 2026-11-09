@@ -26,11 +26,13 @@ const CONTACT_BINDING_PAYLOAD_PREFIX = "asla.contact-binding.v1";
 
 export const CONTACT_TOKEN_PATTERN = /^[0-9a-f]{64}$/;
 
-const getSigningKey = (): string => {
+// A subkey derived from ENCRYPTION_KEY for this one purpose, so the binding never signs with the key that
+// also encrypts ids and signs the /c JWT.
+const getSigningKey = (): Buffer => {
   if (!ENCRYPTION_KEY) {
     throw new Error("ENCRYPTION_KEY is not set");
   }
-  return ENCRYPTION_KEY;
+  return createHmac("sha256", ENCRYPTION_KEY).update(CONTACT_BINDING_PAYLOAD_PREFIX).digest();
 };
 
 export const generateContactBindingToken = (surveyId: string, contactId: string): string =>

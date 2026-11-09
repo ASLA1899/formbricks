@@ -310,6 +310,13 @@ describe("POST /api/v2/client/[workspaceId]/responses — contactId without a Co
     );
   });
 
+  test("records anonymously, rather than rejecting, when the token is malformed", async () => {
+    const response = await postRawBody({ q1: 5 }, { contactId, contactToken: "NOT-HEX", finished: true });
+
+    expect(response.status).toBe(200);
+    expect(created().contactId).toBeUndefined();
+  });
+
   test("records anonymously when no token is sent", async () => {
     const response = await postRawBody({ q1: 5 }, { contactId, finished: true });
 
