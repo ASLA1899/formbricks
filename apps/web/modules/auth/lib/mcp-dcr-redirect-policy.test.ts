@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-// Hoisted so the same objects survive `vi.resetModules()`, which each test uses to get a fresh memo.
+// Hoisted so the same objects survive `vi.resetModules()`, which each test uses to get a fresh module.
 const { mockEnv, mockLogger } = vi.hoisted(() => ({
-  mockEnv: { MCP_DCR_ALLOWED_REDIRECT_URIS: undefined as string[] | undefined },
+  mockEnv: {
+    MCP_DCR_ALLOWED_REDIRECT_URIS: undefined as string[] | undefined,
+    MCP_LIBRECHAT_CALLBACK_URI: undefined as string | undefined,
+  },
   mockLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 vi.mock("@/lib/env", () => ({ env: mockEnv }));
@@ -13,181 +16,129 @@ const loadPolicy = async () => {
   return import("./mcp-dcr-redirect-policy");
 };
 
+const LIBRECHAT = "https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback";
+const LIBRECHAT_PRODUCTION = "https://chat.aslalabs.org/api/mcp/formbricks/oauth/callback";
 const CLAUDE_AI = "https://claude.ai/api/mcp/auth_callback";
-const CLAUDE_COM = "https://claude.com/api/mcp/auth_callback";
 const CHATGPT = "https://chatgpt.com/connector_platform_oauth_redirect";
+const LOOPBACK = "http://127.0.0.1:33418/callback";
 
 beforeEach(() => {
   mockEnv.MCP_DCR_ALLOWED_REDIRECT_URIS = undefined;
-  mockLogger.info.mockClear();
+  mockEnv.MCP_LIBRECHAT_CALLBACK_URI = LIBRECHAT;
+  mockLogger.warn.mockClear();
 });
 
-/**
- * ENG-3086. The redirect-URI allowlist that closes the open DCR consent-phishing hole: an anonymous
- * registration may only claim a redirect URI a remote attacker cannot receive an authorization code at.
- * `http` loopback (RFC 8252 §7.3) is the first such form.
- */
-describe("isLoopbackRedirectUri (ENG-3086)", () => {
+describe("isLoopbackRedirectUri", () => {
   test.each(["http://localhost:8080/cb", "http://127.0.0.1:1/cb", "http://[::1]:9000/cb"])(
-    "accepts %s",
+    "classifies %s as loopback",
     async (uri) => {
       const { isLoopbackRedirectUri } = await loadPolicy();
       expect(isLoopbackRedirectUri(uri)).toBe(true);
     }
   );
 
-  test.each([
-    "https://localhost:8080/cb",
-    "https://example.com/cb1",
-    "https://attacker-controlled-test.example.org/cb",
-    "http://evil.example.com/cb",
-    "com.example.app:/callback",
-    "file:///tmp/cb",
-    "not a url",
-    null,
-    42,
-  ])("rejects %s", async (uri) => {
-    const { isLoopbackRedirectUri } = await loadPolicy();
-    expect(isLoopbackRedirectUri(uri)).toBe(false);
-  });
+  test.each(["https://localhost:8080/cb", "http://evil.example.com/cb", "not a url", null, 42])(
+    "does not classify %s as loopback",
+    async (uri) => {
+      const { isLoopbackRedirectUri } = await loadPolicy();
+      expect(isLoopbackRedirectUri(uri)).toBe(false);
+    }
+  );
 });
 
-/**
- * ENG-3471. The second form: an exact hosted-connector callback. claude.ai and ChatGPT connect from the
- * vendor's cloud and register a fixed `https` callback on the vendor's own origin, so a code sent there
- * only ever reaches the vendor. Exact string match (OAuth 2.1 / RFC 9700 §4.1): any variation is a
- * different URI an attacker might control.
- */
-describe("isAllowedDcrRedirectUri (ENG-3471)", () => {
-  test.each([CLAUDE_AI, CLAUDE_COM, CHATGPT])("accepts the hosted callback %s", async (uri) => {
+/** ASLA Must 1: the allowlist is the LibreChat callback and nothing else. */
+describe("isAllowedDcrRedirectUri (ASLA Must 1)", () => {
+  test("accepts the LibreChat callback", async () => {
     const { getAllowedDcrRedirectUris, isAllowedDcrRedirectUri } = await loadPolicy();
-    expect(isAllowedDcrRedirectUri(uri, getAllowedDcrRedirectUris())).toBe(true);
-  });
-
-  test("still accepts loopback", async () => {
-    const { getAllowedDcrRedirectUris, isAllowedDcrRedirectUri } = await loadPolicy();
-    expect(isAllowedDcrRedirectUri("http://127.0.0.1:33418/callback", getAllowedDcrRedirectUris())).toBe(
-      true
-    );
+    expect(isAllowedDcrRedirectUri(LIBRECHAT, getAllowedDcrRedirectUris())).toBe(true);
   });
 
   test.each([
-    "https://claude.ai.evil.com/api/mcp/auth_callback",
-    "https://evil.claude.ai/api/mcp/auth_callback",
-    "http://claude.ai/api/mcp/auth_callback",
-    "https://claude.ai/api/mcp/auth_callback/",
-    "https://claude.ai/api/mcp/auth_callbackx",
-    "https://CLAUDE.ai/api/mcp/auth_callback",
-    "https://claude.ai:443/api/mcp/auth_callback",
-    "https://claude.ai/api/mcp/auth_callback?next=https://evil.com",
-    "https://claude.ai/api/mcp/auth_callback#x",
-    "https://claude.ai/api/mcp/other",
-    "https://claude.ai/",
-    "https://chatgpt.com/connector/oauth/abc123",
-    "https://chatgpt.com/connector_platform_oauth_redirect/../evil",
-    "https://evil.com/?https://claude.ai/api/mcp/auth_callback",
-  ])("rejects the lookalike %s", async (uri) => {
+    LOOPBACK,
+    "http://localhost:8080/cb",
+    CLAUDE_AI,
+    CHATGPT,
+    LIBRECHAT_PRODUCTION,
+    `${LIBRECHAT}/`,
+    `${LIBRECHAT}?x=1`,
+    LIBRECHAT.replace("https:", "http:"),
+    LIBRECHAT.toUpperCase(),
+    null,
+  ])("refuses %s", async (uri) => {
     const { getAllowedDcrRedirectUris, isAllowedDcrRedirectUri } = await loadPolicy();
     expect(isAllowedDcrRedirectUri(uri, getAllowedDcrRedirectUris())).toBe(false);
   });
 
-  test("accepts an operator-added URI exactly, and only that URI", async () => {
+  test("allows nothing when MCP_LIBRECHAT_CALLBACK_URI is unset (fail closed)", async () => {
+    mockEnv.MCP_LIBRECHAT_CALLBACK_URI = undefined;
+    const { getAllowedDcrRedirectUris } = await loadPolicy();
+    expect(getAllowedDcrRedirectUris().size).toBe(0);
+  });
+
+  test("ignores MCP_DCR_ALLOWED_REDIRECT_URIS, and warns once that it does", async () => {
     mockEnv.MCP_DCR_ALLOWED_REDIRECT_URIS = ["https://client.example.com/oauth/callback"];
     const { getAllowedDcrRedirectUris, isAllowedDcrRedirectUri } = await loadPolicy();
-    const allowed = getAllowedDcrRedirectUris();
 
-    expect(isAllowedDcrRedirectUri("https://client.example.com/oauth/callback", allowed)).toBe(true);
-    expect(isAllowedDcrRedirectUri("https://client.example.com/oauth/callback2", allowed)).toBe(false);
-    // Additions extend the built-ins; they never replace them.
-    expect(isAllowedDcrRedirectUri(CLAUDE_AI, allowed)).toBe(true);
-  });
-
-  test("logs operator additions once, without their query strings", async () => {
-    mockEnv.MCP_DCR_ALLOWED_REDIRECT_URIS = ["https://client.example.com/oauth/callback?tenant=s3cret"];
-    const { getAllowedDcrRedirectUris } = await loadPolicy();
-
+    expect(
+      isAllowedDcrRedirectUri("https://client.example.com/oauth/callback", getAllowedDcrRedirectUris())
+    ).toBe(false);
     getAllowedDcrRedirectUris();
-    getAllowedDcrRedirectUris();
-
-    expect(mockLogger.info).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(mockLogger.info.mock.calls)).not.toContain("s3cret");
-    expect(mockLogger.info.mock.calls[0][0]).toEqual({
-      redirectUris: ["https://client.example.com/oauth/callback"],
-    });
-  });
-
-  test("logs nothing when there are no operator additions", async () => {
-    const { getAllowedDcrRedirectUris } = await loadPolicy();
-    getAllowedDcrRedirectUris();
-    expect(mockLogger.info).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("findDisallowedRedirectUri (ENG-3086, ENG-3471)", () => {
+describe("findDisallowedRedirectUri (ASLA Must 1)", () => {
   const find = async (client: unknown) => {
     const { findDisallowedRedirectUri, getAllowedDcrRedirectUris } = await loadPolicy();
     return findDisallowedRedirectUri(JSON.stringify(client), getAllowedDcrRedirectUris());
   };
 
-  test("returns null for an all-loopback registration", async () => {
-    expect(await find({ redirect_uris: ["http://127.0.0.1:33418/callback"] })).toBeNull();
+  test("returns null for a LibreChat registration", async () => {
+    expect(await find({ redirect_uris: [LIBRECHAT] })).toBeNull();
   });
 
-  // claude.ai's real body carries both of its callbacks; allowing only one would still fail it.
-  test("returns null for claude.ai's registration with both callbacks", async () => {
-    expect(await find({ redirect_uris: [CLAUDE_AI, CLAUDE_COM] })).toBeNull();
+  test("returns null when post_logout_redirect_uris is empty", async () => {
+    expect(await find({ redirect_uris: [LIBRECHAT], post_logout_redirect_uris: [] })).toBeNull();
   });
 
-  test("returns null for ChatGPT's registration", async () => {
-    expect(await find({ redirect_uris: [CHATGPT] })).toBeNull();
+  test.each([
+    ["loopback", [LOOPBACK], LOOPBACK],
+    ["claude.ai", [CLAUDE_AI], CLAUDE_AI],
+    ["the other deployment's callback", [LIBRECHAT_PRODUCTION], LIBRECHAT_PRODUCTION],
+  ])("flags a %s redirect_uri", async (_case, redirectUris, uri) => {
+    expect(await find({ redirect_uris: redirectUris })).toEqual({ field: "redirect_uris", uri });
   });
 
-  test("flags a non-loopback redirect_uri", async () => {
-    expect(await find({ redirect_uris: ["https://evil.example.com/cb"] })).toEqual({
-      field: "redirect_uris",
-      uri: "https://evil.example.com/cb",
-    });
+  test.each([
+    ["missing", {}],
+    ["empty", { redirect_uris: [] }],
+    ["not an array", { redirect_uris: LIBRECHAT }],
+    ["the callback twice", { redirect_uris: [LIBRECHAT, LIBRECHAT] }],
+    ["the callback plus another", { redirect_uris: [LIBRECHAT, LOOPBACK] }],
+  ])("flags redirect_uris that is %s", async (_case, client) => {
+    expect(await find(client)).toEqual({ field: "redirect_uris", uri: null });
   });
 
-  test("flags an attacker URI even when a hosted callback is also present", async () => {
-    expect(await find({ redirect_uris: [CLAUDE_AI, "https://evil.example.com/cb"] })).toEqual({
-      field: "redirect_uris",
-      uri: "https://evil.example.com/cb",
-    });
-  });
-
-  test("flags a non-loopback URI even when a loopback one is also present", async () => {
-    expect(await find({ redirect_uris: ["http://127.0.0.1:1/cb", "http://evil.example.com/cb"] })).toEqual({
-      field: "redirect_uris",
-      uri: "http://evil.example.com/cb",
-    });
-  });
-
-  test("flags a non-loopback post_logout_redirect_uri", async () => {
-    expect(await find({ post_logout_redirect_uris: ["https://evil.example.com/logout"] })).toEqual({
+  test("flags any post_logout_redirect_uri, even the callback itself", async () => {
+    expect(await find({ redirect_uris: [LIBRECHAT], post_logout_redirect_uris: [LIBRECHAT] })).toEqual({
       field: "post_logout_redirect_uris",
-      uri: "https://evil.example.com/logout",
+      uri: LIBRECHAT,
     });
   });
 
-  // Hosted callbacks are allowed for redirect_uris only; no hosted connector registers a logout target.
-  test("flags a hosted callback used as a post_logout_redirect_uri", async () => {
-    expect(await find({ post_logout_redirect_uris: [CLAUDE_AI] })).toEqual({
-      field: "post_logout_redirect_uris",
-      uri: CLAUDE_AI,
-    });
-  });
-
-  test("returns null for a body without redirect URIs", async () => {
-    expect(await find({ client_name: "x" })).toBeNull();
-  });
-
-  // A malformed body must reach upstream unchanged and produce upstream's own error, not ours.
-  test.each(["not json", "[1,2,3]", "null", '"a string"'])(
-    "returns null for malformed body %s",
+  test.each(["not json", "[]", "null", '"text"'])(
+    "flags a body that is not a JSON object: %s",
     async (body) => {
       const { findDisallowedRedirectUri, getAllowedDcrRedirectUris } = await loadPolicy();
-      expect(findDisallowedRedirectUri(body, getAllowedDcrRedirectUris())).toBeNull();
+      expect(findDisallowedRedirectUri(body, getAllowedDcrRedirectUris())).toEqual({
+        field: "redirect_uris",
+        uri: null,
+      });
     }
   );
+
+  test("flags even the LibreChat callback when MCP_LIBRECHAT_CALLBACK_URI is unset", async () => {
+    mockEnv.MCP_LIBRECHAT_CALLBACK_URI = undefined;
+    expect(await find({ redirect_uris: [LIBRECHAT] })).toEqual({ field: "redirect_uris", uri: LIBRECHAT });
+  });
 });

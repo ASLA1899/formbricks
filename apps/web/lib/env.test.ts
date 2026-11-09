@@ -23,6 +23,9 @@ const setTestEnv = (overrides: Record<string, string | undefined> = {}) => {
     AUTHZED_TOKEN: undefined,
     MCP_OAUTH_JWKS_URL: undefined,
     MCP_DCR_ALLOWED_REDIRECT_URIS: undefined,
+    MCP_LIBRECHAT_CALLBACK_URI: undefined,
+    MCP_LIBRECHAT_CLIENT_ID: undefined,
+    MCP_DCR_INITIAL_ACCESS_TOKEN: undefined,
     SES_CONFIGURATION_SET: undefined,
     SES_EMAIL_ENVIRONMENT: undefined,
     ...overrides,
@@ -186,6 +189,73 @@ describe("env", () => {
     setTestEnv({ MCP_OAUTH_JWKS_URL: jwksUrl });
 
     await expect(import("./env")).rejects.toThrow("MCP_OAUTH_JWKS_URL");
+  });
+
+  // ASLA (Must 1): the one OAuth callback MCP accepts. Blank is unset, which closes MCP.
+  test.each(["", "  "])("treats a blank MCP_LIBRECHAT_CALLBACK_URI (%j) as unset", async (value) => {
+    setTestEnv({ MCP_LIBRECHAT_CALLBACK_URI: value });
+
+    const { env } = await import("./env");
+
+    expect(env.MCP_LIBRECHAT_CALLBACK_URI).toBeUndefined();
+  });
+
+  test("accepts the LibreChat callback as MCP_LIBRECHAT_CALLBACK_URI", async () => {
+    const callback = "https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback";
+    setTestEnv({ MCP_LIBRECHAT_CALLBACK_URI: callback });
+
+    const { env } = await import("./env");
+
+    expect(env.MCP_LIBRECHAT_CALLBACK_URI).toBe(callback);
+  });
+
+  test.each([
+    "http://chat.aslalabs.org/api/mcp/formbricks/oauth/callback",
+    "https://localhost/api/mcp/formbricks/oauth/callback",
+    "https://chat.aslalabs.org/api/mcp/*/oauth/callback",
+    "https://chat.aslalabs.org/api/mcp/formbricks/oauth/callback#x",
+    "https://a.example.com/cb,https://b.example.com/cb",
+    "not a url",
+  ])("rejects an unsafe MCP_LIBRECHAT_CALLBACK_URI %s", async (value) => {
+    setTestEnv({ MCP_LIBRECHAT_CALLBACK_URI: value });
+
+    await expect(import("./env")).rejects.toThrow("MCP_LIBRECHAT_CALLBACK_URI");
+  });
+
+  // ASLA (Must 1): the pinned LibreChat client and the one-time registration token. Blank is unset,
+  // which closes MCP and registration respectively.
+  test.each(["MCP_LIBRECHAT_CLIENT_ID", "MCP_DCR_INITIAL_ACCESS_TOKEN"] as const)(
+    "treats a blank %s as unset",
+    async (name) => {
+      setTestEnv({ [name]: "  " });
+
+      const { env } = await import("./env");
+
+      expect(env[name]).toBeUndefined();
+    }
+  );
+
+  test("accepts a registration-issued MCP_LIBRECHAT_CLIENT_ID", async () => {
+    setTestEnv({ MCP_LIBRECHAT_CLIENT_ID: "aBcD1234eFgH5678" });
+
+    const { env } = await import("./env");
+
+    expect(env.MCP_LIBRECHAT_CLIENT_ID).toBe("aBcD1234eFgH5678");
+  });
+
+  test.each(["short", "has spaces in it", "a,b,c,d,e,f,g,h"])(
+    "rejects a malformed MCP_LIBRECHAT_CLIENT_ID %j",
+    async (value) => {
+      setTestEnv({ MCP_LIBRECHAT_CLIENT_ID: value });
+
+      await expect(import("./env")).rejects.toThrow("MCP_LIBRECHAT_CLIENT_ID");
+    }
+  );
+
+  test("rejects an MCP_DCR_INITIAL_ACCESS_TOKEN shorter than 32 characters", async () => {
+    setTestEnv({ MCP_DCR_INITIAL_ACCESS_TOKEN: "x".repeat(31) });
+
+    await expect(import("./env")).rejects.toThrow("MCP_DCR_INITIAL_ACCESS_TOKEN");
   });
 
   test.each(["", "  ", " , "])(

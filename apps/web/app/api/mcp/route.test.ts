@@ -1,28 +1,32 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { ApiKeyPermission } from "@formbricks/database/prisma";
 import { V3_REQUEST_ARRAY_MAX_ITEMS } from "@/app/api/v3/lib/array-budget";
 import { buildV3AuditLog, queueV3AuditLog } from "@/app/api/v3/lib/audit";
-import {
-  createdResponse,
-  problemBadRequest,
-  successListResponse,
-  successResponse,
-} from "@/app/api/v3/lib/response";
+import { problemBadRequest, successListResponse, successResponse } from "@/app/api/v3/lib/response";
 import {
   createV3SurveyResponseFromRawInput,
   listV3Surveys,
   validateV3SurveyFromRawInput,
 } from "@/app/api/v3/surveys/lib/operations";
 import { DEFAULT_REQUEST_BODY_LIMIT_BYTES } from "@/app/lib/api/request-body";
-import { authenticateApiKeyFromHeaders } from "@/modules/api/lib/api-key-auth";
 import { applyIPRateLimit, applyRateLimit } from "@/modules/core/rate-limit/helpers";
 import { POST } from "./route";
 
-const { getJwksMock, verifyBearerTokenMock, userFindUniqueMock } = vi.hoisted(() => ({
-  getJwksMock: vi.fn(),
-  verifyBearerTokenMock: vi.fn(),
-  userFindUniqueMock: vi.fn(),
+const { getJwksMock, verifyBearerTokenMock, userFindUniqueMock, oauthClientFindUniqueMock } = vi.hoisted(
+  () => ({
+    getJwksMock: vi.fn(),
+    verifyBearerTokenMock: vi.fn(),
+    userFindUniqueMock: vi.fn(),
+    oauthClientFindUniqueMock: vi.fn(),
+  })
+);
+
+// ASLA (Must 1): requests come from the LibreChat client, whose only callback is this one.
+const LIBRECHAT_CALLBACK = "https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback";
+vi.mock("@/modules/auth/lib/mcp-librechat-callback", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/modules/auth/lib/mcp-librechat-callback")>()),
+  getMcpLibreChatCallbackUri: () => LIBRECHAT_CALLBACK,
+  getMcpLibreChatClientId: () => "client_1",
 }));
 
 vi.mock("better-auth/oauth2", async (importOriginal) => ({
@@ -46,6 +50,9 @@ vi.mock("@formbricks/database", () => ({
   prisma: {
     user: {
       findUnique: userFindUniqueMock,
+    },
+    oauthClient: {
+      findUnique: oauthClientFindUniqueMock,
     },
   },
 }));
@@ -73,7 +80,6 @@ const MCP_AUDIENCE = "http://localhost/api/mcp";
 const EXPECTED_CHALLENGE = `Bearer resource_metadata="http://localhost/.well-known/oauth-protected-resource/api/mcp", scope="${MCP_CHALLENGE_SCOPE}"`;
 
 vi.mock("@/modules/api/lib/api-key-auth", () => ({
-  authenticateApiKeyFromHeaders: vi.fn(),
   getBearerTokenFromHeaders: vi.fn((headers: Headers) => {
     const authorization = headers.get("authorization");
     return authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : null;
@@ -128,20 +134,10 @@ vi.mock("@formbricks/logger", () => ({
   },
 }));
 
-const apiKeyAuth = {
-  type: "apiKey" as const,
-  apiKeyId: "key_1",
-  organizationId: "org_1",
-  organizationAccess: {
-    accessControl: { read: true, write: true },
-  },
-  workspacePermissions: [
-    {
-      workspaceId: "clxx1234567890123456789012",
-      workspaceName: "Workspace",
-      permission: ApiKeyPermission.write,
-    },
-  ],
+/** What the v3 operations receive for the default OAuth token below: the person, not an API key. */
+const oauthAuthentication = {
+  user: { id: "user_1", email: "person@example.com", name: "Person" },
+  expires: expect.any(String),
 };
 
 function createMcpRequest(body: Record<string, unknown>, headers: Record<string, string> = {}): NextRequest {
@@ -151,7 +147,7 @@ function createMcpRequest(body: Record<string, unknown>, headers: Record<string,
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
       "mcp-protocol-version": "2025-06-18",
-      "x-api-key": "fbk_test",
+      authorization: "Bearer oauth_access_token",
       ...headers,
     },
     body: JSON.stringify(body),
@@ -171,10 +167,10 @@ async function readMcpResponse(response: Response): Promise<Record<string, any>>
 describe("POST /api/mcp", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(authenticateApiKeyFromHeaders).mockResolvedValue(apiKeyAuth);
     vi.mocked(applyRateLimit).mockResolvedValue({ allowed: true });
     vi.mocked(applyIPRateLimit).mockResolvedValue({ allowed: true });
     userFindUniqueMock.mockResolvedValue({ isActive: true });
+    oauthClientFindUniqueMock.mockResolvedValue({ redirectUris: [LIBRECHAT_CALLBACK], disabled: false });
     getJwksMock.mockResolvedValue({ keys: [] });
     verifyBearerTokenMock.mockResolvedValue({
       aud: MCP_AUDIENCE,
@@ -241,7 +237,7 @@ describe("POST /api/mcp", () => {
   });
 
   test("returns 401 before MCP handling when authentication fails", async () => {
-    vi.mocked(authenticateApiKeyFromHeaders).mockResolvedValue(null);
+    verifyBearerTokenMock.mockRejectedValueOnce(new Error("invalid token"));
 
     const response = await POST(
       createMcpRequest({
@@ -276,7 +272,6 @@ describe("POST /api/mcp", () => {
 
     expect(response.status).toBe(413);
     expect(response.headers.get("X-Request-Id")).toBe("req_large");
-    expect(authenticateApiKeyFromHeaders).not.toHaveBeenCalled();
   });
 
   test("returns 413 for a body without content-length that exceeds the limit (ENG-3384)", async () => {
@@ -290,7 +285,7 @@ describe("POST /api/mcp", () => {
           accept: "application/json, text/event-stream",
           "content-type": "application/json",
           "mcp-protocol-version": "2025-06-18",
-          "x-api-key": "fbk_test",
+          authorization: "Bearer oauth_access_token",
           "x-request-id": "req_chunked",
         },
         body: new ReadableStream<Uint8Array>({
@@ -305,7 +300,7 @@ describe("POST /api/mcp", () => {
 
     expect(response.status).toBe(413);
     expect(response.headers.get("X-Request-Id")).toBe("req_chunked");
-    expect(authenticateApiKeyFromHeaders).toHaveBeenCalled();
+    expect(verifyBearerTokenMock).toHaveBeenCalled();
     expect(listV3Surveys).not.toHaveBeenCalled();
   });
 
@@ -352,7 +347,7 @@ describe("POST /api/mcp", () => {
     expect(createV3SurveyResponseFromRawInput).not.toHaveBeenCalled();
   });
 
-  test("lists MCP tools for a valid API key", async () => {
+  test("lists only the allowlisted v1 tools (ASLA Must 2)", async () => {
     const response = await POST(
       createMcpRequest(
         {
@@ -370,67 +365,22 @@ describe("POST /api/mcp", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("X-Request-Id")).toBe("req_tools");
     const message = await readMcpResponse(response);
+    // Every upstream tool in "Tools (v1)" that 6.1.4 registers, in registration order. Exact, so an
+    // upstream rename that silently drops a v1 tool fails here as surely as a leaked tool does.
     expect(message.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
       "list_surveys",
       "get_survey",
-      "create_survey",
       "validate_survey",
       "patch_survey",
       "edit_survey_blocks",
       "set_survey_block_order",
       "delete_survey",
-      "list_workflows",
-      "get_workflow",
-      "list_workflow_runs",
-      "get_workflow_run",
-      "test_workflow",
-      "create_workflow",
-      "patch_workflow",
-      "duplicate_workflow",
-      "delete_workflow",
-      "enable_workflow",
-      "disable_workflow",
-      "archive_workflow",
-      "unarchive_workflow",
       "list_workspaces",
-      "get_workspace_custom_css",
-      "patch_workspace_custom_css",
-      "list_feedback_datasets",
-      "list_feedback_records",
-      "count_feedback_records",
-      "get_feedback_record",
-      "create_feedback_record",
-      "create_feedback_records",
-      "update_feedback_record",
-      "delete_feedback_record",
-      "search_feedback_records",
-      "find_similar_feedback_records",
       "list_responses",
       "count_responses",
       "get_response",
-      "validate_response",
-      "create_response",
-      "update_response",
-      "delete_response",
-      "batch_delete_responses",
     ]);
     const tools = new Map(message.result.tools.map((tool: { name: string }) => [tool.name, tool]));
-    expect(Object.keys((tools.get("create_survey") as any).inputSchema.properties)).toEqual(
-      expect.arrayContaining([
-        "workspaceId",
-        "name",
-        "type",
-        "status",
-        "defaultLanguage",
-        "metadata",
-        "languages",
-        "welcomeCard",
-        "blocks",
-        "endings",
-        "hiddenFields",
-        "variables",
-      ])
-    );
     expect(Object.keys((tools.get("validate_survey") as any).inputSchema.properties)).toEqual(
       expect.arrayContaining(["operation", "surveyId", "data"])
     );
@@ -497,48 +447,70 @@ describe("POST /api/mcp", () => {
     });
     expect(listV3Surveys).toHaveBeenCalledWith(
       expect.objectContaining({
-        authentication: apiKeyAuth,
+        authentication: oauthAuthentication,
         requestId: "req_mcp",
         instance: "/api/mcp",
       })
     );
   });
 
-  test("authenticates an API key from an Authorization bearer token", async () => {
+  // ASLA (Must 1): no API keys on /api/mcp, through either header.
+  test.each([
+    ["Authorization: Bearer", { authorization: "Bearer fbk_secret-with-hyphens" }],
+    ["x-api-key", { "x-api-key": "fbk_test" }],
+  ])("refuses an API key sent as %s before MCP handling", async (_case, headers) => {
     const response = await POST(
       createMcpRequest(
         {
           jsonrpc: "2.0",
           id: 2,
           method: "tools/call",
-          params: {
-            name: "list_surveys",
-            arguments: {
-              workspaceId: "clxx1234567890123456789012",
-            },
-          },
+          params: { name: "list_surveys", arguments: { workspaceId: "clxx1234567890123456789012" } },
         },
-        {
-          authorization: "Bearer fbk_secret-with-hyphens",
-          "x-api-key": "",
-          "x-request-id": "req_bearer_api_key",
-        }
+        headers
       )
     );
 
-    expect(response.status).toBe(200);
-    await readMcpResponse(response);
-    expect(authenticateApiKeyFromHeaders).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(401);
+    expect(response.headers.get("WWW-Authenticate")).toBe(EXPECTED_CHALLENGE);
     expect(verifyBearerTokenMock).not.toHaveBeenCalled();
-    expect(listV3Surveys).toHaveBeenCalledWith(
-      expect.objectContaining({
-        authentication: apiKeyAuth,
-        requestId: "req_bearer_api_key",
-      })
+    expect(listV3Surveys).not.toHaveBeenCalled();
+  });
+
+  test("refuses a token from a client other than LibreChat before MCP handling (ASLA Must 1)", async () => {
+    verifyBearerTokenMock.mockResolvedValue({
+      aud: MCP_AUDIENCE,
+      sub: "user_1",
+      scope: "surveys:read",
+      exp: Math.floor(Date.now() / 1000) + 900,
+      azp: "self_registered_client",
+    });
+
+    const response = await POST(
+      createMcpRequest({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} })
+    );
+
+    expect(response.status).toBe(403);
+    expect(oauthClientFindUniqueMock).not.toHaveBeenCalled();
+  });
+
+  test("refuses the pinned client once its callback no longer matches (ASLA Must 1)", async () => {
+    oauthClientFindUniqueMock.mockResolvedValue({
+      redirectUris: ["http://127.0.0.1:33418/callback"],
+      disabled: false,
+    });
+
+    const response = await POST(
+      createMcpRequest({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} })
+    );
+
+    expect(response.status).toBe(403);
+    expect(oauthClientFindUniqueMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { clientId: "client_1" } })
     );
   });
 
-  test("authenticates OAuth bearer tokens without API-key lookup", async () => {
+  test("authenticates OAuth bearer tokens", async () => {
     const response = await POST(
       createMcpRequest(
         {
@@ -556,14 +528,12 @@ describe("POST /api/mcp", () => {
         },
         {
           authorization: "Bearer eyJhbGciOiJFZERTQSJ9.payload.signature",
-          "x-api-key": "",
           "x-request-id": "req_oauth",
         }
       )
     );
 
     expect(response.status).toBe(200);
-    expect(authenticateApiKeyFromHeaders).not.toHaveBeenCalled();
     // The key set is pre-loaded from the same URL verification reads, so both share Better Auth's cache.
     expect(getJwksMock).toHaveBeenCalledWith("eyJhbGciOiJFZERTQSJ9.payload.signature", {
       jwksFetch: "http://formbricks:3000/api/auth/jwks",
@@ -609,14 +579,12 @@ describe("POST /api/mcp", () => {
         },
         {
           authorization: "Bearer eyJhbGciOiJFZERTQSJ9.invalid.signature",
-          "x-api-key": "",
           "x-request-id": "req_invalid_oauth",
         }
       )
     );
 
     expect(response.status).toBe(401);
-    expect(authenticateApiKeyFromHeaders).not.toHaveBeenCalled();
     expect(applyIPRateLimit).toHaveBeenCalled();
     expect(response.headers.get("WWW-Authenticate")).toBe(EXPECTED_CHALLENGE);
   });
@@ -628,7 +596,7 @@ describe("POST /api/mcp", () => {
       email: "person@example.com",
       scope: "openid profile email surveys:read",
       exp: Math.floor(Date.now() / 1000) + 900,
-      azp: "client_read_only",
+      azp: "client_1",
     });
 
     const response = await POST(
@@ -646,7 +614,6 @@ describe("POST /api/mcp", () => {
         },
         {
           authorization: "Bearer eyJhbGciOiJFZERTQSJ9.readonly.signature",
-          "x-api-key": "",
           "x-request-id": "req_read_only",
         }
       )
@@ -665,16 +632,17 @@ describe("POST /api/mcp", () => {
     });
   });
 
-  test("blocks workflow write tools for tokens without workflows:write", async () => {
-    // A write-capable user whose OAuth token was only granted read scopes (surveys:read + workflows:read)
-    // must not be able to reach a workflow mutation — the ENG-1967 token-scope boundary.
+  test("audits a refused mutation by a token without surveys:write", async () => {
+    // A write-capable user whose OAuth token was only granted read scopes must not reach a mutation — the
+    // ENG-1967 token-scope boundary. (Upstream drove this with delete_workflow; workflow tools are outside
+    // the ASLA allowlist, so delete_survey carries the same check.)
     verifyBearerTokenMock.mockResolvedValueOnce({
       aud: MCP_AUDIENCE,
       sub: "user_1",
       email: "person@example.com",
-      scope: "openid profile email surveys:read workflows:read",
+      scope: "openid profile email surveys:read",
       exp: Math.floor(Date.now() / 1000) + 900,
-      azp: "client_wf_read_only",
+      azp: "client_1",
     });
     // The module mock returns nothing by default; the guard only queues what the builder hands back.
     vi.mocked(buildV3AuditLog).mockReturnValue({ status: "failure" } as never);
@@ -686,15 +654,14 @@ describe("POST /api/mcp", () => {
           id: 10,
           method: "tools/call",
           params: {
-            name: "delete_workflow",
+            name: "delete_survey",
             arguments: {
-              workflowId: "wf1234567890123456789012ab",
+              surveyId: "clsv1234567890123456789012",
             },
           },
         },
         {
           authorization: "Bearer eyJhbGciOiJFZERTQSJ9.wfreadonly.signature",
-          "x-api-key": "",
           "x-request-id": "req_wf_read_only",
         }
       )
@@ -708,82 +675,57 @@ describe("POST /api/mcp", () => {
       code: "forbidden",
       // The refusal names the scope the client must obtain, since a JSON-RPC tool result carries no
       // WWW-Authenticate header for it to read.
-      detail: "OAuth token does not include the required MCP scope: workflows:write",
+      detail: "OAuth token does not include the required MCP scope: surveys:write",
       requestId: "req_wf_read_only",
     });
     // The scope gate fires BEFORE any mutation side effect — the workflow handler never runs — but the
     // refusal itself is written down as a failed attempt by the caller (ENG-2872): a read-only token
-    // reaching for `delete_workflow` is exactly the event an audit reviewer wants to see.
+    // reaching for `delete_survey` is exactly the event an audit reviewer wants to see.
     expect(buildV3AuditLog).toHaveBeenCalledTimes(1);
     expect(buildV3AuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ user: expect.objectContaining({ id: "user_1" }) }),
       "deleted",
-      "workflow",
+      "survey",
       expect.any(String)
     );
     expect(queueV3AuditLog).toHaveBeenCalledTimes(1);
     expect(vi.mocked(queueV3AuditLog).mock.calls[0][0]).toMatchObject({
       status: "failure",
       eventId: "req_wf_read_only",
-      targetId: "wf1234567890123456789012ab",
+      targetId: "clsv1234567890123456789012",
     });
   });
 
-  test("calls create_survey through the MCP route", async () => {
-    vi.mocked(createV3SurveyResponseFromRawInput).mockResolvedValue(
-      createdResponse(
-        { id: "clsv1234567890123456789012" },
-        { requestId: "req_create", location: "/api/v3/surveys/clsv1234567890123456789012" }
-      )
-    );
+  // ASLA (Must 2): a tool outside the allowlist is not registered, so a call is refused as an unknown
+  // tool before any scope gate or handler — for every token, including one holding every scope.
+  test.each([
+    "create_survey",
+    "delete_workflow",
+    "patch_workspace_custom_css",
+    "create_feedback_record",
+    "create_response",
+    "delete_response",
+    "batch_delete_responses",
+  ])("refuses %s, which is outside the allowlist", async (name) => {
+    verifyBearerTokenMock.mockResolvedValueOnce({
+      aud: MCP_AUDIENCE,
+      sub: "user_1",
+      scope:
+        "surveys:read surveys:write workflows:read workflows:write feedbackRecords:read feedbackRecords:write responses:read responses:write",
+      exp: Math.floor(Date.now() / 1000) + 900,
+      azp: "client_1",
+    });
 
     const response = await POST(
-      createMcpRequest(
-        {
-          jsonrpc: "2.0",
-          id: 3,
-          method: "tools/call",
-          params: {
-            name: "create_survey",
-            arguments: {
-              workspaceId: "clxx1234567890123456789012",
-              name: "MCP QA create",
-              blocks: [
-                {
-                  id: "clbk1234567890123456789012",
-                  name: "Main Block",
-                  elements: [
-                    {
-                      id: "feedback",
-                      type: "openText",
-                      headline: { "en-US": "What should we improve?" },
-                      required: true,
-                    },
-                  ],
-                },
-              ],
-            },
-          },
-        },
-        {
-          "x-request-id": "req_create",
-        }
-      )
+      createMcpRequest({ jsonrpc: "2.0", id: 11, method: "tools/call", params: { name, arguments: {} } })
     );
-
-    expect(response.status).toBe(200);
     const message = await readMcpResponse(response);
-    expect(message.result.structuredContent).toEqual({
-      data: { id: "clsv1234567890123456789012" },
-      requestId: "req_create",
-    });
-    expect(createV3SurveyResponseFromRawInput).toHaveBeenCalledWith(
-      expect.objectContaining({
-        authentication: apiKeyAuth,
-        requestId: "req_create",
-        instance: "/api/mcp",
-      })
-    );
+
+    // The SDK's own unknown-tool refusal: a JSON-RPC Invalid Params error, not a tool result.
+    expect(message.result).toBeUndefined();
+    expect(message.error).toMatchObject({ code: -32602, message: `Tool ${name} not found` });
+    expect(createV3SurveyResponseFromRawInput).not.toHaveBeenCalled();
+    expect(buildV3AuditLog).not.toHaveBeenCalled();
   });
 
   test("calls validate_survey patch through the MCP route", async () => {
@@ -825,20 +767,14 @@ describe("POST /api/mcp", () => {
           surveyId: "clsv1234567890123456789012",
           data: { name: "Updated survey" },
         },
-        authentication: apiKeyAuth,
+        authentication: oauthAuthentication,
         requestId: "req_validate",
         instance: "/api/mcp",
       })
     );
   });
 
-  test("maps v3 create and validate bad requests to MCP tool errors", async () => {
-    vi.mocked(createV3SurveyResponseFromRawInput).mockResolvedValueOnce(
-      problemBadRequest("req_create_invalid", "Invalid survey document", {
-        instance: "/api/mcp",
-        invalid_params: [{ name: "blocks.0.elements", reason: "Required" }],
-      })
-    );
+  test("maps v3 validate bad requests to MCP tool errors", async () => {
     vi.mocked(validateV3SurveyFromRawInput).mockResolvedValueOnce(
       problemBadRequest("req_validate_invalid", "Invalid survey validation request", {
         instance: "/api/mcp",
@@ -846,24 +782,6 @@ describe("POST /api/mcp", () => {
       })
     );
 
-    const createResponse = await POST(
-      createMcpRequest(
-        {
-          jsonrpc: "2.0",
-          id: 5,
-          method: "tools/call",
-          params: {
-            name: "create_survey",
-            arguments: {
-              workspaceId: "clxx1234567890123456789012",
-              name: "Invalid create",
-              blocks: [{ id: "clbk1234567890123456789012" }],
-            },
-          },
-        },
-        { "x-request-id": "req_create_invalid" }
-      )
-    );
     const validateResponse = await POST(
       createMcpRequest(
         {
@@ -882,11 +800,6 @@ describe("POST /api/mcp", () => {
       )
     );
 
-    expect((await readMcpResponse(createResponse)).result.structuredContent.error).toMatchObject({
-      status: 400,
-      detail: "Invalid survey document",
-      invalid_params: [{ name: "blocks.0.elements", reason: "Required" }],
-    });
     expect((await readMcpResponse(validateResponse)).result.structuredContent.error).toMatchObject({
       status: 400,
       detail: "Invalid survey validation request",

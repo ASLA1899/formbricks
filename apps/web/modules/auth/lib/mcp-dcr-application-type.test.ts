@@ -5,8 +5,14 @@ import {
   withInferredApplicationType,
 } from "./mcp-dcr-application-type";
 
-// The redirect allowlist reads its operator additions from env; none here, so only the built-ins apply.
-vi.mock("@/lib/env", () => ({ env: { MCP_DCR_ALLOWED_REDIRECT_URIS: undefined } }));
+// The redirect allowlist is the LibreChat callback (ASLA Must 1).
+const LIBRECHAT = "https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback";
+vi.mock("@/lib/env", () => ({
+  env: {
+    MCP_DCR_ALLOWED_REDIRECT_URIS: undefined,
+    MCP_LIBRECHAT_CALLBACK_URI: "https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback",
+  },
+}));
 
 const BASE = "https://app.formbricks.test";
 const REGISTER = `${BASE}/api/auth/oauth2/register`;
@@ -116,19 +122,17 @@ describe("isDcrRegistration", () => {
 });
 
 describe("prepareDcrRequest", () => {
-  test("rebuilds the registration with the inferred type and keeps the headers", async () => {
-    const request = new Request(REGISTER, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: "Bearer t" },
-      body: JSON.stringify({ redirect_uris: ["http://127.0.0.1:33418/callback"] }),
-    });
+  test("ASLA: rejects a loopback registration before any inference", async () => {
+    const prepared = await prepareDcrRequest(
+      new Request(REGISTER, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ redirect_uris: ["http://127.0.0.1:33418/callback"] }),
+      })
+    );
 
-    const prepared = await prepareDcrRequest(request);
-
-    expect(prepared).toBeInstanceOf(Request);
-    const normalized = prepared as Request;
-    expect(normalized.headers.get("authorization")).toBe("Bearer t");
-    await expect(normalized.json()).resolves.toMatchObject({ application_type: "native" });
+    expect(prepared).toBeInstanceOf(Response);
+    expect((prepared as Response).status).toBe(400);
   });
 
   // ENG-3086: the reported repro — an anonymous registration claiming an attacker-controlled https
@@ -154,36 +158,39 @@ describe("prepareDcrRequest", () => {
     await expect(response.json()).resolves.toMatchObject({ error: "invalid_redirect_uri" });
   });
 
-  // ENG-3471: claude.ai registers both of its https callbacks and no application_type. It must pass the
-  // gate untouched — still a `web` client, which is what upstream requires for a non-loopback https URI.
-  test("passes a hosted connector registration through without inferring native", async () => {
+  test("ASLA: rejects a hosted connector registration", async () => {
+    const prepared = await prepareDcrRequest(
+      new Request(REGISTER, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ redirect_uris: ["https://claude.ai/api/mcp/auth_callback"] }),
+      })
+    );
+
+    expect(prepared).toBeInstanceOf(Response);
+    expect((prepared as Response).status).toBe(400);
+  });
+
+  // A Request body is single-use, so the gate has to reconstruct the request it read — otherwise the
+  // body it consumed would be gone by the time Better Auth reads it. The headers come along too.
+  test("passes a LibreChat registration through unchanged, with a readable body and its headers", async () => {
     const body = JSON.stringify({
-      client_name: "Claude",
-      redirect_uris: ["https://claude.ai/api/mcp/auth_callback", "https://claude.com/api/mcp/auth_callback"],
+      client_name: "ASLA Chat",
+      redirect_uris: [LIBRECHAT],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
     });
     const prepared = await prepareDcrRequest(
-      new Request(REGISTER, { method: "POST", headers: { "content-type": "application/json" }, body })
+      new Request(REGISTER, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer t" },
+        body,
+      })
     );
 
     expect(prepared).toBeInstanceOf(Request);
-    await expect((prepared as Request).text()).resolves.toBe(body);
-  });
-
-  // A Request body is single-use, so the normalizer has to reconstruct even when it changes nothing —
-  // otherwise the body it consumed would be gone by the time Better Auth reads it.
-  test("still yields a readable body when nothing is inferred", async () => {
-    const body = JSON.stringify({
-      redirect_uris: ["http://127.0.0.1:1/cb"],
-      application_type: "native",
-    });
-    const prepared = await prepareDcrRequest(
-      new Request(REGISTER, { method: "POST", headers: { "content-type": "application/json" }, body })
-    );
-
-    expect(prepared).toBeInstanceOf(Request);
+    expect((prepared as Request).headers.get("authorization")).toBe("Bearer t");
     await expect((prepared as Request).text()).resolves.toBe(body);
   });
 

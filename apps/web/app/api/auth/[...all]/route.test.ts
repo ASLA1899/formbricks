@@ -37,6 +37,14 @@ vi.mock("@/modules/auth/lib/auth", () => ({
     },
   },
 }));
+// The ASLA DCR policy (ASL-1892) admits exactly the configured LibreChat callback. Pin it here; the env
+// parsing itself is covered in lib/env.test.ts.
+const LIBRECHAT_CALLBACK = "https://chat.example.test/api/mcp/formbricks/oauth/callback";
+vi.mock("@/modules/auth/lib/mcp-librechat-callback", () => ({
+  getMcpLibreChatCallbackUri: () => LIBRECHAT_CALLBACK,
+  isLibreChatOnlyRedirectUris: (uris: unknown, callback: string | null) =>
+    callback !== null && Array.isArray(uris) && uris.length === 1 && uris[0] === callback,
+}));
 vi.mock("@/modules/ee/sso/lib/sso-request-context", () => ({
   runWithSsoRequestContext: runWithCtxMock,
 }));
@@ -194,22 +202,26 @@ describe("[...all] Better Auth route — pinned SSO callback (ENG-2343)", () => 
 });
 
 /**
- * The DCR redirect-URI allowlist (ENG-3086). `prepareDcrRequest` is the real implementation here, so
- * these prove the route wires it: a non-loopback registration is rejected before `auth.handler` runs,
- * and a loopback one is still delegated (with the application_type inference applied to its body).
+ * The DCR redirect-URI allowlist (ENG-3086, narrowed by ASLA ASL-1892). `prepareDcrRequest` is the real
+ * implementation here, so these prove the route wires it: anything but the LibreChat callback — a
+ * third-party host or a loopback CLI — is rejected before `auth.handler` runs, and the callback alone
+ * is delegated unchanged.
  */
-describe("[...all] Better Auth route — DCR redirect-URI allowlist (ENG-3086)", () => {
+describe("[...all] Better Auth route — DCR redirect-URI allowlist (ENG-3086, ASL-1892)", () => {
   beforeEach(() => {
     handlerMock.mockClear();
     runWithCtxMock.mockClear();
   });
 
-  test("rejects a non-loopback registration without delegating to auth.handler", async () => {
+  test.each([
+    ["a third-party host", "https://attacker-controlled-test.example.org/cb"],
+    ["a loopback CLI", "http://127.0.0.1:33418/callback"],
+  ])("rejects %s without delegating to auth.handler", async (_label, uri) => {
     const response = await POST(
       new Request("http://localhost/api/auth/oauth2/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ redirect_uris: ["https://attacker-controlled-test.example.org/cb"] }),
+        body: JSON.stringify({ redirect_uris: [uri] }),
       })
     );
 
@@ -219,18 +231,18 @@ describe("[...all] Better Auth route — DCR redirect-URI allowlist (ENG-3086)",
     expect(runWithCtxMock).not.toHaveBeenCalled();
   });
 
-  test("delegates a loopback registration to auth.handler with the inferred type", async () => {
+  test("delegates the LibreChat callback registration to auth.handler", async () => {
     await POST(
       new Request("http://localhost/api/auth/oauth2/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ redirect_uris: ["http://127.0.0.1:33418/callback"] }),
+        body: JSON.stringify({ redirect_uris: [LIBRECHAT_CALLBACK] }),
       })
     );
 
     expect(handlerMock).toHaveBeenCalledTimes(1);
     const handled = handlerMock.mock.calls[0][0];
     expect(handled.url).toBe("http://localhost/api/auth/oauth2/register");
-    await expect(handled.json()).resolves.toMatchObject({ application_type: "native" });
+    await expect(handled.json()).resolves.toMatchObject({ redirect_uris: [LIBRECHAT_CALLBACK] });
   });
 });

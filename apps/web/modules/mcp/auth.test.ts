@@ -3,23 +3,31 @@ import { NextRequest } from "next/server";
 import { type Server, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
-import { ApiKeyPermission } from "@formbricks/database/prisma";
 import { TooManyRequestsError } from "@formbricks/types/errors";
-import { authenticateApiKeyFromHeaders } from "@/modules/api/lib/api-key-auth";
 import { applyIPRateLimit, applyRateLimit } from "@/modules/core/rate-limit/helpers";
-import {
-  authenticateMcpRequest,
-  getMcpAuthentication,
-  getMcpRequestId,
-  handleAuthenticatedMcpRequest,
-} from "./auth";
+import { authenticateMcpRequest, getMcpAuthentication, handleAuthenticatedMcpRequest } from "./auth";
 
-const { getJwksMock, verifyBearerTokenMock, userFindUniqueMock, warnMock } = vi.hoisted(() => ({
-  getJwksMock: vi.fn(),
-  verifyBearerTokenMock: vi.fn(),
-  userFindUniqueMock: vi.fn(),
-  warnMock: vi.fn(),
+const { getJwksMock, verifyBearerTokenMock, userFindUniqueMock, oauthClientFindUniqueMock, warnMock } =
+  vi.hoisted(() => ({
+    getJwksMock: vi.fn(),
+    verifyBearerTokenMock: vi.fn(),
+    userFindUniqueMock: vi.fn(),
+    oauthClientFindUniqueMock: vi.fn(),
+    warnMock: vi.fn(),
+  }));
+
+// ASLA (Must 1): the sandbox's LibreChat callback. The real `isLibreChatOnlyRedirectUris` runs; only the
+// env read is pinned.
+const LIBRECHAT_CALLBACK = "https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback";
+vi.mock("@/modules/auth/lib/mcp-librechat-callback", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/modules/auth/lib/mcp-librechat-callback")>()),
+  getMcpLibreChatCallbackUri: vi.fn(() => LIBRECHAT_CALLBACK),
+  getMcpLibreChatClientId: vi.fn((): string | null => "librechat"),
 }));
+
+/** The allowed client, as the per-request check reads it. Set per test: global setup resets mocks. */
+const allowLibreChatClient = () =>
+  oauthClientFindUniqueMock.mockResolvedValue({ redirectUris: [LIBRECHAT_CALLBACK], disabled: false });
 
 vi.mock("better-auth/oauth2", async (importOriginal) => ({
   ...(await importOriginal<typeof import("better-auth/oauth2")>()),
@@ -39,6 +47,9 @@ vi.mock("@formbricks/database", () => ({
     user: {
       findUnique: userFindUniqueMock,
     },
+    oauthClient: {
+      findUnique: oauthClientFindUniqueMock,
+    },
     // This file's mock replaces the global one in vitestSetup, so it needs its own no-op
     // `oauthResource`: Better Auth 1.7 seeds resources when the oauthProvider plugin initialises,
     // which importing ./auth triggers, and without it the adapter throws an unhandled
@@ -56,7 +67,6 @@ vi.mock("@formbricks/database", () => ({
 }));
 
 vi.mock("@/modules/api/lib/api-key-auth", () => ({
-  authenticateApiKeyFromHeaders: vi.fn(),
   getBearerTokenFromHeaders: vi.fn((headers: Headers) => {
     const authorization = headers.get("authorization");
     return authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length).trim() : null;
@@ -111,22 +121,6 @@ const MCP_AUDIENCE = "https://app.example.com/api/mcp";
 // `openid` is in scope. Derived from the mocked issuer above.
 const USERINFO_AUDIENCE = "https://app.example.com/api/auth/oauth2/userinfo";
 
-const apiKeyAuth = {
-  type: "apiKey" as const,
-  apiKeyId: "key_1",
-  organizationId: "org_1",
-  organizationAccess: {
-    accessControl: { read: true, write: true },
-  },
-  workspacePermissions: [
-    {
-      workspaceId: "workspace_1",
-      workspaceName: "Workspace",
-      permission: ApiKeyPermission.write,
-    },
-  ],
-};
-
 function createRequest(url = "http://localhost/api/mcp", headers: Record<string, string> = {}): NextRequest {
   return new NextRequest(url, {
     method: "POST",
@@ -139,13 +133,12 @@ describe("authenticateMcpRequest", () => {
     vi.clearAllMocks();
     verifyBearerTokenMock.mockReset();
     userFindUniqueMock.mockResolvedValue({ isActive: true });
+    allowLibreChatClient();
     vi.mocked(applyRateLimit).mockResolvedValue({ allowed: true });
     vi.mocked(applyIPRateLimit).mockResolvedValue({ allowed: true });
   });
 
-  test("returns 401 when no API key authenticates", async () => {
-    vi.mocked(authenticateApiKeyFromHeaders).mockResolvedValue(null);
-
+  test("returns 401 when no credentials are sent", async () => {
     const result = await authenticateMcpRequest(createRequest());
 
     expect(result.ok).toBe(false);
@@ -164,7 +157,7 @@ describe("authenticateMcpRequest", () => {
       expect(result.response.headers.get("WWW-Authenticate")).not.toContain('realm="formbricks"');
       expect(await result.response.json()).toMatchObject({
         code: "not_authenticated",
-        detail: "API key or OAuth access token required",
+        detail: "OAuth access token required",
       });
     }
   });
@@ -186,7 +179,6 @@ describe("authenticateMcpRequest", () => {
     const result = await authenticateMcpRequest(createRequest("http://localhost/api/mcp?apiKey=secret"));
 
     expect(result.ok).toBe(false);
-    expect(authenticateApiKeyFromHeaders).not.toHaveBeenCalled();
     if (!result.ok) {
       expect(result.response.status).toBe(400);
       const body = await result.response.json();
@@ -200,7 +192,6 @@ describe("authenticateMcpRequest", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(authenticateApiKeyFromHeaders).not.toHaveBeenCalled();
     if (!result.ok) {
       expect(result.response.status).toBe(400);
     }
@@ -215,7 +206,6 @@ describe("authenticateMcpRequest", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(authenticateApiKeyFromHeaders).not.toHaveBeenCalled();
     if (!result.ok) {
       expect(result.response.status).toBe(403);
     }
@@ -231,102 +221,59 @@ describe("authenticateMcpRequest", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(authenticateApiKeyFromHeaders).not.toHaveBeenCalled();
     if (!result.ok) {
       expect(result.response.status).toBe(403);
     }
   });
 
   test("allows the configured public origin", async () => {
-    vi.mocked(authenticateApiKeyFromHeaders).mockResolvedValue(apiKeyAuth);
+    verifyBearerTokenMock.mockResolvedValue({
+      aud: MCP_AUDIENCE,
+      sub: "user_1",
+      azp: "librechat",
+      scope: "surveys:read",
+    });
 
     const result = await authenticateMcpRequest(
       createRequest("http://internal.local/api/mcp", {
         origin: "https://app.example.com",
-        "x-api-key": "fbk_test",
+        authorization: "Bearer oauth_access_token",
       })
     );
 
     expect(result.ok).toBe(true);
   });
 
-  test("returns auth info for a valid API key and rate limits by API key id", async () => {
-    vi.mocked(authenticateApiKeyFromHeaders).mockResolvedValue(apiKeyAuth);
-
-    const result = await authenticateMcpRequest(
-      createRequest("http://localhost/api/mcp", {
-        "x-request-id": "req_1",
-        "x-api-key": "fbk_test",
-      })
-    );
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.requestId).toBe("req_1");
-      expect(result.authInfo.clientId).toBe("key_1");
-      expect(result.authInfo.token).toBe("key_1");
-      expect(getMcpAuthentication(result.authInfo)).toEqual(apiKeyAuth);
-      expect(getMcpRequestId(result.authInfo)).toBe("req_1");
-      // A write-capable key must reach every tool group's read AND write tools. Asserted exactly
-      // rather than with `arrayContaining`, which is a subset matcher: it passed whether or not
-      // `getMcpScopes` granted `responses:write`, so deleting that line left the whole suite green.
-      // The read-only case below has always been exact; this one now matches it.
-      // Sorted on both sides: the set is the contract, the order is an artefact of the `Set` insertion
-      // in `getMcpScopes`. Consumers read these through `hasMcpScopes`, so reordering the adds would
-      // break this test without breaking anything real.
-      expect([...result.authInfo.scopes].sort()).toEqual(
-        [
-          "surveys:read",
-          "workflows:read",
-          "feedbackRecords:read",
-          "responses:read",
-          "surveys:write",
-          "workflows:write",
-          "feedbackRecords:write",
-          "responses:write",
-        ].sort()
-      );
-    }
-    expect(applyRateLimit).toHaveBeenCalledWith(expect.objectContaining({ namespace: "api:v3" }), "key_1");
-  });
-
-  test("grants only read scopes to a read-only API key", async () => {
-    vi.mocked(authenticateApiKeyFromHeaders).mockResolvedValue({
-      ...apiKeyAuth,
-      workspacePermissions: [
-        { workspaceId: "workspace_1", workspaceName: "Workspace", permission: ApiKeyPermission.read },
-      ],
+  // ASLA (Must 1): no API keys on /api/mcp, through either header.
+  test.each([
+    ["x-api-key", { "x-api-key": "fbk_test" }],
+    [
+      "x-api-key alongside a valid OAuth bearer",
+      { "x-api-key": "fbk_test", authorization: "Bearer oauth_access_token" },
+    ],
+    ["an empty x-api-key", { "x-api-key": "" }],
+    ["Authorization: Bearer", { authorization: "Bearer fbk_abcDEF123_-" }],
+  ])("refuses an API key sent as %s", async (_case, headers) => {
+    verifyBearerTokenMock.mockResolvedValue({
+      aud: MCP_AUDIENCE,
+      sub: "user_1",
+      azp: "librechat",
+      scope: "surveys:read",
     });
 
-    const result = await authenticateMcpRequest(
-      createRequest("http://localhost/api/mcp", { "x-api-key": "fbk_test" })
-    );
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      // `responses:read` rides along (ENG-2862): the same key can already read responses through v1/v2
-      // management, so withholding it would make MCP narrower than the REST surface this credential has.
-      expect([...result.authInfo.scopes].sort()).toEqual(
-        ["surveys:read", "workflows:read", "feedbackRecords:read", "responses:read"].sort()
-      );
-    }
-  });
-
-  test("returns 429 when rate limited", async () => {
-    vi.mocked(authenticateApiKeyFromHeaders).mockResolvedValue(apiKeyAuth);
-    vi.mocked(applyRateLimit).mockRejectedValue(new TooManyRequestsError("Too many requests", 30));
-
-    const result = await authenticateMcpRequest(
-      createRequest("http://localhost/api/mcp", {
-        "x-api-key": "fbk_test",
-      })
-    );
+    const result = await authenticateMcpRequest(createRequest("http://localhost/api/mcp", headers));
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.response.status).toBe(429);
-      expect(result.response.headers.get("Retry-After")).toBe("30");
+      expect(result.response.status).toBe(401);
+      expect(result.response.headers.get("WWW-Authenticate")).toMatch(CHALLENGE_GRAMMAR);
+      expect(await result.response.json()).toMatchObject({
+        detail: "API keys are not accepted by the MCP server. Sign in with OAuth.",
+      });
     }
+    expect(verifyBearerTokenMock).not.toHaveBeenCalled();
+    expect(oauthClientFindUniqueMock).not.toHaveBeenCalled();
+    expect(applyIPRateLimit).toHaveBeenCalledWith(expect.objectContaining({ namespace: "api:mcp:auth" }));
   });
 
   test("authenticates OAuth bearer tokens and rate limits by user and client", async () => {
@@ -336,7 +283,7 @@ describe("authenticateMcpRequest", () => {
       email: "user@example.com",
       name: "Test User",
       exp: 2_000_000_000,
-      azp: "client_1",
+      azp: "librechat",
       scope: "openid profile email surveys:read surveys:write",
     });
 
@@ -348,8 +295,12 @@ describe("authenticateMcpRequest", () => {
     );
 
     expect(result.ok).toBe(true);
+    expect(oauthClientFindUniqueMock).toHaveBeenCalledWith({
+      where: { clientId: "librechat" },
+      select: { redirectUris: true, disabled: true },
+    });
     if (result.ok) {
-      expect(result.authInfo.clientId).toBe("client_1");
+      expect(result.authInfo.clientId).toBe("librechat");
       expect(result.authInfo.scopes).toEqual(["openid", "profile", "email", "surveys:read", "surveys:write"]);
       expect(result.authInfo.extra.authMethod).toBe("oauth");
       expect(getMcpAuthentication(result.authInfo)).toMatchObject({
@@ -360,7 +311,6 @@ describe("authenticateMcpRequest", () => {
         },
       });
     }
-    expect(authenticateApiKeyFromHeaders).not.toHaveBeenCalled();
     // Exact equality on purpose: this is the canary for the verify options drifting. `typ` pins the
     // RFC 9068 access-token type, enforceable from Better Auth 1.7 (1.6 emitted no typ header).
     expect(verifyBearerTokenMock).toHaveBeenCalledWith("oauth_access_token", {
@@ -377,7 +327,7 @@ describe("authenticateMcpRequest", () => {
     });
     expect(applyRateLimit).toHaveBeenCalledWith(
       expect.objectContaining({ namespace: "api:v3" }),
-      "oauth:user_1:client_1"
+      "oauth:user_1:librechat"
     );
   });
 
@@ -385,7 +335,7 @@ describe("authenticateMcpRequest", () => {
     verifyBearerTokenMock.mockResolvedValue({
       aud: MCP_AUDIENCE,
       sub: "user_1",
-      azp: "client_1",
+      azp: "librechat",
       scope: "surveys:read surveys:write",
     });
     userFindUniqueMock.mockResolvedValue({ isActive: false });
@@ -424,7 +374,7 @@ describe("authenticateMcpRequest", () => {
     verifyBearerTokenMock.mockResolvedValue({
       aud: MCP_AUDIENCE,
       sub: "user_1",
-      client_id: "client_2",
+      client_id: "librechat",
       scope: "openid profile email",
     });
 
@@ -455,7 +405,7 @@ describe("authenticateMcpRequest", () => {
     verifyBearerTokenMock.mockResolvedValue({
       aud: MCP_AUDIENCE,
       sub: "user_1",
-      client_id: "client_2",
+      client_id: "librechat",
       scope: "openid profile email offline_access",
     });
 
@@ -478,7 +428,7 @@ describe("authenticateMcpRequest", () => {
   test.each([["feedbackRecords:read"], ["surveys:write"], ["responses:read"]])(
     "authenticates an OAuth token scoped only to %s",
     async (scope) => {
-      verifyBearerTokenMock.mockResolvedValue({ aud: MCP_AUDIENCE, sub: "user_1", azp: "client_1", scope });
+      verifyBearerTokenMock.mockResolvedValue({ aud: MCP_AUDIENCE, sub: "user_1", azp: "librechat", scope });
 
       const result = await authenticateMcpRequest(
         createRequest("http://localhost/api/mcp", {
@@ -501,7 +451,7 @@ describe("authenticateMcpRequest", () => {
     verifyBearerTokenMock.mockResolvedValue({
       aud: "https://other.example.com/api",
       sub: "user_1",
-      azp: "client_1",
+      azp: "librechat",
       scope: "surveys:read",
     });
 
@@ -523,7 +473,7 @@ describe("authenticateMcpRequest", () => {
     verifyBearerTokenMock.mockResolvedValue({
       aud: [MCP_AUDIENCE, "https://other.example.com/api"],
       sub: "user_1",
-      azp: "client_1",
+      azp: "librechat",
       scope: "surveys:read",
     });
     vi.mocked(applyIPRateLimit).mockRejectedValue(new TooManyRequestsError("Too many auth requests", 45));
@@ -544,7 +494,7 @@ describe("authenticateMcpRequest", () => {
   test("rejects OAuth bearer tokens without a user subject", async () => {
     verifyBearerTokenMock.mockResolvedValue({
       aud: MCP_AUDIENCE,
-      azp: "client_1",
+      azp: "librechat",
       scope: "surveys:read",
     });
 
@@ -608,7 +558,7 @@ describe("authenticateMcpRequest", () => {
     verifyBearerTokenMock.mockResolvedValue({
       aud: MCP_AUDIENCE,
       sub: "user_1",
-      azp: "client_1",
+      azp: "librechat",
       scope: "surveys:read",
     });
     vi.mocked(applyRateLimit).mockRejectedValue(new TooManyRequestsError("Too many requests", 30));
@@ -626,8 +576,144 @@ describe("authenticateMcpRequest", () => {
     }
     expect(applyRateLimit).toHaveBeenCalledWith(
       expect.objectContaining({ namespace: "api:v3" }),
-      "oauth:user_1:client_1"
+      "oauth:user_1:librechat"
     );
+  });
+});
+
+/**
+ * ASLA (Must 1): `/api/mcp` accepts a token only while its OAuth client is ASLA Chat — the client ID
+ * pinned by `MCP_LIBRECHAT_CLIENT_ID`, enabled, with redirect URIs of exactly `MCP_LIBRECHAT_CALLBACK_URI`,
+ * read from the database per request.
+ */
+describe("MCP OAuth client restriction (ASLA Must 1)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    userFindUniqueMock.mockResolvedValue({ isActive: true });
+    allowLibreChatClient();
+    vi.mocked(applyRateLimit).mockResolvedValue({ allowed: true });
+    vi.mocked(applyIPRateLimit).mockResolvedValue({ allowed: true });
+  });
+
+  const authenticateWithPayload = (payload: Record<string, unknown>) => {
+    verifyBearerTokenMock.mockResolvedValue({
+      aud: MCP_AUDIENCE,
+      sub: "user_1",
+      scope: "surveys:read",
+      ...payload,
+    });
+    return authenticateMcpRequest(
+      createRequest("http://localhost/api/mcp", { authorization: "Bearer oauth_access_token" })
+    );
+  };
+
+  const expectRefused = async (
+    result: Awaited<ReturnType<typeof authenticateMcpRequest>>,
+    reason: string
+  ) => {
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.response.status).toBe(403);
+      expect(result.response.headers.get("WWW-Authenticate")).toBeNull();
+      expect(await result.response.json()).toMatchObject({
+        detail: "This OAuth client is not allowed to use the MCP server",
+      });
+    }
+    expect(warnMock).toHaveBeenCalledWith(
+      expect.objectContaining({ statusCode: 403, reason }),
+      "MCP OAuth client is not the allowed LibreChat client"
+    );
+    expect(applyRateLimit).not.toHaveBeenCalled();
+  };
+
+  test("accepts the LibreChat client, read by azp", async () => {
+    const result = await authenticateWithPayload({ azp: "librechat", client_id: "ignored" });
+
+    expect(result.ok).toBe(true);
+    expect(oauthClientFindUniqueMock).toHaveBeenCalledWith({
+      where: { clientId: "librechat" },
+      select: { redirectUris: true, disabled: true },
+    });
+  });
+
+  test("falls back to client_id when the token has no azp", async () => {
+    const result = await authenticateWithPayload({ client_id: "librechat" });
+
+    expect(result.ok).toBe(true);
+    expect(oauthClientFindUniqueMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { clientId: "librechat" } })
+    );
+  });
+
+  test("refuses a token that names no client", async () => {
+    await expectRefused(await authenticateWithPayload({}), "missing_client_id");
+    expect(oauthClientFindUniqueMock).not.toHaveBeenCalled();
+  });
+
+  // The finding that motivated the pin: before registration was closed, anyone could register their
+  // own client with the LibreChat callback. Its redirect URIs match; its client ID does not.
+  test("refuses a self-registered client with the LibreChat callback, without a DB read", async () => {
+    await expectRefused(await authenticateWithPayload({ azp: "self_registered" }), "not_librechat_client");
+    expect(oauthClientFindUniqueMock).not.toHaveBeenCalled();
+  });
+
+  test("refuses every client when MCP_LIBRECHAT_CLIENT_ID is unset", async () => {
+    const { getMcpLibreChatClientId } = await import("@/modules/auth/lib/mcp-librechat-callback");
+    vi.mocked(getMcpLibreChatClientId).mockReturnValueOnce(null);
+
+    await expectRefused(await authenticateWithPayload({ azp: "librechat" }), "not_librechat_client");
+    expect(oauthClientFindUniqueMock).not.toHaveBeenCalled();
+  });
+
+  test("refuses the pinned client once it no longer exists", async () => {
+    oauthClientFindUniqueMock.mockResolvedValue(null);
+    await expectRefused(await authenticateWithPayload({ azp: "librechat" }), "unknown_client");
+  });
+
+  test("refuses a disabled client", async () => {
+    oauthClientFindUniqueMock.mockResolvedValue({ redirectUris: [LIBRECHAT_CALLBACK], disabled: true });
+    await expectRefused(await authenticateWithPayload({ azp: "librechat" }), "disabled_client");
+  });
+
+  test.each([
+    ["a loopback callback", ["http://127.0.0.1:33418/callback"]],
+    ["claude.ai", ["https://claude.ai/api/mcp/auth_callback"]],
+    ["the other deployment's callback", ["https://chat.aslalabs.org/api/mcp/formbricks/oauth/callback"]],
+    ["the callback plus a loopback", [LIBRECHAT_CALLBACK, "http://127.0.0.1:33418/callback"]],
+    ["the callback twice", [LIBRECHAT_CALLBACK, LIBRECHAT_CALLBACK]],
+    ["no callback", []],
+  ])("refuses a client registered with %s", async (_case, redirectUris) => {
+    oauthClientFindUniqueMock.mockResolvedValue({ redirectUris, disabled: false });
+    await expectRefused(await authenticateWithPayload({ azp: "librechat" }), "redirect_uris_mismatch");
+  });
+
+  // The same token, before and after the client's callbacks change: no cache carries the first answer.
+  test("refuses a token whose client was changed after the token was issued", async () => {
+    expect((await authenticateWithPayload({ azp: "librechat" })).ok).toBe(true);
+    vi.mocked(applyRateLimit).mockClear();
+
+    oauthClientFindUniqueMock.mockResolvedValue({
+      redirectUris: ["http://127.0.0.1:33418/callback"],
+      disabled: false,
+    });
+    await expectRefused(await authenticateWithPayload({ azp: "librechat" }), "redirect_uris_mismatch");
+  });
+
+  test("refuses every client when MCP_LIBRECHAT_CALLBACK_URI is unset", async () => {
+    const { getMcpLibreChatCallbackUri } = await import("@/modules/auth/lib/mcp-librechat-callback");
+    vi.mocked(getMcpLibreChatCallbackUri).mockReturnValueOnce(null);
+
+    await expectRefused(await authenticateWithPayload({ azp: "librechat" }), "redirect_uris_mismatch");
+  });
+
+  test("an inactive user is still refused with 401 even when the client is wrong", async () => {
+    userFindUniqueMock.mockResolvedValue({ isActive: false });
+    oauthClientFindUniqueMock.mockResolvedValue(null);
+
+    const result = await authenticateWithPayload({ azp: "deleted" });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.response.status).toBe(401);
   });
 });
 
@@ -639,10 +725,17 @@ describe("handleAuthenticatedMcpRequest", () => {
   });
 
   test("attaches MCP auth info and request headers to handler response", async () => {
-    vi.mocked(authenticateApiKeyFromHeaders).mockResolvedValue(apiKeyAuth);
+    userFindUniqueMock.mockResolvedValue({ isActive: true });
+    allowLibreChatClient();
+    verifyBearerTokenMock.mockResolvedValue({
+      aud: MCP_AUDIENCE,
+      sub: "user_1",
+      azp: "librechat",
+      scope: "surveys:read",
+    });
     const handler = vi.fn(async (request: Request & { auth?: unknown }) => {
       expect(request.auth).toMatchObject({
-        clientId: "key_1",
+        clientId: "librechat",
       });
       return Response.json({ ok: true });
     });
@@ -650,7 +743,7 @@ describe("handleAuthenticatedMcpRequest", () => {
     const response = await handleAuthenticatedMcpRequest(
       createRequest("http://localhost/api/mcp", {
         "x-request-id": "req_2",
-        "x-api-key": "fbk_test",
+        authorization: "Bearer oauth_access_token",
       }),
       handler
     );
@@ -674,6 +767,7 @@ describe("MCP OAuth access token audience binding", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     userFindUniqueMock.mockResolvedValue({ isActive: true });
+    allowLibreChatClient();
     vi.mocked(applyRateLimit).mockResolvedValue({ allowed: true });
     vi.mocked(applyIPRateLimit).mockResolvedValue({ allowed: true });
 
@@ -687,7 +781,7 @@ describe("MCP OAuth access token audience binding", () => {
   });
 
   async function signAccessToken(aud: string | string[] | undefined): Promise<string> {
-    const token = new SignJWT({ scope: "surveys:read", azp: "client_1" })
+    const token = new SignJWT({ scope: "surveys:read", azp: "librechat" })
       // `typ: at+jwt` is what Better Auth 1.7 stamps on an access token (RFC 9068 §2.1), and the
       // resource server now requires it — so the fixtures have to carry it to stay realistic.
       .setProtectedHeader({ alg: "ES256", typ: "at+jwt" })
@@ -797,7 +891,7 @@ describe("MCP OAuth JWKS loading against the real Better Auth verifier", () => {
 
     const keyPair = await generateKeyPair("ES256");
     const publicJwk = { ...(await exportJWK(keyPair.publicKey)), kid: KID, alg: "ES256", use: "sig" };
-    token = await new SignJWT({ scope: "surveys:read", azp: "client_1" })
+    token = await new SignJWT({ scope: "surveys:read", azp: "librechat" })
       .setProtectedHeader({ alg: "ES256", typ: "at+jwt", kid: KID })
       .setIssuer(ISSUER)
       .setAudience(MCP_AUDIENCE)
@@ -840,6 +934,7 @@ describe("MCP OAuth JWKS loading against the real Better Auth verifier", () => {
     getJwksMock.mockImplementation(realOAuth2.getJwks);
     verifyBearerTokenMock.mockImplementation(realOAuth2.verifyBearerToken);
     userFindUniqueMock.mockResolvedValue({ isActive: true });
+    allowLibreChatClient();
     vi.mocked(applyRateLimit).mockResolvedValue({ allowed: true });
     vi.mocked(applyIPRateLimit).mockResolvedValue({ allowed: true });
   });

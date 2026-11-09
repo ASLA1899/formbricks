@@ -98,7 +98,10 @@ export const prepareDcrRequest = async (request: Request): Promise<Request | Res
     return Response.json(
       {
         error: "invalid_redirect_uri",
-        error_description: `"${disallowed.uri}" in ${disallowed.field} is not an allowed redirect URI for dynamic client registration`,
+        error_description:
+          disallowed.uri === null
+            ? `${disallowed.field} must list exactly the one allowed redirect URI for dynamic client registration`
+            : `"${disallowed.uri}" in ${disallowed.field} is not an allowed redirect URI for dynamic client registration`,
       },
       { status: 400 }
     );

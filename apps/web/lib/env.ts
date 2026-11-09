@@ -79,6 +79,55 @@ const ZDcrRedirectUri = z.url().refine(isValidDcrRedirectUri, {
     "MCP_DCR_ALLOWED_REDIRECT_URIS entries must be exact, non-loopback https URLs without credentials, a fragment or a wildcard",
 });
 
+/**
+ * The one OAuth callback the MCP server serves (ASLA, Must 1): ASLA Chat's LibreChat connector callback
+ * for this deployment. Same shape rules as a DCR allowlist entry. Blank counts as unset, and unset fails
+ * closed: no client can register and `/api/mcp` accepts no token.
+ */
+const ZMcpLibreChatCallbackUri = z.preprocess(
+  (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
+  z
+    .url()
+    // No comma: this is one callback, not a list. A comma-joined pair parses as a single URL that no
+    // client would ever use, which would close MCP with no hint why.
+    .refine((value) => isValidDcrRedirectUri(value) && !value.includes(","), {
+      message:
+        "MCP_LIBRECHAT_CALLBACK_URI must be one exact, non-loopback https URL without credentials, a fragment, a wildcard or a comma",
+    })
+    .optional()
+);
+
+/** Blank counts as unset, so an empty Key Vault render does not become a value. */
+const blankAsUnset = (value: unknown) =>
+  typeof value === "string" && value.trim().length === 0 ? undefined : value;
+
+/**
+ * ASLA (Must 1): the client ID of the one OAuth client `/api/mcp` serves, ASLA Chat's LibreChat
+ * connector. Created once by the operator (see `MCP_DCR_INITIAL_ACCESS_TOKEN`). Unset fails closed:
+ * `/api/mcp` accepts no token.
+ */
+const ZMcpLibreChatClientId = z.preprocess(
+  blankAsUnset,
+  z
+    .string()
+    .trim()
+    .regex(/^[\w-]{8,128}$/, "MCP_LIBRECHAT_CLIENT_ID must be the client_id returned by registration")
+    .optional()
+);
+
+/**
+ * ASLA (Must 1): the RFC 7591 initial access token that authorizes `/oauth2/register`. Set it only for
+ * the one-time registration of the LibreChat client, then unset it. Unset closes registration entirely.
+ * At least 32 characters so it cannot be guessed; compared in constant time.
+ */
+const ZMcpDcrInitialAccessToken = z.preprocess(
+  blankAsUnset,
+  z
+    .string()
+    .min(32, "MCP_DCR_INITIAL_ACCESS_TOKEN must be at least 32 characters (use openssl rand -base64 48)")
+    .optional()
+);
+
 /** Comma-separated list; blank, and empty entries from a stray comma, count as unset. */
 const ZDcrRedirectUriList = z.preprocess((value) => {
   if (typeof value !== "string") return value;
@@ -695,6 +744,9 @@ const parsedEnv = createEnv({
     BETTER_AUTH_URL: z.url().optional(),
     MCP_OAUTH_JWKS_URL: ZMcpOauthJwksUrl.optional(),
     MCP_DCR_ALLOWED_REDIRECT_URIS: ZDcrRedirectUriList,
+    MCP_LIBRECHAT_CALLBACK_URI: ZMcpLibreChatCallbackUri,
+    MCP_LIBRECHAT_CLIENT_ID: ZMcpLibreChatClientId,
+    MCP_DCR_INITIAL_ACCESS_TOKEN: ZMcpDcrInitialAccessToken,
     MAIL_FROM_NAME: z.string().optional(),
     NOTION_OAUTH_CLIENT_ID: z.string().optional(),
     NOTION_OAUTH_CLIENT_SECRET: z.string().optional(),
@@ -828,6 +880,9 @@ const parsedEnv = createEnv({
     BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
     MCP_OAUTH_JWKS_URL: process.env.MCP_OAUTH_JWKS_URL,
     MCP_DCR_ALLOWED_REDIRECT_URIS: process.env.MCP_DCR_ALLOWED_REDIRECT_URIS,
+    MCP_LIBRECHAT_CALLBACK_URI: process.env.MCP_LIBRECHAT_CALLBACK_URI,
+    MCP_LIBRECHAT_CLIENT_ID: process.env.MCP_LIBRECHAT_CLIENT_ID,
+    MCP_DCR_INITIAL_ACCESS_TOKEN: process.env.MCP_DCR_INITIAL_ACCESS_TOKEN,
     BREVO_API_KEY: process.env.BREVO_API_KEY,
     BREVO_LIST_ID: process.env.BREVO_LIST_ID,
     CRON_SECRET: process.env.CRON_SECRET,

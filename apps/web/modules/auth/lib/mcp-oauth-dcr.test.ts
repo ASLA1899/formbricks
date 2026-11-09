@@ -5,6 +5,7 @@ import { jwt } from "better-auth/plugins";
 import { NextRequest } from "next/server";
 import { describe, expect, test, vi } from "vitest";
 import { GET as getProtectedResourceMetadata } from "@/app/.well-known/oauth-protected-resource/[[...resource]]/route";
+import { AUTH_DISABLED_PATHS, OAUTH_CLIENT_MUTATION_PATHS } from "./auth-disabled-paths";
 import { prepareDcrRequest, withInferredApplicationType } from "./mcp-dcr-application-type";
 import { getMcpOauthProviderOptions } from "./mcp-oauth-provider-options";
 import { getAuthIssuerUrl, getMcpResourceUrl, getOAuthUserInfoUrl } from "./oauth-urls";
@@ -18,8 +19,21 @@ vi.mock("@/lib/env", () => ({
     NEXTAUTH_URL: undefined,
     PUBLIC_URL: undefined,
     MCP_DCR_ALLOWED_REDIRECT_URIS: undefined,
+    MCP_LIBRECHAT_CALLBACK_URI: "https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback",
+    // Literal, not the constant below: vi.mock factories are hoisted above module scope.
+    MCP_DCR_INITIAL_ACCESS_TOKEN: "mcp-dcr-test-initial-access-token-0123456789abcdef",
   },
 }));
+
+/**
+ * ASLA (Must 1): registration needs the operator's RFC 7591 initial access token. Every registration in
+ * this file sends it unless the test is about what happens without it.
+ */
+const INITIAL_ACCESS_TOKEN = "mcp-dcr-test-initial-access-token-0123456789abcdef";
+const REGISTRATION_HEADERS = {
+  "content-type": "application/json",
+  authorization: `Bearer ${INITIAL_ACCESS_TOKEN}`,
+};
 
 const BASE_URL = "http://localhost:3000";
 const REDIRECT_URI = "http://127.0.0.1:33418/callback";
@@ -47,7 +61,10 @@ const LOOPBACK_REGISTRATION = JSON.stringify({
  * how the missing offline_access advertisement broke every MCP-client login. A pre-seeded
  * full-scope client would mask that bug, so this suite must register via DCR only.
  */
-const createAuthInstance = ({ withEmailPassword = false }: { withEmailPassword?: boolean } = {}) => {
+const createAuthInstance = ({
+  withEmailPassword = false,
+  disabledPaths,
+}: { withEmailPassword?: boolean; disabledPaths?: string[] } = {}) => {
   // memoryAdapter needs every model it will touch declared up front — it does not create them
   // lazily. Better Auth 1.7 added the resource tables, and without them the plugin's boot-time
   // resource seeding logs `Model oauthResource not found in the DB` and every authorize fails.
@@ -71,6 +88,7 @@ const createAuthInstance = ({ withEmailPassword = false }: { withEmailPassword?:
     database: memoryAdapter(db),
     // Only the end-to-end flow below needs a signed-in user; everything else stops at the login redirect.
     ...(withEmailPassword ? { emailAndPassword: { enabled: true } } : {}),
+    ...(disabledPaths ? { disabledPaths } : {}),
     // jwt is a hard dependency of oauthProvider; configured as in production auth.ts.
     plugins: [
       jwt({
@@ -95,7 +113,7 @@ const registerClient = async (auth: ReturnType<typeof createAuthInstance>, scope
   const response = await auth.handler(
     new Request(`${BASE_URL}/api/auth/oauth2/register`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: REGISTRATION_HEADERS,
       body: JSON.stringify({
         client_name: "MCP DCR test client",
         redirect_uris: [REDIRECT_URI],
@@ -183,7 +201,7 @@ describe("MCP OAuth Dynamic Client Registration → authorize (real-client shape
     auth.handler(
       new Request(`${BASE_URL}/api/auth/oauth2/register`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: REGISTRATION_HEADERS,
         body,
       })
     );
@@ -256,7 +274,7 @@ describe("MCP OAuth Dynamic Client Registration → authorize (real-client shape
     const response = await auth.handler(
       new Request(`${BASE_URL}/api/auth/oauth2/register`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: REGISTRATION_HEADERS,
         body: JSON.stringify({
           client_name: "MCP DCR default-scope client",
           redirect_uris: [REDIRECT_URI],
@@ -377,10 +395,15 @@ describe("MCP OAuth Dynamic Client Registration → authorize (real-client shape
 
 const REGISTER_PATH = "/api/auth/oauth2/register";
 
-const registrationRequest = (path: string, body: string, contentType = "application/json") =>
+const registrationRequest = (
+  path: string,
+  body: string,
+  contentType = "application/json",
+  authorization: string | null = `Bearer ${INITIAL_ACCESS_TOKEN}`
+) =>
   new Request(`${BASE_URL}${path}`, {
     method: "POST",
-    headers: { "content-type": contentType },
+    headers: { "content-type": contentType, ...(authorization ? { authorization } : {}) },
     body,
   });
 
@@ -432,16 +455,14 @@ describe("DCR redirect-URI allowlist vs. the real plugin (ENG-3086)", () => {
     expect(body.error).toBe("invalid_redirect_uri");
   });
 
-  test("a loopback MCP registration still reaches upstream and registers", async () => {
+  test("ASLA: the gate refuses a loopback MCP registration (desktop clients are not allowed)", async () => {
     const response = await throughRoute(
       createAuthInstance(),
       registrationRequest(REGISTER_PATH, LOOPBACK_REGISTRATION)
     );
-    const body = (await response.json()) as { client_id?: string };
 
-    // Through the gate AND through the application_type inference — the shape a real MCP client sends.
-    expect(response.status).toBe(201);
-    expect(body.client_id).toBeTruthy();
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: "invalid_redirect_uri" });
   });
 
   // Paths the gate matches. `..` and a query string are the two that would slip past a naive
@@ -495,20 +516,27 @@ describe("DCR redirect-URI allowlist vs. the real plugin (ENG-3086)", () => {
 });
 
 /**
- * ENG-3471. Hosted MCP connectors (claude.ai, ChatGPT) connect from the vendor's cloud and register a
- * fixed `https` callback on the vendor's own origin. The ENG-3086 gate allows those exact URIs — the
- * bodies below are the shapes the vendors actually send — and this suite proves the rest of the chain
- * works once it does: upstream accepts them as public `web` clients, and the flow reaches a token.
- *
- * It also pins the upstream behaviour the whole design rests on. The gate only decides what may be
- * REGISTERED; what may be REDIRECTED TO is decided by Better Auth at `/authorize`. If that ever matched
- * an https redirect URI loosely (prefix, path, query), registering `https://claude.ai/api/mcp/auth_callback`
- * would let an attacker send codes to any page on claude.ai. So the exact match is asserted here.
+ * ASLA Must 1 (ENG-3471 upstream). Only ASLA Chat's LibreChat connector may register: its exact callback
+ * (`MCP_LIBRECHAT_CALLBACK_URI`, pinned to the sandbox value in the env mock above) passes the gate, and
+ * the upstream hosted connectors (claude.ai, ChatGPT) that 6.1 allows are refused. The suite proves the
+ * LibreChat client reaches a token for the MCP resource, and pins the upstream behaviour the design rests
+ * on: Better Auth matches the redirect URI exactly at `/authorize`, so a registered callback cannot be
+ * widened to another path or query later.
  */
-describe("hosted MCP connector registration vs. the real plugin (ENG-3471)", () => {
+describe("LibreChat connector registration vs. the real plugin (ASLA Must 1)", () => {
+  const LIBRECHAT = "https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback";
+  const LIBRECHAT_PRODUCTION = "https://chat.aslalabs.org/api/mcp/formbricks/oauth/callback";
   const CLAUDE_AI = "https://claude.ai/api/mcp/auth_callback";
   const CLAUDE_COM = "https://claude.com/api/mcp/auth_callback";
   const CHATGPT = "https://chatgpt.com/connector_platform_oauth_redirect";
+
+  const LIBRECHAT_REGISTRATION = JSON.stringify({
+    client_name: "ASLA Chat",
+    redirect_uris: [LIBRECHAT],
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    token_endpoint_auth_method: "none",
+  });
 
   // claude.ai lists both callbacks in one body and sends no application_type.
   const CLAUDE_REGISTRATION = JSON.stringify({
@@ -534,29 +562,41 @@ describe("hosted MCP connector registration vs. the real plugin (ENG-3471)", () 
     return { verifier, challenge: Buffer.from(digest).toString("base64url") };
   };
 
+  test("a LibreChat registration passes the gate and registers with exactly its callback", async () => {
+    const response = await throughRoute(
+      createAuthInstance(),
+      registrationRequest(REGISTER_PATH, LIBRECHAT_REGISTRATION)
+    );
+    const registered = (await response.json()) as { client_id?: string; redirect_uris?: string[] };
+
+    expect(response.status).toBe(201);
+    // The operator pins this value as MCP_LIBRECHAT_CLIENT_ID, so a generated ID must pass the same
+    // format rule `lib/env.ts` enforces, or the app refuses to boot with it.
+    expect(registered.client_id).toMatch(/^[\w-]{8,128}$/);
+    expect(registered.redirect_uris).toEqual([LIBRECHAT]);
+  });
+
   test.each([
     ["claude.ai", CLAUDE_REGISTRATION],
     ["ChatGPT", CHATGPT_REGISTRATION],
-  ])("a %s registration passes the gate and registers as a public web client", async (_client, body) => {
+  ])("ASLA: the gate refuses a %s registration that upstream would accept", async (_client, body) => {
     const response = await throughRoute(createAuthInstance(), registrationRequest(REGISTER_PATH, body));
-    const registered = (await response.json()) as {
-      client_id?: string;
-      token_endpoint_auth_method?: string;
-      redirect_uris?: string[];
-    };
 
-    expect(response.status).toBe(201);
-    expect(registered.client_id).toBeTruthy();
-    expect(registered.token_endpoint_auth_method).toBe("none");
-    expect(registered.redirect_uris).toEqual((JSON.parse(body) as { redirect_uris: string[] }).redirect_uris);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: "invalid_redirect_uri" });
   });
 
-  test("a lookalike of a hosted callback is still refused by the gate", async () => {
+  test.each([
+    ["the production callback on the sandbox", [LIBRECHAT_PRODUCTION]],
+    ["the callback plus a second URI", [LIBRECHAT, "https://attacker-controlled-test.example.org/cb"]],
+    ["the callback twice", [LIBRECHAT, LIBRECHAT]],
+    ["no redirect URI", []],
+  ])("ASLA: the gate refuses %s", async (_case, redirectUris) => {
     const response = await throughRoute(
       createAuthInstance(),
       registrationRequest(
         REGISTER_PATH,
-        JSON.stringify({ ...JSON.parse(CLAUDE_REGISTRATION), redirect_uris: [`${CLAUDE_AI}/`] })
+        JSON.stringify({ ...JSON.parse(LIBRECHAT_REGISTRATION), redirect_uris: redirectUris })
       )
     );
 
@@ -564,9 +604,22 @@ describe("hosted MCP connector registration vs. the real plugin (ENG-3471)", () 
     await expect(response.json()).resolves.toMatchObject({ error: "invalid_redirect_uri" });
   });
 
-  test("a registered claude.ai client completes consent → code → token for the MCP resource", async () => {
+  test("a lookalike of the LibreChat callback is refused by the gate", async () => {
+    const response = await throughRoute(
+      createAuthInstance(),
+      registrationRequest(
+        REGISTER_PATH,
+        JSON.stringify({ ...JSON.parse(LIBRECHAT_REGISTRATION), redirect_uris: [`${LIBRECHAT}/`] })
+      )
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: "invalid_redirect_uri" });
+  });
+
+  test("a registered LibreChat client completes consent → code → token for the MCP resource", async () => {
     const auth = createAuthInstance({ withEmailPassword: true });
-    const registration = await throughRoute(auth, registrationRequest(REGISTER_PATH, CLAUDE_REGISTRATION));
+    const registration = await throughRoute(auth, registrationRequest(REGISTER_PATH, LIBRECHAT_REGISTRATION));
     const { client_id: clientId } = (await registration.json()) as { client_id: string };
 
     const signUp = await auth.api.signUpEmail({
@@ -583,9 +636,9 @@ describe("hosted MCP connector registration vs. the real plugin (ENG-3471)", () 
     const query = new URLSearchParams({
       client_id: clientId,
       response_type: "code",
-      redirect_uri: CLAUDE_AI,
+      redirect_uri: LIBRECHAT,
       scope: "surveys:read offline_access",
-      state: "claude-state",
+      state: "librechat-state",
       code_challenge: challenge,
       code_challenge_method: "S256",
       resource,
@@ -610,8 +663,8 @@ describe("hosted MCP connector registration vs. the real plugin (ENG-3471)", () 
     const { url: callbackUrl } = (await consent.json()) as { url: string };
     const callback = new URL(callbackUrl);
 
-    expect(`${callback.origin}${callback.pathname}`).toBe(CLAUDE_AI);
-    expect(callback.searchParams.get("state")).toBe("claude-state");
+    expect(`${callback.origin}${callback.pathname}`).toBe(LIBRECHAT);
+    expect(callback.searchParams.get("state")).toBe("librechat-state");
     // RFC 9207: ChatGPT only uses its stable callback when the AS returns `iss`.
     expect(callback.searchParams.get("iss")).toBe(getAuthIssuerUrl());
 
@@ -622,7 +675,7 @@ describe("hosted MCP connector registration vs. the real plugin (ENG-3471)", () 
         body: new URLSearchParams({
           grant_type: "authorization_code",
           code: callback.searchParams.get("code") ?? "",
-          redirect_uri: CLAUDE_AI,
+          redirect_uri: LIBRECHAT,
           client_id: clientId,
           code_verifier: verifier,
           resource,
@@ -639,33 +692,187 @@ describe("hosted MCP connector registration vs. the real plugin (ENG-3471)", () 
     expect([claims.aud].flat()).toContain(resource);
   });
 
-  test.each([`${CLAUDE_AI}?next=https://evil.example.com`, `${CLAUDE_AI}/`, "https://claude.ai/other"])(
-    "upstream refuses to redirect a registered claude.ai client to %s",
-    async (redirectUri) => {
-      const auth = createAuthInstance();
-      const registration = await throughRoute(auth, registrationRequest(REGISTER_PATH, CLAUDE_REGISTRATION));
-      const { client_id: clientId } = (await registration.json()) as { client_id: string };
-      const { challenge } = await createPkcePair();
+  test.each([
+    `${LIBRECHAT}?next=https://evil.example.com`,
+    `${LIBRECHAT}/`,
+    "https://chat.aslalabs.org/api/mcp/other/oauth/callback",
+  ])("upstream refuses to redirect a registered LibreChat client to %s", async (redirectUri) => {
+    const auth = createAuthInstance();
+    const registration = await throughRoute(auth, registrationRequest(REGISTER_PATH, LIBRECHAT_REGISTRATION));
+    const { client_id: clientId } = (await registration.json()) as { client_id: string };
+    const { challenge } = await createPkcePair();
 
-      const authorize = await auth.handler(
-        new Request(
-          `${BASE_URL}/api/auth/oauth2/authorize?${new URLSearchParams({
-            client_id: clientId,
-            response_type: "code",
-            redirect_uri: redirectUri,
-            scope: "surveys:read",
-            state: "s",
-            code_challenge: challenge,
-            code_challenge_method: "S256",
-          }).toString()}`,
-          { redirect: "manual" }
-        )
+    const authorize = await auth.handler(
+      new Request(
+        `${BASE_URL}/api/auth/oauth2/authorize?${new URLSearchParams({
+          client_id: clientId,
+          response_type: "code",
+          redirect_uri: redirectUri,
+          scope: "surveys:read",
+          state: "s",
+          code_challenge: challenge,
+          code_challenge_method: "S256",
+        }).toString()}`,
+        { redirect: "manual" }
+      )
+    );
+    const location = authorize.headers.get("location") ?? "";
+
+    // Upstream answers on its own error page and never sends the browser to the unregistered URI.
+    expect(location).not.toContain("chat.aslalabs.org");
+    expect(location).toContain("invalid_redirect");
+  });
+});
+
+/**
+ * ASLA Must 1: the signed-in client-management routes. Upstream 6.1 leaves them open to any signed-in
+ * user, which bypasses the DCR gate entirely (ASL-1799). Each is driven against the real plugin twice:
+ * open without `disabledPaths` (so the 404 below is proof of the closure, not of a wrong path), and
+ * closed with the production list.
+ */
+describe("OAuth client-management routes (ASLA Must 1)", () => {
+  const LIBRECHAT_ONLY_REGISTRATION = JSON.stringify({
+    client_name: "ASLA Chat",
+    redirect_uris: ["https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback"],
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    token_endpoint_auth_method: "client_secret_post",
+  });
+
+  const signedInCookie = async (auth: ReturnType<typeof createAuthInstance>) => {
+    const signUp = await auth.api.signUpEmail({
+      body: { email: "client-admin@example.com", password: "a-long-test-password-1", name: "User" },
+      asResponse: true,
+    });
+    return signUp.headers
+      .getSetCookie()
+      .map((value) => value.split(";")[0])
+      .join("; ");
+  };
+
+  const createClientRequest = (path: string, cookie: string) =>
+    new Request(`${BASE_URL}/api/auth${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, origin: BASE_URL },
+      body: JSON.stringify({
+        client_name: "Signed-in client",
+        redirect_uris: ["http://127.0.0.1:33418/callback"],
+        application_type: "native",
+        token_endpoint_auth_method: "none",
+      }),
+    });
+
+  // `clientPrivileges` denies `create` to sessions, so this is closed even before disabledPaths 404s it.
+  test("a signed-in user cannot create a client even where the route is mounted", async () => {
+    const auth = createAuthInstance({ withEmailPassword: true });
+    const response = await auth.handler(
+      createClientRequest("/oauth2/create-client", await signedInCookie(auth))
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  test.each([
+    "/oauth2/create-client",
+    "/oauth2/create-client?x=1",
+    "/oauth2/update-client",
+    "/oauth2/client/rotate-secret",
+    "/oauth2/delete-client",
+    "/admin/oauth2/create-client",
+    "/admin/oauth2/update-client",
+  ])("the production disabledPaths answer %s with 404", async (path) => {
+    const auth = createAuthInstance({ withEmailPassword: true, disabledPaths: [...AUTH_DISABLED_PATHS] });
+    const response = await auth.handler(createClientRequest(path, await signedInCookie(auth)));
+
+    expect(response.status).toBe(404);
+  });
+
+  // Near-miss spellings must be paths upstream does not route either, or the closure can be walked around.
+  test.each([
+    "/oauth2/create-client/",
+    "/oauth2/CREATE-CLIENT",
+    "//oauth2/create-client",
+    "/oauth2/create%2Dclient",
+  ])("upstream does not route %s", async (path) => {
+    const auth = createAuthInstance({ withEmailPassword: true, disabledPaths: [...AUTH_DISABLED_PATHS] });
+    const response = await auth.handler(createClientRequest(path, await signedInCookie(auth)));
+
+    expect(response.status).toBe(404);
+  });
+
+  // Nor in-process: the admin endpoint takes a session, and sessions may not create clients. The only way
+  // to create one is registration with the initial access token.
+  test("a session cannot create a client through the admin endpoint in-process", async () => {
+    const auth = createAuthInstance({ withEmailPassword: true, disabledPaths: [...AUTH_DISABLED_PATHS] });
+
+    await expect(
+      auth.api.adminCreateOAuthClient({
+        headers: new Headers({ cookie: await signedInCookie(auth) }),
+        body: {
+          client_name: "ASLA Chat",
+          redirect_uris: ["https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback"],
+          token_endpoint_auth_method: "client_secret_basic",
+        },
+      })
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  test.each([
+    ["no token", null],
+    ["a wrong token", "Bearer not-the-operator-token-but-just-as-long-0123456"],
+    ["a prefix of the token", `Bearer ${INITIAL_ACCESS_TOKEN.slice(0, -1)}`],
+  ])("registration with %s is refused, even for the LibreChat callback", async (_label, authorization) => {
+    const response = await throughRoute(
+      createAuthInstance(),
+      registrationRequest(REGISTER_PATH, LIBRECHAT_ONLY_REGISTRATION, "application/json", authorization)
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  test("a signed-in session cannot register a client, even with the right token alongside", async () => {
+    const auth = createAuthInstance({ withEmailPassword: true });
+    const request = registrationRequest(REGISTER_PATH, LIBRECHAT_ONLY_REGISTRATION);
+    request.headers.set("cookie", await signedInCookie(auth));
+
+    const response = await throughRoute(auth, request);
+
+    expect(response.status).toBe(401);
+  });
+
+  test("registration is closed entirely while MCP_DCR_INITIAL_ACCESS_TOKEN is unset", async () => {
+    const { env } = await import("@/lib/env");
+    const mutableEnv = env as { MCP_DCR_INITIAL_ACCESS_TOKEN?: string };
+    mutableEnv.MCP_DCR_INITIAL_ACCESS_TOKEN = undefined;
+    try {
+      const response = await throughRoute(
+        createAuthInstance(),
+        registrationRequest(REGISTER_PATH, LIBRECHAT_ONLY_REGISTRATION)
       );
-      const location = authorize.headers.get("location") ?? "";
-
-      // Upstream answers on its own error page and never sends the browser to the unregistered URI.
-      expect(location).not.toContain("claude.ai");
-      expect(location).toContain("invalid_redirect");
+      expect(response.status).toBe(401);
+    } finally {
+      mutableEnv.MCP_DCR_INITIAL_ACCESS_TOKEN = INITIAL_ACCESS_TOKEN;
     }
-  );
+  });
+
+  // Upgrade tripwire: a route that can create, change, rotate or delete a client must be either closed
+  // here or SERVER_ONLY. A new one in a later oauth-provider release fails this test until it is.
+  test("every client-mutating endpoint the plugin mounts is closed or SERVER_ONLY", () => {
+    const endpoints = Object.values(oauthProvider(getMcpOauthProviderOptions()).endpoints) as {
+      path: string;
+      options?: { metadata?: { SERVER_ONLY?: boolean } };
+    }[];
+    const mutating = endpoints.filter(
+      ({ path }) => /client/.test(path) && /(create|update|delete|rotate|register)/.test(path)
+    );
+
+    expect(mutating.length).toBeGreaterThan(0);
+    const open = mutating.filter(
+      ({ path, options }) =>
+        path !== "/oauth2/register" &&
+        !options?.metadata?.SERVER_ONLY &&
+        !(OAUTH_CLIENT_MUTATION_PATHS as readonly string[]).includes(path)
+    );
+    expect(open.map(({ path }) => path)).toEqual([]);
+  });
 });
