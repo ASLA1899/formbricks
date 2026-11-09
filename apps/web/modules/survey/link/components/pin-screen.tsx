@@ -37,6 +37,8 @@ interface PinScreenProps {
   isEmbed: boolean;
   isPreview: boolean;
   contactId?: string;
+  /** ASLA fork (ASL-1877): binds contactId to this survey for the client API. */
+  contactToken?: string;
   canReadUserIdFromUrl?: boolean;
   recaptchaSiteKey?: string;
   isSpamProtectionEnabled?: boolean;
@@ -63,6 +65,7 @@ export const PinScreen = (props: Readonly<PinScreenProps>) => {
     isEmbed,
     isPreview,
     contactId,
+    contactToken,
     canReadUserIdFromUrl = false,
     recaptchaSiteKey,
     isSpamProtectionEnabled = false,
@@ -176,6 +179,7 @@ export const PinScreen = (props: Readonly<PinScreenProps>) => {
       singleUseId={singleUseId}
       singleUseResponseId={singleUseResponse?.id}
       contactId={contactId}
+      contactToken={contactToken}
       canReadUserIdFromUrl={canReadUserIdFromUrl}
       recaptchaSiteKey={recaptchaSiteKey}
       isSpamProtectionEnabled={isSpamProtectionEnabled}

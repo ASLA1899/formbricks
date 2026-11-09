@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { MAX_INGESTED_VALUE_BYTES } from "@formbricks/types/embedded-data-ingest";
+import { generateContactBindingToken } from "@/modules/survey/link/lib/contact-binding";
 import { POST } from "./route";
 
 /**
@@ -18,7 +19,6 @@ const mocks = vi.hoisted(() => ({
   findRecentDuplicateResponse: vi.fn(),
   formatValidationErrorsForV1Api: vi.fn((errors) => errors),
   getClientIpFromHeaders: vi.fn(),
-  getInvitedContactId: vi.fn(async ({ contactId }: { contactId?: string | null }) => contactId ?? undefined),
   getIsContactsEnabled: vi.fn(),
   getOrganizationIdFromWorkspaceId: vi.fn(),
   getSurvey: vi.fn(),
@@ -81,10 +81,6 @@ vi.mock("@/modules/storage/utils", () => ({
 
 vi.mock("@/app/api/client/[workspaceId]/responses/lib/duplicate-response", () => ({
   findRecentDuplicateResponse: mocks.findRecentDuplicateResponse,
-}));
-
-vi.mock("@/modules/survey/invitations/lib/invited-contact", () => ({
-  getInvitedContactId: mocks.getInvitedContactId,
 }));
 
 vi.mock("./lib/response", () => ({
@@ -261,10 +257,13 @@ describe("POST /api/v2/client/[workspaceId]/responses — duplicate submissions 
   });
 });
 
-// ASLA fork: the /c/<token> invitation flow submits with a contactId, and this install has no Enterprise
-// Contacts license. Upstream answers that with a 403, which would reject every invitation response.
+// ASLA fork: the /c/<token> invitation flow submits with a contactId and the binding token the page minted
+// for that survey, and this install has no Enterprise Contacts license. Upstream answers any contactId with
+// a 403; here it is kept only with this survey's token, and otherwise recorded anonymously. These go through
+// the real input parser, so a schema that stripped `contactToken` would fail them.
 describe("POST /api/v2/client/[workspaceId]/responses — contactId without a Contacts license (ASL-1877)", () => {
   const contactId = "clh8ruz3w0000qa8h9x0bt9ry";
+  const otherSurveyId = "cmor8y52a0000qa8h9x0bt9ry";
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -287,24 +286,34 @@ describe("POST /api/v2/client/[workspaceId]/responses — contactId without a Co
     });
   });
 
-  test("creates the response and keeps the contactId of an invited contact", async () => {
-    const response = await postRawBody({ q1: 5 }, { contactId, finished: true });
+  const created = () => mocks.createResponseWithQuotaEvaluation.mock.calls[0][0];
+
+  test("keeps the contactId with this survey's binding token, and does not store the token", async () => {
+    const contactToken = generateContactBindingToken(surveyId, contactId);
+
+    const response = await postRawBody({ q1: 5 }, { contactId, contactToken, finished: true });
 
     expect(response.status).toBe(200);
-    expect(mocks.getInvitedContactId).toHaveBeenCalledWith({ workspaceId, surveyId, contactId });
-    expect(mocks.createResponseWithQuotaEvaluation).toHaveBeenCalledTimes(1);
-    expect(mocks.createResponseWithQuotaEvaluation.mock.calls[0][0]).toMatchObject({ contactId });
+    expect(created()).toMatchObject({ contactId });
+    expect(created()).not.toHaveProperty("contactToken");
   });
 
-  test("records the response anonymously when the contact is not invited to the survey", async () => {
-    mocks.getInvitedContactId.mockResolvedValueOnce(undefined);
+  test("records anonymously when the token was minted for a different survey", async () => {
+    const contactToken = generateContactBindingToken(otherSurveyId, contactId);
 
-    const response = await postRawBody({ q1: 5 }, { contactId, finished: true });
+    const response = await postRawBody({ q1: 5 }, { contactId, contactToken, finished: true });
 
     expect(response.status).toBe(200);
-    expect(mocks.createResponseWithQuotaEvaluation.mock.calls[0][0].contactId).toBeUndefined();
+    expect(created().contactId).toBeUndefined();
     expect(mocks.findRecentDuplicateResponse).toHaveBeenCalledWith(
       expect.objectContaining({ contactId: undefined })
     );
+  });
+
+  test("records anonymously when no token is sent", async () => {
+    const response = await postRawBody({ q1: 5 }, { contactId, finished: true });
+
+    expect(response.status).toBe(200);
+    expect(created().contactId).toBeUndefined();
   });
 });

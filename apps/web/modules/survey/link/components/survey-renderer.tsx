@@ -35,6 +35,8 @@ interface SurveyRendererProps {
   singleUseId?: string;
   singleUseResponse?: Pick<Response, "id" | "finished">;
   contactId?: string;
+  /** ASLA fork (ASL-1877): binds contactId to this survey for the client API. */
+  contactToken?: string;
   allowUrlUserIdLookup?: boolean;
   isPreview: boolean;
   // New props - pre-fetched in parent
@@ -63,6 +65,7 @@ export const renderSurvey = async ({
   singleUseId,
   singleUseResponse,
   contactId,
+  contactToken,
   allowUrlUserIdLookup = false,
   isPreview,
   workspaceContext,
@@ -192,6 +195,7 @@ export const renderSurvey = async ({
         isEmbed={isEmbed}
         isPreview={isPreview}
         contactId={contactId}
+        contactToken={contactToken}
         canReadUserIdFromUrl={canReadUserIdFromUrl}
         recaptchaSiteKey={RECAPTCHA_SITE_KEY}
         isSpamProtectionEnabled={isSpamProtectionEnabled}
@@ -213,6 +217,7 @@ export const renderSurvey = async ({
       singleUseId={singleUseId}
       singleUseResponseId={singleUseResponse?.id}
       contactId={contactId}
+      contactToken={contactToken}
       canReadUserIdFromUrl={canReadUserIdFromUrl}
       recaptchaSiteKey={RECAPTCHA_SITE_KEY}
       isSpamProtectionEnabled={isSpamProtectionEnabled}

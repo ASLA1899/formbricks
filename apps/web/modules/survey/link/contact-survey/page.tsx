@@ -5,6 +5,7 @@ import { getTranslate } from "@/lingodotdev/server";
 import { getResponseCountBySurveyId } from "@/modules/survey/lib/response";
 import { SurveyInactive } from "@/modules/survey/link/components/survey-inactive";
 import { renderSurvey } from "@/modules/survey/link/components/survey-renderer";
+import { generateContactBindingToken } from "@/modules/survey/link/lib/contact-binding";
 import { verifyContactSurveyToken } from "@/modules/survey/link/lib/contact-survey-link";
 import { getExistingContactResponse, getResponseBySingleUseId } from "@/modules/survey/link/lib/data";
 import { getServableLinkSurvey } from "@/modules/survey/link/lib/servable-survey";
@@ -117,6 +118,8 @@ export const ContactSurveyPage = async (props: ContactSurveyPageProps) => {
     survey,
     searchParams,
     contactId,
+    // ASLA fork (ASL-1877): lets the client API keep contactId for this survey only.
+    contactToken: generateContactBindingToken(surveyId, contactId),
     isPreview,
     singleUseId,
     singleUseResponse,

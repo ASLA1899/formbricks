@@ -109,6 +109,7 @@ export function Survey({
   isPreviewMode = false,
   userId,
   contactId,
+  contactToken,
   mode,
   survey,
   styling,
@@ -178,9 +179,10 @@ export function Survey({
               resumedId ?? singleUseResponseId,
               userId,
               contactId,
-              pinAuthToken
+              pinAuthToken,
+              contactToken
             )
-          : new SurveyState(survey.id, null, resumedId, userId, contactId, pinAuthToken);
+          : new SurveyState(survey.id, null, resumedId, userId, contactId, pinAuthToken, contactToken);
       if (resumedResponse) {
         state.responseAcc = {
           finished: false,
@@ -203,6 +205,7 @@ export function Survey({
     singleUseResponseId,
     contactId,
     pinAuthToken,
+    contactToken,
   ]);
 
   // Update the responseQueue to use the stored responseId
@@ -566,6 +569,7 @@ export function Survey({
           surveyId: survey.id,
           ...(userId && { userId }),
           ...(contactId && { contactId }),
+          ...(contactId && contactToken && { contactToken }),
         });
 
         if (!display.ok) {
@@ -591,6 +595,7 @@ export function Survey({
     survey.id,
     userId,
     contactId,
+    contactToken,
     onDisplayCreated,
     isPreviewMode,
     onDisplay,
@@ -1007,6 +1012,7 @@ export function Survey({
       if (surveyState && responseQueue) {
         if (contactId) {
           surveyState.updateContactId(contactId);
+          surveyState.updateContactToken(contactToken ?? null);
         }
 
         if (userId) {
@@ -1044,6 +1050,7 @@ export function Survey({
       onResponse,
       triggerResponseCreatedOnce,
       contactId,
+      contactToken,
       userId,
       survey,
       action,

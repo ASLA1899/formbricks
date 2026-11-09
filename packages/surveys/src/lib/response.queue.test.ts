@@ -37,6 +37,7 @@ const getSurveyState: () => SurveyState = () => ({
   displayId: "display1",
   userId: "user1",
   contactId: "contact1",
+  contactToken: null,
   surveyId: "survey1",
   singleUseId: "single1",
   pinAuthToken: null,
@@ -46,6 +47,7 @@ const getSurveyState: () => SurveyState = () => ({
   updateDisplayId: vi.fn(),
   updateUserId: vi.fn(),
   updateContactId: vi.fn(),
+  updateContactToken: vi.fn(),
   enableBootstrapResponseCreate: vi.fn(),
   disableBootstrapResponseCreate: vi.fn(),
   accumulateResponse: vi.fn(),
@@ -306,6 +308,28 @@ describe("ResponseQueue", () => {
     expect(surveyState.disableBootstrapResponseCreate).toHaveBeenCalled();
     expect(config.setSurveyState).toHaveBeenCalledWith(surveyState);
     expect(result.ok).toBe(true);
+  });
+
+  // ASLA fork (ASL-1877): the /c page's binding token travels with the contactId, and only with it.
+  test("sendResponse sends the contact binding token alongside the contactId", async () => {
+    surveyState.contactToken = "a".repeat(64);
+    apiMock.createResponse.mockResolvedValue({ ok: true, data: { id: "newid" } });
+
+    await queue.sendResponse(responseUpdate);
+
+    expect(apiMock.createResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ contactId: "contact1", contactToken: "a".repeat(64) })
+    );
+  });
+
+  test("sendResponse omits the contact binding token when there is no contactId", async () => {
+    surveyState.contactId = null;
+    surveyState.contactToken = "a".repeat(64);
+    apiMock.createResponse.mockResolvedValue({ ok: true, data: { id: "newid" } });
+
+    await queue.sendResponse(responseUpdate);
+
+    expect(apiMock.createResponse.mock.calls[0][0]).not.toHaveProperty("contactToken");
   });
 
   test("sendResponse uses accumulated response state when bootstrap create is enabled", async () => {

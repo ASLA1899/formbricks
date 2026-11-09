@@ -44,6 +44,8 @@ interface SurveyClientWrapperProps {
   singleUseId?: string;
   singleUseResponseId?: string;
   contactId?: string;
+  /** ASLA fork (ASL-1877): binds contactId to this survey for the client API. */
+  contactToken?: string;
   canReadUserIdFromUrl?: boolean;
   recaptchaSiteKey?: string;
   isSpamProtectionEnabled: boolean;
@@ -72,6 +74,7 @@ export const SurveyClientWrapper = ({
   singleUseId,
   singleUseResponseId,
   contactId,
+  contactToken,
   canReadUserIdFromUrl = false,
   recaptchaSiteKey,
   isSpamProtectionEnabled,
@@ -419,6 +422,7 @@ export const SurveyClientWrapper = ({
           pinAuthToken={pinAuthToken}
           getSetIsResponseSendingFinished={(_f: (value: boolean) => void) => {}}
           contactId={contactId}
+          contactToken={contactToken}
           userId={userId}
           recaptchaSiteKey={recaptchaSiteKey}
           isSpamProtectionEnabled={isSpamProtectionEnabled}
