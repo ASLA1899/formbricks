@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   findRecentDuplicateResponse: vi.fn(),
   formatValidationErrorsForV1Api: vi.fn((errors) => errors),
   getClientIpFromHeaders: vi.fn(),
+  getInvitedContactId: vi.fn(async ({ contactId }: { contactId?: string | null }) => contactId ?? undefined),
   getIsContactsEnabled: vi.fn(),
   getOrganizationIdFromWorkspaceId: vi.fn(),
   getSurvey: vi.fn(),
@@ -80,6 +81,10 @@ vi.mock("@/modules/storage/utils", () => ({
 
 vi.mock("@/app/api/client/[workspaceId]/responses/lib/duplicate-response", () => ({
   findRecentDuplicateResponse: mocks.findRecentDuplicateResponse,
+}));
+
+vi.mock("@/modules/survey/invitations/lib/invited-contact", () => ({
+  getInvitedContactId: mocks.getInvitedContactId,
 }));
 
 vi.mock("./lib/response", () => ({
@@ -282,11 +287,24 @@ describe("POST /api/v2/client/[workspaceId]/responses — contactId without a Co
     });
   });
 
-  test("creates the response and keeps the contactId", async () => {
+  test("creates the response and keeps the contactId of an invited contact", async () => {
     const response = await postRawBody({ q1: 5 }, { contactId, finished: true });
 
     expect(response.status).toBe(200);
+    expect(mocks.getInvitedContactId).toHaveBeenCalledWith({ workspaceId, surveyId, contactId });
     expect(mocks.createResponseWithQuotaEvaluation).toHaveBeenCalledTimes(1);
     expect(mocks.createResponseWithQuotaEvaluation.mock.calls[0][0]).toMatchObject({ contactId });
+  });
+
+  test("records the response anonymously when the contact is not invited to the survey", async () => {
+    mocks.getInvitedContactId.mockResolvedValueOnce(undefined);
+
+    const response = await postRawBody({ q1: 5 }, { contactId, finished: true });
+
+    expect(response.status).toBe(200);
+    expect(mocks.createResponseWithQuotaEvaluation.mock.calls[0][0].contactId).toBeUndefined();
+    expect(mocks.findRecentDuplicateResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ contactId: undefined })
+    );
   });
 });

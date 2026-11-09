@@ -20,6 +20,7 @@ import { formatValidationErrorsForV1Api, validateResponseData } from "@/modules/
 import { validateOtherOptionLengthForMultipleChoice } from "@/modules/api/v2/lib/element";
 import { createQuotaFullObject } from "@/modules/ee/quotas/lib/helpers";
 import { validateClientFileUploads } from "@/modules/storage/utils";
+import { getInvitedContactId } from "@/modules/survey/invitations/lib/invited-contact";
 import { createResponseWithQuotaEvaluation } from "./lib/response";
 import { TResponseInputV2, ZResponseInputV2 } from "./types/response";
 
@@ -68,11 +69,10 @@ const parseAndValidateResponseInput = async (
   };
 };
 
-// ASLA fork: a contactId is accepted WITHOUT an Enterprise Contacts license. The /c/<token>
-// invitation flow stores contactId on its responses (that is how "already responded" and reminder
-// suppression work), and upstream's license gate here would 403 every invitation submission. The
-// contact is still resolved inside this workspace (resolveCreateResponseContext → getContact), so
-// an id from another workspace is dropped, not attached.
+// ASLA fork: a contactId is accepted WITHOUT an Enterprise Contacts license when the contact is invited
+// to the survey (getInvitedContactId, applied in POST). The /c/<token> invitation flow stores contactId on
+// its responses (that is how "already responded" and reminder suppression work), and upstream's license
+// gate here would 403 every invitation submission.
 
 const validateResponseSubmission = async (
   workspaceId: string,
@@ -227,6 +227,14 @@ export const POST = async (request: Request, context: Context): Promise<Response
     if (!survey) {
       return responses.notFoundResponse("Survey", responseInputData.surveyId, true);
     }
+
+    // ASLA fork: keep the caller's contactId only when that contact is invited to this survey; see
+    // getInvitedContactId. Done before the duplicate fold and the create, which both key on it.
+    responseInputData.contactId = await getInvitedContactId({
+      workspaceId,
+      surveyId: responseInputData.surveyId,
+      contactId: responseInputData.contactId,
+    });
 
     // The Embedded Data ingest contract (ENG-1845), re-run server-side because this endpoint is
     // public and the renderer's filtering is never trusted. It has to precede
