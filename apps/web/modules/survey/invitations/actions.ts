@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
-import { ResourceNotFoundError } from "@formbricks/types/errors";
-import { ZSurveyInvitationConfig } from "@formbricks/types/surveys/types";
+import { AuthorizationError, ResourceNotFoundError } from "@formbricks/types/errors";
+import { type TSurveyInvitationConfig, ZSurveyInvitationConfig } from "@formbricks/types/surveys/types";
 import { assertCan } from "@/lib/authorization";
 import { getOrganizationByWorkspaceId } from "@/lib/organization/service";
 import { authenticatedActionClient } from "@/lib/utils/action-client";
@@ -19,6 +19,25 @@ import {
 import { sendManualReminders } from "./lib/reminders";
 
 const ZSurveyIdInput = z.object({ surveyId: z.string().cuid2() });
+
+// Writes a client-supplied invitation config onto its survey. Every action that stores the config goes
+// through here, so none of them can save another workspace's segment. Writes only this field, which
+// skips updateSurvey's full-survey validation; ZSurveyInvitationConfig has already validated it.
+async function persistInvitationConfig(
+  survey: { id: string; workspaceId: string },
+  config: TSurveyInvitationConfig
+): Promise<void> {
+  if (config.audience.source === "segment") {
+    const segment = await prisma.segment.findUnique({
+      where: { id: config.audience.segmentId },
+      select: { workspaceId: true },
+    });
+    if (segment && segment.workspaceId !== survey.workspaceId) {
+      throw new AuthorizationError("Segment is not in this survey's workspace");
+    }
+  }
+  await prisma.survey.update({ where: { id: survey.id }, data: { invitationConfig: config } });
+}
 
 export const getInvitationSummaryAction = authenticatedActionClient
   .inputSchema(ZSurveyIdInput)
@@ -40,6 +59,46 @@ export const listSurveyInvitationsAction = authenticatedActionClient
     return listInvitationsBySurveyId(parsedInput.surveyId);
   });
 
+export const getInvitationConfigAction = authenticatedActionClient
+  .inputSchema(ZSurveyIdInput)
+  .action(async ({ ctx, parsedInput }) => {
+    await assertCan({ type: "user", id: ctx.user.id }, "survey.read", {
+      type: "survey",
+      id: parsedInput.surveyId,
+    });
+    const survey = await prisma.survey.findUnique({
+      where: { id: parsedInput.surveyId },
+      select: { invitationConfig: true },
+    });
+    if (!survey) throw new ResourceNotFoundError("Survey", parsedInput.surveyId);
+    // A stored config that no longer matches the schema is shown as empty rather than failing the card.
+    const parsed = ZSurveyInvitationConfig.safeParse(survey.invitationConfig);
+    return parsed.success ? parsed.data : null;
+  });
+
+const ZSaveInvitationConfigInput = z.object({
+  surveyId: z.string().cuid2(),
+  config: ZSurveyInvitationConfig,
+});
+
+// Saves the editor's recipients and reminder settings without sending. Scheduled reminders read this
+// config, so it has to be saved before the schedule can run.
+export const saveInvitationConfigAction = authenticatedActionClient
+  .inputSchema(ZSaveInvitationConfigInput)
+  .action(async ({ ctx, parsedInput }) => {
+    await assertCan({ type: "user", id: ctx.user.id }, "survey.write", {
+      type: "survey",
+      id: parsedInput.surveyId,
+    });
+
+    const survey = await getSurvey(parsedInput.surveyId);
+    if (!survey) throw new ResourceNotFoundError("Survey", parsedInput.surveyId);
+
+    await persistInvitationConfig(survey, parsedInput.config);
+    revalidatePath(`/workspaces/${survey.workspaceId}/surveys/${survey.id}`);
+    return { saved: true };
+  });
+
 const ZSendInvitationsInput = z.object({
   surveyId: z.string().cuid2(),
   config: ZSurveyInvitationConfig,
@@ -56,14 +115,8 @@ export const sendInvitationsAction = authenticatedActionClient
     const survey = await getSurvey(parsedInput.surveyId);
     if (!survey) throw new ResourceNotFoundError("Survey", parsedInput.surveyId);
 
-    // Persist the config used for this send back to the survey, so the
-    // editor sees what we actually sent next time it loads. Bypasses
-    // updateSurvey's full-shape Zod validation by writing only this field
-    // — SurveyInvitationConfig is its own validated input above.
-    await prisma.survey.update({
-      where: { id: survey.id },
-      data: { invitationConfig: parsedInput.config },
-    });
+    // Persist the config used for this send, so the editor shows what was actually sent.
+    await persistInvitationConfig(survey, parsedInput.config);
 
     // Enqueue-only: persist SurveyInvitation rows with sentAt=null and return
     // immediately. Actual SMTP sends are throttled by the drainer to respect
@@ -107,10 +160,7 @@ export const sendRemindersAction = authenticatedActionClient
     if (!survey) throw new ResourceNotFoundError("Survey", parsedInput.surveyId);
 
     // Same persist-on-send as sendInvitationsAction.
-    await prisma.survey.update({
-      where: { id: survey.id },
-      data: { invitationConfig: parsedInput.config },
-    });
+    await persistInvitationConfig(survey, parsedInput.config);
 
     const org = await getOrganizationByWorkspaceId(survey.workspaceId);
     const organizationName = org?.name ?? "";

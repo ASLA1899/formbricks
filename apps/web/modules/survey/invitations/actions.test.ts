@@ -5,8 +5,10 @@ import { AuthorizationError, ResourceNotFoundError } from "@formbricks/types/err
 import { assertCan } from "@/lib/authorization";
 import { getSurvey } from "@/modules/survey/lib/survey";
 import {
+  getInvitationConfigAction,
   getInvitationSummaryAction,
   listSurveyInvitationsAction,
+  saveInvitationConfigAction,
   sendInvitationsAction,
   sendRemindersAction,
 } from "./actions";
@@ -19,7 +21,9 @@ import {
 import { sendManualReminders } from "./lib/reminders";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@formbricks/database", () => ({ prisma: { survey: { update: vi.fn() } } }));
+vi.mock("@formbricks/database", () => ({
+  prisma: { survey: { update: vi.fn(), findUnique: vi.fn() }, segment: { findUnique: vi.fn() } },
+}));
 vi.mock("@formbricks/logger", () => ({ logger: { error: vi.fn(), warn: vi.fn() } }));
 vi.mock("@/lib/authorization", () => ({ assertCan: vi.fn() }));
 vi.mock("@/lib/utils/action-client", () => ({
@@ -117,6 +121,79 @@ describe("invitation actions", () => {
     vi.mocked(getSurvey).mockResolvedValue(null as never);
     await expect(run(sendInvitationsAction, { surveyId, config })).rejects.toThrow(ResourceNotFoundError);
     await expect(run(sendRemindersAction, { surveyId, config })).rejects.toThrow(ResourceNotFoundError);
+    expect(prisma.survey.update).not.toHaveBeenCalled();
+  });
+
+  test("config read needs survey.read and returns the stored config", async () => {
+    vi.mocked(prisma.survey.findUnique).mockResolvedValue({ invitationConfig: config } as never);
+    const res = await run(getInvitationConfigAction, { surveyId });
+    expect(assertCan).toHaveBeenCalledWith({ type: "user", id: "user-1" }, "survey.read", resource);
+    expect(res).toEqual(config);
+  });
+
+  test("config read returns null for a missing or invalid stored config", async () => {
+    vi.mocked(prisma.survey.findUnique).mockResolvedValue({ invitationConfig: { audience: 1 } } as never);
+    expect(await run(getInvitationConfigAction, { surveyId })).toBeNull();
+    vi.mocked(prisma.survey.findUnique).mockResolvedValue({ invitationConfig: null } as never);
+    expect(await run(getInvitationConfigAction, { surveyId })).toBeNull();
+  });
+
+  test("config read of an unknown survey is not found", async () => {
+    vi.mocked(prisma.survey.findUnique).mockResolvedValue(null);
+    await expect(run(getInvitationConfigAction, { surveyId })).rejects.toThrow(ResourceNotFoundError);
+  });
+
+  test("save needs survey.write, stores the config, and queues nothing", async () => {
+    vi.mocked(prisma.segment.findUnique).mockResolvedValue({ workspaceId: "w1" } as never);
+    const res = await run(saveInvitationConfigAction, { surveyId, config });
+    expect(assertCan).toHaveBeenCalledWith({ type: "user", id: "user-1" }, "survey.write", resource);
+    expect(prisma.survey.update).toHaveBeenCalledWith({
+      where: { id: surveyId },
+      data: { invitationConfig: config },
+    });
+    expect(enqueueInvitationsForSurvey).not.toHaveBeenCalled();
+    expect(res).toEqual({ saved: true });
+  });
+
+  test("save refuses a segment from another workspace", async () => {
+    vi.mocked(prisma.segment.findUnique).mockResolvedValue({ workspaceId: "other" } as never);
+    await expect(run(saveInvitationConfigAction, { surveyId, config })).rejects.toThrow(AuthorizationError);
+    expect(prisma.survey.update).not.toHaveBeenCalled();
+  });
+
+  test("send and remind refuse a segment from another workspace before saving or sending", async () => {
+    vi.mocked(prisma.segment.findUnique).mockResolvedValue({ workspaceId: "other" } as never);
+    const segmentConfig = {
+      ...config,
+      audience: { source: "segment", segmentId: "clsegment0000000000000000" },
+    };
+    await expect(run(sendInvitationsAction, { surveyId, config: segmentConfig })).rejects.toThrow(
+      AuthorizationError
+    );
+    await expect(run(sendRemindersAction, { surveyId, config: segmentConfig })).rejects.toThrow(
+      AuthorizationError
+    );
+    expect(prisma.survey.update).not.toHaveBeenCalled();
+    expect(enqueueInvitationsForSurvey).not.toHaveBeenCalled();
+    expect(sendManualReminders).not.toHaveBeenCalled();
+  });
+
+  test("a segment from the survey's own workspace is saved", async () => {
+    vi.mocked(prisma.segment.findUnique).mockResolvedValue({ workspaceId: "w1" } as never);
+    const segmentConfig = {
+      ...config,
+      audience: { source: "segment", segmentId: "clsegment0000000000000000" },
+    };
+    await run(saveInvitationConfigAction, { surveyId, config: segmentConfig });
+    expect(prisma.survey.update).toHaveBeenCalledWith({
+      where: { id: surveyId },
+      data: { invitationConfig: segmentConfig },
+    });
+  });
+
+  test("a denied save writes nothing", async () => {
+    vi.mocked(assertCan).mockRejectedValue(new AuthorizationError("Not authorized"));
+    await expect(run(saveInvitationConfigAction, { surveyId, config })).rejects.toThrow(AuthorizationError);
     expect(prisma.survey.update).not.toHaveBeenCalled();
   });
 });

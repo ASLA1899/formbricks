@@ -14,6 +14,7 @@ import { ResponseOptionsCard } from "@/modules/survey/editor/components/response
 import { SurveyPlacementCard } from "@/modules/survey/editor/components/survey-placement-card";
 import { TargetingLockedCard } from "@/modules/survey/editor/components/targeting-locked-card";
 import { WhenToSendCard } from "@/modules/survey/editor/components/when-to-send-card";
+import { RecipientsCard } from "@/modules/survey/invitations/components/recipients-card";
 import { type TSurveySchedulingConfig } from "@/modules/survey/scheduling/lib/config";
 import { SharingPanel } from "@/modules/survey/sharing/components/sharing-panel";
 
@@ -124,6 +125,8 @@ export const SettingsView = ({
         surveySchedulingConfig={surveySchedulingConfig}
         locale={locale}
       />
+
+      {localSurvey.type === "link" && <RecipientsCard surveyId={localSurvey.id} segments={segments} />}
 
       {canManageSharing ? <SharingPanel surveyId={localSurvey.id} /> : null}
 
