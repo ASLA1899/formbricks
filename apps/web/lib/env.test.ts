@@ -26,6 +26,7 @@ const setTestEnv = (overrides: Record<string, string | undefined> = {}) => {
     MCP_LIBRECHAT_CALLBACK_URI: undefined,
     MCP_LIBRECHAT_CLIENT_ID: undefined,
     MCP_DCR_INITIAL_ACCESS_TOKEN: undefined,
+    MCP_ALLOWED_IMAGE_HOSTS: undefined,
     SES_CONFIGURATION_SET: undefined,
     SES_EMAIL_ENVIRONMENT: undefined,
     ...overrides,
@@ -256,6 +257,26 @@ describe("env", () => {
     setTestEnv({ MCP_DCR_INITIAL_ACCESS_TOKEN: "x".repeat(31) });
 
     await expect(import("./env")).rejects.toThrow("MCP_DCR_INITIAL_ACCESS_TOKEN");
+  });
+
+  // ASLA (Must 5): extra image hosts for MCP survey writes.
+  test("parses MCP_ALLOWED_IMAGE_HOSTS into lowercase hostnames", async () => {
+    setTestEnv({ MCP_ALLOWED_IMAGE_HOSTS: " Assets.ASLAlabs.org , cdn.example.org," });
+
+    const { env } = await import("./env");
+
+    expect(env.MCP_ALLOWED_IMAGE_HOSTS).toEqual(["assets.aslalabs.org", "cdn.example.org"]);
+  });
+
+  test.each([
+    "https://assets.aslalabs.org",
+    "assets.aslalabs.org/path",
+    "assets.aslalabs.org:443",
+    "localhost",
+  ])("rejects MCP_ALLOWED_IMAGE_HOSTS entry %j", async (value) => {
+    setTestEnv({ MCP_ALLOWED_IMAGE_HOSTS: value });
+
+    await expect(import("./env")).rejects.toThrow("MCP_ALLOWED_IMAGE_HOSTS");
   });
 
   test.each(["", "  ", " , "])(

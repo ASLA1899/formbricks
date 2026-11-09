@@ -1,5 +1,6 @@
 import "server-only";
 import type { McpServer } from "@modelcontextprotocol/server";
+import type { TMcpToolGuard, TMcpToolHandler } from "./survey-write-guard/tool-guards";
 
 /**
  * ASLA (Must 2): the only tools `/api/mcp` exposes — the "Tools (v1)" table in
@@ -9,8 +10,8 @@ import type { McpServer } from "@modelcontextprotocol/server";
  * not only the LibreChat config.
  *
  * Final v1 names. Some are not registered yet, and stay hidden until the ticket that adds them:
- * - `create_survey_draft` replaces upstream `create_survey` with the draft-only guard (2.3, ASL-1893).
- *   Upstream `create_survey` is deliberately absent, so creation is closed until then.
+ * - `create_survey_draft` is upstream `create_survey`, renamed by its draft-only guard (2.3, ASL-1893).
+ *   Upstream's name is deliberately absent, so the unguarded tool can never be exposed.
  * - `update_survey_settings` (2.4a), `prepare_status_change` and `apply_status_change` (2.4),
  *   `summarize_responses` (2.5) are new ASLA tools.
  *
@@ -62,15 +63,25 @@ const SKIPPED_TOOL = Object.freeze({
  */
 export function withMcpToolAllowlist(
   server: McpServer,
-  allowlist: ReadonlySet<string> = MCP_TOOL_ALLOWLIST
+  allowlist: ReadonlySet<string> = MCP_TOOL_ALLOWLIST,
+  guards: Readonly<Record<string, TMcpToolGuard>> = {}
 ): McpServer {
   return new Proxy(server, {
     get(target, property) {
       if (property === "registerTool") {
-        return ((name: string, ...rest: unknown[]) =>
-          allowlist.has(name)
-            ? (target.registerTool as (...args: unknown[]) => unknown)(name, ...rest)
-            : SKIPPED_TOOL) as McpServer["registerTool"];
+        return ((name: string, config: Record<string, unknown>, handler: TMcpToolHandler) => {
+          // The guard runs first, so the allowlist judges the name the tool is exposed under: a guard
+          // can rename (`create_survey` → `create_survey_draft`), and the unguarded name stays absent.
+          const guard = Object.hasOwn(guards, name) ? guards[name] : undefined;
+          const registration = guard ? guard({ name, config, handler }) : { name, config, handler };
+          return allowlist.has(registration.name)
+            ? (target.registerTool as (...args: unknown[]) => unknown)(
+                registration.name,
+                registration.config,
+                registration.handler
+              )
+            : SKIPPED_TOOL;
+        }) as unknown as McpServer["registerTool"];
       }
       if (typeof property === "symbol") return undefined;
       throw new Error(

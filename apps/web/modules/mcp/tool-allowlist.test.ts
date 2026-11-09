@@ -68,6 +68,29 @@ describe("withMcpToolAllowlist", () => {
     expect(guarded[Symbol.toStringTag]).toBeUndefined();
   });
 
+  test("a guard runs before the allowlist and can rename the tool it wraps", () => {
+    const { server, registerTool } = fakeServer();
+    const guardedHandler = vi.fn();
+    const guarded = withMcpToolAllowlist(server, new Set(["create_survey_draft"]), {
+      create_survey: ({ config }) => ({ name: "create_survey_draft", config, handler: guardedHandler }),
+    });
+
+    guarded.registerTool("create_survey", {} as never, (() => {}) as never);
+
+    expect(registerTool).toHaveBeenCalledWith("create_survey_draft", {}, guardedHandler);
+  });
+
+  test("an unguarded name is still judged by the allowlist", () => {
+    const { server, registerTool } = fakeServer();
+    withMcpToolAllowlist(server, new Set(["create_survey_draft"]), {}).registerTool(
+      "create_survey",
+      {} as never,
+      (() => {}) as never
+    );
+
+    expect(registerTool).not.toHaveBeenCalled();
+  });
+
   test("does not expose upstream create_survey", () => {
     expect(MCP_TOOL_ALLOWLIST.has("create_survey")).toBe(false);
   });

@@ -319,6 +319,14 @@ const getStorageUrlPathSegments = (fileUrl: string): string[] | null => {
   return pathWithoutSearch.split("/").filter(Boolean);
 };
 
+/**
+ * Whether a URL is a file in this app's own storage: a `/storage/` path, or an absolute URL on the app's
+ * own origin (`WEBAPP_URL` or the public domain) under `/storage/`. A protocol-relative `//host/...` is
+ * not a storage path.
+ */
+export const isAppStorageFileUrl = (fileUrl: string): boolean =>
+  !fileUrl.startsWith("//") && getStorageUrlPathSegments(fileUrl) !== null;
+
 type TParsedStorageFileUrl = {
   storageId: string;
   accessType: TAccessType;

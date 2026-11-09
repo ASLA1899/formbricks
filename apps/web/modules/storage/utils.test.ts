@@ -10,6 +10,7 @@ import {
   getStorageUrlSurveyId,
   getSurveyFileUploadElementIds,
   isAllowedFileExtension,
+  isAppStorageFileUrl,
   isValidImageFile,
   parseStorageFileUrl,
   resolveStorageUrl,
@@ -923,6 +924,24 @@ describe("storage utils", () => {
       "not a url",
     ])("should reject invalid storage URL %s", (fileUrl) => {
       expect(parseStorageFileUrl(fileUrl)).toBeNull();
+    });
+  });
+
+  // ASLA (Must 5): the storage half of the MCP image-host rule.
+  describe("isAppStorageFileUrl", () => {
+    test.each([
+      ["a relative storage path", "/storage/ws-1/public/a.png", true],
+      // Built the same way the app does, so the origin is whatever WEBAPP_URL is in the test environment.
+      ["the app's own origin", resolveStorageUrl("/storage/ws-1/private/a.png", "private"), true],
+      ["another origin with a storage path", "https://evil.example.org/storage/ws-1/public/a.png", false],
+      ["a protocol-relative URL", "//evil.example.org/storage/ws-1/public/a.png", false],
+      [
+        "the app's origin outside storage",
+        resolveStorageUrl("/storage/ws-1/private/a.png", "private").replace("/storage/", "/images/"),
+        false,
+      ],
+    ])("%s → %s", (_label, url, expected) => {
+      expect(isAppStorageFileUrl(url)).toBe(expected);
     });
   });
 
