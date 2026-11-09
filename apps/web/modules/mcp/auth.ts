@@ -22,6 +22,7 @@ import { getBearerTokenFromHeaders } from "@/modules/api/lib/api-key-auth";
 import { auth } from "@/modules/auth/lib/auth";
 import {
   getMcpLibreChatCallbackUri,
+  getMcpLibreChatClientId,
   isLibreChatOnlyRedirectUris,
 } from "@/modules/auth/lib/mcp-librechat-callback";
 import {
@@ -261,21 +262,26 @@ async function isOAuthUserActive(userId: string): Promise<boolean> {
 
 type TMcpOAuthClientRefusal =
   | "missing_client_id"
+  | "not_librechat_client"
   | "unknown_client"
   | "disabled_client"
   | "redirect_uris_mismatch";
 
 /**
- * ASLA (Must 1): whether the OAuth client a token was issued to may use `/api/mcp` right now. Only a
- * client whose registered redirect URIs are exactly `MCP_LIBRECHAT_CALLBACK_URI` qualifies — ASLA Chat.
+ * ASLA (Must 1): whether the OAuth client a token was issued to may use `/api/mcp` right now. Only ASLA
+ * Chat qualifies: the client ID must equal `MCP_LIBRECHAT_CLIENT_ID`, and that client must be enabled
+ * with redirect URIs of exactly `MCP_LIBRECHAT_CALLBACK_URI`.
  *
  * Read from the database on every request, with no cache, so a client changed or disabled after its
  * token was issued is refused on the next call rather than when the 15-minute token expires. The
- * client's creator is deliberately not compared with the token's user: one server-created client serves
+ * client's creator is deliberately not compared with the token's user: one registered client serves
  * every staff member. Returns why the client is refused, or `null` when it is allowed.
  */
 async function getMcpOAuthClientRefusal(clientId: string | null): Promise<TMcpOAuthClientRefusal | null> {
   if (!clientId) return "missing_client_id";
+  // Checked before the DB read: a token from any other client is refused without touching the table,
+  // and an unset pin refuses every token.
+  if (clientId !== getMcpLibreChatClientId()) return "not_librechat_client";
 
   const client = await prisma.oauthClient.findUnique({
     where: { clientId },

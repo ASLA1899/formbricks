@@ -36,10 +36,11 @@ export const isLoopbackRedirectUri = (uri: unknown): boolean => {
 let warnedIgnoredOperatorUris = false;
 
 /**
- * The redirect URIs anonymous DCR may register: the LibreChat callback, or nothing when it is unset.
+ * The redirect URIs registration may use: the LibreChat callback, or nothing when it is unset.
+ * Registration itself needs the operator's initial access token (`mcp-oauth-provider-options.ts`).
  *
  * `MCP_DCR_ALLOWED_REDIRECT_URIS` is ignored. ASLA reads the callback from one variable so DCR, the
- * per-request client check and a server-created client cannot drift apart; a second list an operator
+ * per-request client check and the registered client cannot drift apart; a second list an operator
  * has to keep in sync is exactly how they would. A non-empty value is logged once so it is noticed.
  */
 export const getAllowedDcrRedirectUris = (): ReadonlySet<string> => {
@@ -55,7 +56,7 @@ export const getAllowedDcrRedirectUris = (): ReadonlySet<string> => {
   return new Set(callbackUri ? [callbackUri] : []);
 };
 
-/** Whether anonymous DCR may register this `redirect_uris` entry: an exact allowlisted URI, nothing else. */
+/** Whether registration may use this `redirect_uris` entry: an exact allowlisted URI, nothing else. */
 export const isAllowedDcrRedirectUri = (uri: unknown, allowed: ReadonlySet<string>): boolean =>
   typeof uri === "string" && allowed.has(uri);
 

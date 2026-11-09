@@ -26,6 +26,7 @@ const LIBRECHAT_CALLBACK = "https://chat.aslalabs.org/api/mcp/formbricks-sandbox
 vi.mock("@/modules/auth/lib/mcp-librechat-callback", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/modules/auth/lib/mcp-librechat-callback")>()),
   getMcpLibreChatCallbackUri: () => LIBRECHAT_CALLBACK,
+  getMcpLibreChatClientId: () => "client_1",
 }));
 
 vi.mock("better-auth/oauth2", async (importOriginal) => ({
@@ -477,6 +478,23 @@ describe("POST /api/mcp", () => {
   });
 
   test("refuses a token from a client other than LibreChat before MCP handling (ASLA Must 1)", async () => {
+    verifyBearerTokenMock.mockResolvedValue({
+      aud: MCP_AUDIENCE,
+      sub: "user_1",
+      scope: "surveys:read",
+      exp: Math.floor(Date.now() / 1000) + 900,
+      azp: "self_registered_client",
+    });
+
+    const response = await POST(
+      createMcpRequest({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} })
+    );
+
+    expect(response.status).toBe(403);
+    expect(oauthClientFindUniqueMock).not.toHaveBeenCalled();
+  });
+
+  test("refuses the pinned client once its callback no longer matches (ASLA Must 1)", async () => {
     oauthClientFindUniqueMock.mockResolvedValue({
       redirectUris: ["http://127.0.0.1:33418/callback"],
       disabled: false,
@@ -578,7 +596,7 @@ describe("POST /api/mcp", () => {
       email: "person@example.com",
       scope: "openid profile email surveys:read",
       exp: Math.floor(Date.now() / 1000) + 900,
-      azp: "client_read_only",
+      azp: "client_1",
     });
 
     const response = await POST(
@@ -624,7 +642,7 @@ describe("POST /api/mcp", () => {
       email: "person@example.com",
       scope: "openid profile email surveys:read",
       exp: Math.floor(Date.now() / 1000) + 900,
-      azp: "client_wf_read_only",
+      azp: "client_1",
     });
     // The module mock returns nothing by default; the guard only queues what the builder hands back.
     vi.mocked(buildV3AuditLog).mockReturnValue({ status: "failure" } as never);

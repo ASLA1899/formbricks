@@ -1,5 +1,6 @@
 import "server-only";
 import type { oauthProvider } from "@better-auth/oauth-provider";
+import { isMcpDcrInitialAccessToken } from "./mcp-librechat-callback";
 import { MCP_OAUTH_SCOPES, getMcpResourceUrl } from "./oauth-urls";
 
 type TOauthProviderOptions = Parameters<typeof oauthProvider>[0];
@@ -68,8 +69,18 @@ export const getMcpOauthProviderOptions = (): TOauthProviderOptions => ({
   // save one indexed read per /oauth2/token call, which is not the hot path (/api/mcp verifies JWTs
   // locally against a cached JWKS and never reads the resource tables; its ASLA client check reads one
   // `oauthClient` row per request, uncached on purpose).
+  // ASLA (Must 1): registration is closed to the public. `/oauth2/register` accepts only the operator's
+  // RFC 7591 initial access token (`MCP_DCR_INITIAL_ACCESS_TOKEN`), used once to create ASLA Chat's
+  // LibreChat client, and is closed entirely while that variable is unset. Dynamic registration stays
+  // "enabled" only because the token-backed mode runs through it.
   allowDynamicClientRegistration: true,
-  allowUnauthenticatedClientRegistration: true,
+  allowUnauthenticatedClientRegistration: false,
+  validateInitialAccessToken: ({ initialAccessToken }) =>
+    isMcpDcrInitialAccessToken(initialAccessToken) ? {} : false,
+  // A signed-in user's session would otherwise authorize registration (the plugin checks a session
+  // before the bearer token) and the client-management endpoints. Sessions may read and list clients,
+  // which the consent screen needs, and nothing else.
+  clientPrivileges: ({ action }) => action === "read" || action === "list",
   // Register MCP clients with the full advertised scope set by default so the consent screen offers
   // write and the write tools are reachable (clients derive their DCR/authorize scopes from what we
   // advertise, and the plugin validates authorize against the client's registered scopes). Granting

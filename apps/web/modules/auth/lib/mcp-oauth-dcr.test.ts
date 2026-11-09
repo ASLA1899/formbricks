@@ -20,8 +20,20 @@ vi.mock("@/lib/env", () => ({
     PUBLIC_URL: undefined,
     MCP_DCR_ALLOWED_REDIRECT_URIS: undefined,
     MCP_LIBRECHAT_CALLBACK_URI: "https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback",
+    // Literal, not the constant below: vi.mock factories are hoisted above module scope.
+    MCP_DCR_INITIAL_ACCESS_TOKEN: "mcp-dcr-test-initial-access-token-0123456789abcdef",
   },
 }));
+
+/**
+ * ASLA (Must 1): registration needs the operator's RFC 7591 initial access token. Every registration in
+ * this file sends it unless the test is about what happens without it.
+ */
+const INITIAL_ACCESS_TOKEN = "mcp-dcr-test-initial-access-token-0123456789abcdef";
+const REGISTRATION_HEADERS = {
+  "content-type": "application/json",
+  authorization: `Bearer ${INITIAL_ACCESS_TOKEN}`,
+};
 
 const BASE_URL = "http://localhost:3000";
 const REDIRECT_URI = "http://127.0.0.1:33418/callback";
@@ -101,7 +113,7 @@ const registerClient = async (auth: ReturnType<typeof createAuthInstance>, scope
   const response = await auth.handler(
     new Request(`${BASE_URL}/api/auth/oauth2/register`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: REGISTRATION_HEADERS,
       body: JSON.stringify({
         client_name: "MCP DCR test client",
         redirect_uris: [REDIRECT_URI],
@@ -189,7 +201,7 @@ describe("MCP OAuth Dynamic Client Registration → authorize (real-client shape
     auth.handler(
       new Request(`${BASE_URL}/api/auth/oauth2/register`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: REGISTRATION_HEADERS,
         body,
       })
     );
@@ -262,7 +274,7 @@ describe("MCP OAuth Dynamic Client Registration → authorize (real-client shape
     const response = await auth.handler(
       new Request(`${BASE_URL}/api/auth/oauth2/register`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: REGISTRATION_HEADERS,
         body: JSON.stringify({
           client_name: "MCP DCR default-scope client",
           redirect_uris: [REDIRECT_URI],
@@ -383,10 +395,15 @@ describe("MCP OAuth Dynamic Client Registration → authorize (real-client shape
 
 const REGISTER_PATH = "/api/auth/oauth2/register";
 
-const registrationRequest = (path: string, body: string, contentType = "application/json") =>
+const registrationRequest = (
+  path: string,
+  body: string,
+  contentType = "application/json",
+  authorization: string | null = `Bearer ${INITIAL_ACCESS_TOKEN}`
+) =>
   new Request(`${BASE_URL}${path}`, {
     method: "POST",
-    headers: { "content-type": contentType },
+    headers: { "content-type": contentType, ...(authorization ? { authorization } : {}) },
     body,
   });
 
@@ -712,6 +729,14 @@ describe("LibreChat connector registration vs. the real plugin (ASLA Must 1)", (
  * closed with the production list.
  */
 describe("OAuth client-management routes (ASLA Must 1)", () => {
+  const LIBRECHAT_ONLY_REGISTRATION = JSON.stringify({
+    client_name: "ASLA Chat",
+    redirect_uris: ["https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback"],
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    token_endpoint_auth_method: "client_secret_post",
+  });
+
   const signedInCookie = async (auth: ReturnType<typeof createAuthInstance>) => {
     const signUp = await auth.api.signUpEmail({
       body: { email: "client-admin@example.com", password: "a-long-test-password-1", name: "User" },
@@ -735,13 +760,14 @@ describe("OAuth client-management routes (ASLA Must 1)", () => {
       }),
     });
 
-  test("upstream alone lets a signed-in user create a client with a loopback callback", async () => {
+  // `clientPrivileges` denies `create` to sessions, so this is closed even before disabledPaths 404s it.
+  test("a signed-in user cannot create a client even where the route is mounted", async () => {
     const auth = createAuthInstance({ withEmailPassword: true });
     const response = await auth.handler(
       createClientRequest("/oauth2/create-client", await signedInCookie(auth))
     );
 
-    expect(response.status).toBeLessThan(300);
+    expect(response.status).toBe(401);
   });
 
   test.each([
@@ -772,19 +798,59 @@ describe("OAuth client-management routes (ASLA Must 1)", () => {
     expect(response.status).toBe(404);
   });
 
-  // The admin endpoint still needs a signed-in session, passed as headers in-process.
-  test("a server-side admin client can still be created in-process (the 2.1 fallback)", async () => {
+  // Nor in-process: the admin endpoint takes a session, and sessions may not create clients. The only way
+  // to create one is registration with the initial access token.
+  test("a session cannot create a client through the admin endpoint in-process", async () => {
     const auth = createAuthInstance({ withEmailPassword: true, disabledPaths: [...AUTH_DISABLED_PATHS] });
-    const client = await auth.api.adminCreateOAuthClient({
-      headers: new Headers({ cookie: await signedInCookie(auth) }),
-      body: {
-        client_name: "ASLA Chat",
-        redirect_uris: ["https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback"],
-        token_endpoint_auth_method: "client_secret_basic",
-      },
-    });
 
-    expect(client.client_id).toBeTruthy();
+    await expect(
+      auth.api.adminCreateOAuthClient({
+        headers: new Headers({ cookie: await signedInCookie(auth) }),
+        body: {
+          client_name: "ASLA Chat",
+          redirect_uris: ["https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback"],
+          token_endpoint_auth_method: "client_secret_basic",
+        },
+      })
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  test.each([
+    ["no token", null],
+    ["a wrong token", "Bearer not-the-operator-token-but-just-as-long-0123456"],
+    ["a prefix of the token", `Bearer ${INITIAL_ACCESS_TOKEN.slice(0, -1)}`],
+  ])("registration with %s is refused, even for the LibreChat callback", async (_label, authorization) => {
+    const response = await throughRoute(
+      createAuthInstance(),
+      registrationRequest(REGISTER_PATH, LIBRECHAT_ONLY_REGISTRATION, "application/json", authorization)
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  test("a signed-in session cannot register a client, even with the right token alongside", async () => {
+    const auth = createAuthInstance({ withEmailPassword: true });
+    const request = registrationRequest(REGISTER_PATH, LIBRECHAT_ONLY_REGISTRATION);
+    request.headers.set("cookie", await signedInCookie(auth));
+
+    const response = await throughRoute(auth, request);
+
+    expect(response.status).toBe(401);
+  });
+
+  test("registration is closed entirely while MCP_DCR_INITIAL_ACCESS_TOKEN is unset", async () => {
+    const { env } = await import("@/lib/env");
+    const mutableEnv = env as { MCP_DCR_INITIAL_ACCESS_TOKEN?: string };
+    mutableEnv.MCP_DCR_INITIAL_ACCESS_TOKEN = undefined;
+    try {
+      const response = await throughRoute(
+        createAuthInstance(),
+        registrationRequest(REGISTER_PATH, LIBRECHAT_ONLY_REGISTRATION)
+      );
+      expect(response.status).toBe(401);
+    } finally {
+      mutableEnv.MCP_DCR_INITIAL_ACCESS_TOKEN = INITIAL_ACCESS_TOKEN;
+    }
   });
 
   // Upgrade tripwire: a route that can create, change, rotate or delete a client must be either closed

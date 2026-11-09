@@ -31,11 +31,11 @@
  * closing the route leaves the action as the only way in. `signupPolicyBeforeHandler` and the
  * `user.create.before` backstop stay as defence in depth for any other in-process caller.
  *
- * ASLA (Must 1): every HTTP route that creates or changes an OAuth client is closed, so the only ways to
- * get one are dynamic registration (held to the LibreChat callback by `mcp-dcr-redirect-policy.ts`) and
- * a server-side `auth.api.adminCreateOAuthClient`. Upstream 6.1 left these open to any signed-in user,
- * who could create a client with any callback, or move one to a loopback callback, and get an MCP token
- * for it (reproduced in ASL-1799). The admin routes are SERVER_ONLY in oauth-provider 1.7.0 and closed
+ * ASLA (Must 1): every HTTP route that creates or changes an OAuth client is closed, so the only way to
+ * get one is registration with the operator's initial access token, held to the LibreChat callback by
+ * `mcp-dcr-redirect-policy.ts` (`clientPrivileges` also denies sessions, in-process included). Upstream
+ * 6.1 left these open to any signed-in user, who could create a client with any callback, or move one to
+ * a loopback callback, and get an MCP token for it (reproduced in ASL-1799). The admin routes are SERVER_ONLY in oauth-provider 1.7.0 and closed
  * here anyway, so a future release that exposes them stays closed. `mcp-oauth-dcr.test.ts` fails if a
  * new client-mutating route appears that is neither listed here nor SERVER_ONLY: recheck at every upgrade.
  */
