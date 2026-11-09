@@ -4313,6 +4313,7 @@
         "heading_none": "No heading",
         "invitation_email": "Invitation email",
         "invitees": "Invitees",
+        "load_failed": "Could not load the invitation settings.",
         "manual_list_help": "One recipient per line: email, first name, last name. Or upload a CSV with those columns; a header row is optional and the column order is detected. {count, plural, one {# valid recipient} other {# valid recipients}}.",
         "manual_list_label": "Recipients (email, first name, last name)",
         "max_reminders": "Max reminders per person",

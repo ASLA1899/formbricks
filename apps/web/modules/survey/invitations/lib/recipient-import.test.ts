@@ -64,6 +64,19 @@ describe("textToRecipients / recipientsToText", () => {
     expect(recipientsToText(textToRecipients(text))).toBe(text);
   });
 
+  test("names with commas, quotes and line breaks survive an edit of the text", () => {
+    const list = [
+      { email: "a@x.org", firstName: "John", lastName: "Smith, Jr." },
+      { email: "b@x.org", firstName: 'Ann "Annie"', lastName: "Lee" },
+    ];
+    const text = recipientsToText(list);
+    expect(text).toBe('a@x.org, John, "Smith, Jr."\nb@x.org, "Ann ""Annie""", Lee');
+    expect(textToRecipients(text)).toEqual(list);
+    expect(textToRecipients(recipientsToText([{ email: "c@x.org", lastName: "Two\nLines" }]))).toEqual([
+      { email: "c@x.org", firstName: undefined, lastName: "Two Lines" },
+    ]);
+  });
+
   test("keeps a last name when the first name is missing", () => {
     expect(recipientsToText([{ email: "a@x.org", lastName: "Day" }])).toBe("a@x.org, , Day");
   });
@@ -72,13 +85,14 @@ describe("textToRecipients / recipientsToText", () => {
 describe("mergeRecipients", () => {
   test("de-duplicates case-insensitively, import wins on names, and counts", () => {
     const { merged, added, updated } = mergeRecipients(
-      [
-        { email: "A@x.org", firstName: "Old" },
-        { email: "b@x.org" },
-      ],
+      [{ email: "A@x.org", firstName: "Old" }, { email: "b@x.org" }],
       [{ email: "a@X.org", firstName: "New" }, { email: "c@x.org" }]
     );
-    expect(merged).toEqual([{ email: "a@X.org", firstName: "New" }, { email: "b@x.org" }, { email: "c@x.org" }]);
+    expect(merged).toEqual([
+      { email: "a@X.org", firstName: "New" },
+      { email: "b@x.org" },
+      { email: "c@x.org" },
+    ]);
     expect(added).toBe(1);
     expect(updated).toBe(1);
   });

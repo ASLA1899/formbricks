@@ -64,6 +64,10 @@ export const RecipientsCard = ({ surveyId, segments }: Readonly<RecipientsCardPr
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  // Set when the saved config could not be read. The card then offers a retry rather than an editable
+  // default draft, whose Save would overwrite the stored templates and schedule.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [draft, setDraft] = useState<TInvitationConfigDraft>(createEmptyDraft);
   // The textarea keeps the raw text so a half-typed line ("it@") stays visible while the parsed
   // recipient list only holds lines that validate.
@@ -88,30 +92,37 @@ export const RecipientsCard = ({ surveyId, segments }: Readonly<RecipientsCardPr
     if (!open || loaded) return;
     let cancelled = false;
     const load = async () => {
-      const [configResult] = await Promise.all([
-        getInvitationConfigAction({ surveyId }),
-        refreshInvitations(),
-      ]);
-      if (cancelled) return;
-      if (configResult?.data) {
-        setDraft(configResult.data);
-        if (configResult.data.audience.source === "manualList") {
-          setManualListRaw(recipientsToText(configResult.data.audience.recipients));
+      setLoadError(null);
+      try {
+        const [configResult] = await Promise.all([
+          getInvitationConfigAction({ surveyId }),
+          refreshInvitations(),
+        ]);
+        if (cancelled) return;
+        // A null config (nothing saved yet) is normal; an error is not.
+        const message = configResult ? getFormattedErrorMessage(configResult) : "";
+        if (!configResult || message) {
+          setLoadError(message || t("workspace.surveys.invitations.load_failed"));
+          return;
         }
-      } else if (configResult && !configResult.data) {
-        // No saved config yet (null) is normal; an error is not.
-        const message = getFormattedErrorMessage(configResult);
-        if (message) toast.error(message);
+        if (configResult.data) {
+          setDraft(configResult.data);
+          if (configResult.data.audience.source === "manualList") {
+            setManualListRaw(recipientsToText(configResult.data.audience.recipients));
+          }
+        }
+        setLoaded(true);
+      } catch {
+        if (!cancelled) setLoadError(t("workspace.surveys.invitations.load_failed"));
       }
-      setLoaded(true);
     };
     void load();
     return () => {
       cancelled = true;
     };
-    // refreshInvitations only closes over surveyId.
+    // refreshInvitations and t are stable for this card; loadAttempt re-runs the load on retry.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, loaded, surveyId]);
+  }, [open, loaded, surveyId, loadAttempt]);
 
   const updateDraft = (patch: Partial<TInvitationConfigDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
@@ -127,6 +138,9 @@ export const RecipientsCard = ({ surveyId, segments }: Readonly<RecipientsCardPr
   const audienceComplete = isAudienceComplete(audience);
   // Segments need the Contacts feature this fork does not ship; offer them only where they exist.
   const showSegmentSource = segments.length > 0 || audience.source === "segment";
+  // Snowflake audiences are switched off on this instance (resolveSnowflakeAudience refuses them);
+  // the option stays only so a config saved with it can still be viewed and changed.
+  const showSnowflakeSource = audience.source === "snowflake";
 
   const handleCsvFile = async (file: File) => {
     if (file.size > MAX_CSV_BYTES) {
@@ -249,7 +263,9 @@ export const RecipientsCard = ({ surveyId, segments }: Readonly<RecipientsCardPr
       <Collapsible.CollapsibleContent className="flex flex-col">
         <hr className="py-1 text-slate-600" />
         {loaded ? (
-          <div className="space-y-6 p-4">
+          // Locked while a save, send or remind is in flight, so an edit made then cannot be marked
+          // saved by the response.
+          <fieldset disabled={busy !== null} className="space-y-6 p-4">
             {summary && summary.total > 0 && (
               <div className="grid grid-cols-4 gap-2 text-center">
                 <Stat label={t("workspace.surveys.invitations.stat_invited")} value={summary.total} />
@@ -285,9 +301,11 @@ export const RecipientsCard = ({ surveyId, segments }: Readonly<RecipientsCardPr
                       {t("workspace.surveys.invitations.source_segment")}
                     </SelectItem>
                   )}
-                  <SelectItem value="snowflake">
-                    {t("workspace.surveys.invitations.source_snowflake")}
-                  </SelectItem>
+                  {showSnowflakeSource && (
+                    <SelectItem value="snowflake">
+                      {t("workspace.surveys.invitations.source_snowflake")}
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
 
@@ -480,9 +498,20 @@ export const RecipientsCard = ({ surveyId, segments }: Readonly<RecipientsCardPr
                   : t("workspace.surveys.invitations.saves_separately")}
               </p>
             </div>
-          </div>
+          </fieldset>
         ) : (
-          <p className="p-4 text-sm text-slate-500">{t("common.loading")}</p>
+          <div className="flex items-center gap-3 p-4 text-sm text-slate-500">
+            {loadError ? (
+              <>
+                <span role="alert">{loadError}</span>
+                <Button variant="secondary" size="sm" onClick={() => setLoadAttempt((n) => n + 1)}>
+                  {t("common.try_again")}
+                </Button>
+              </>
+            ) : (
+              t("common.loading")
+            )}
+          </div>
         )}
       </Collapsible.CollapsibleContent>
     </Collapsible.Root>

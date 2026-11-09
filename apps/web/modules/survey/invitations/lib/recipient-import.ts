@@ -53,7 +53,11 @@ export const parseCsv = (text: string): string[][] => {
   return rows;
 };
 
-const normalizeHeader = (s: string): string => s.trim().toLowerCase().replaceAll(/[\s_-]/g, "");
+const normalizeHeader = (s: string): string =>
+  s
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[\s_-]/g, "");
 
 const HEADER_ALIASES: Record<"email" | "firstName" | "lastName", string[]> = {
   email: ["email", "e-mail", "emailaddress", "email_address"].map(normalizeHeader),
@@ -100,20 +104,34 @@ export const csvToRecipients = (csv: string): TManualRecipient[] => {
     .filter((r) => isValidEmail(r.email));
 };
 
-// One recipient per line: "email, first, last". Lines whose email does not validate yet (the user
-// is still typing) are skipped here; the editor keeps the raw text separately.
+// One recipient per line: "email, first, last", CSV-quoted so a name may hold a comma
+// (`a@x.com, John, "Smith, Jr."`). Lines whose email does not validate yet (the user is still typing)
+// are skipped here; the editor keeps the raw text separately.
 export const textToRecipients = (text: string): TManualRecipient[] =>
   text
     .split(/\r?\n/)
     .map((line) => {
-      const parts = line.split(",").map((s) => s.trim());
+      const parts = (parseCsv(line)[0] ?? []).map((s) => s.trim());
       return { email: parts[0] ?? "", firstName: parts[1] || undefined, lastName: parts[2] || undefined };
     })
     .filter((r) => isValidEmail(r.email));
 
+// Quotes a field that holds a comma or quote. Line breaks become spaces: the textarea holds one
+// recipient per line.
+const toTextField = (value: string): string => {
+  const flat = value.replaceAll(/[\r\n]+/g, " ").trim();
+  return /[",]/.test(flat) ? `"${flat.replaceAll('"', '""')}"` : flat;
+};
+
+// Inverse of textToRecipients: textToRecipients(recipientsToText(list)) returns the list.
 export const recipientsToText = (recipients: TManualRecipient[]): string =>
   recipients
-    .map((r) => [r.email, r.firstName ?? "", r.lastName ?? ""].join(", ").replace(/(,\s*)+$/, ""))
+    .map((r) =>
+      [r.email, r.firstName ?? "", r.lastName ?? ""]
+        .map(toTextField)
+        .join(", ")
+        .replace(/(,\s*)+$/, "")
+    )
     .join("\n");
 
 // Merges an import into the current list. De-duplicates by email (case-insensitive); the import
