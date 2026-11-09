@@ -36,9 +36,29 @@ export const MCP_TOOL_ALLOWLIST: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The server the tool modules register on: the real one, except that `registerTool` silently skips a
+ * Returned for a skipped tool so a module that chains `.disable()` / `.update()` on the result keeps
+ * working instead of throwing inside the handler factory. Every method is a no-op; the tool never exists.
+ */
+const SKIPPED_TOOL = Object.freeze({
+  enabled: false,
+  enable: () => undefined,
+  disable: () => undefined,
+  update: () => undefined,
+  remove: () => undefined,
+  handler: () => {
+    throw new Error("Tool is not on the MCP allowlist");
+  },
+});
+
+/**
+ * The server the tool modules register on. It exposes `registerTool` only, and that silently skips a
  * name outside the allowlist. Enforced here, at the server, rather than in `registerScopedTool`, because
  * a tool module receives the server and could always call `registerTool` on it directly.
+ *
+ * Any other member (`server.server` and its `setRequestHandler`, `registerResource`, `registerPrompt`, …)
+ * throws, so an upstream module that reaches past `registerTool` fails loudly in the route tests instead
+ * of quietly adding a handler the allowlist never saw. Symbol keys read as `undefined` so inspection and
+ * logging of the proxy still work.
  */
 export function withMcpToolAllowlist(
   server: McpServer,
@@ -50,10 +70,15 @@ export function withMcpToolAllowlist(
         return ((name: string, ...rest: unknown[]) =>
           allowlist.has(name)
             ? (target.registerTool as (...args: unknown[]) => unknown)(name, ...rest)
-            : undefined) as McpServer["registerTool"];
+            : SKIPPED_TOOL) as McpServer["registerTool"];
       }
-      const value: unknown = Reflect.get(target, property, target);
-      return typeof value === "function" ? value.bind(target) : value;
+      if (typeof property === "symbol") return undefined;
+      throw new Error(
+        `MCP tool modules may only call registerTool; "${property}" is blocked by the tool allowlist`
+      );
+    },
+    set() {
+      throw new Error("MCP tool modules may not modify the server");
     },
   });
 }
