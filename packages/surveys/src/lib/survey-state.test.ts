@@ -57,6 +57,7 @@ describe("SurveyState", () => {
       };
       surveyState.userId = "userTest";
       surveyState.contactId = "contactTest";
+      surveyState.contactToken = "contactTokenTest";
       surveyState.singleUseId = "singleUseTest";
       surveyState.displayId = "displayTest";
 
@@ -68,6 +69,7 @@ describe("SurveyState", () => {
       expect(copiedState.displayId).toBeNull(); // displayId is not copied, so it remains null from constructor
       expect(copiedState.userId).toBe(surveyState.userId);
       expect(copiedState.contactId).toBe(surveyState.contactId);
+      expect(copiedState.contactToken).toBe(surveyState.contactToken);
       expect(copiedState.singleUseId).toBe(surveyState.singleUseId);
       expect(copiedState.responseAcc).toEqual(surveyState.responseAcc); // Checks for value equality
       expect(copiedState.responseAcc.data).toBe(surveyState.responseAcc.data);

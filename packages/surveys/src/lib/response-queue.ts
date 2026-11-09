@@ -580,7 +580,7 @@ export class ResponseQueue {
     responseUpdate: TResponseUpdate
   ): Omit<
     Parameters<ApiClient["createResponse"]>[0],
-    "contactId" | "userId" | "singleUseId" | "surveyId" | "displayId" | "recaptchaToken"
+    "contactId" | "contactToken" | "userId" | "singleUseId" | "surveyId" | "displayId" | "recaptchaToken"
   > {
     if (!this.surveyState.shouldCreateResponseFromState) {
       return {
@@ -660,6 +660,9 @@ export class ResponseQueue {
           ...createPayload,
           surveyId: this.surveyState.surveyId,
           contactId: this.surveyState.contactId || null,
+          // ASLA fork (ASL-1877): sent only alongside a contactId; the server ignores it otherwise.
+          ...(this.surveyState.contactId &&
+            this.surveyState.contactToken && { contactToken: this.surveyState.contactToken }),
           userId: this.surveyState.userId || null,
           singleUseId: this.surveyState.singleUseId || null,
           displayId: this.surveyState.displayId,

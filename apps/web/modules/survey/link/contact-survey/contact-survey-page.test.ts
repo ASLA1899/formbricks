@@ -2,9 +2,9 @@ import { createInstance } from "i18next";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { findMatchingLocale, getAcceptedLanguages } from "@/lib/utils/locale";
 import { getTranslate } from "@/lingodotdev/server";
-import { verifyContactSurveyToken } from "@/modules/ee/contacts/lib/contact-survey-link";
 import { SurveyInactive } from "@/modules/survey/link/components/survey-inactive";
 import { renderSurvey } from "@/modules/survey/link/components/survey-renderer";
+import { verifyContactSurveyToken } from "@/modules/survey/link/lib/contact-survey-link";
 import { getExistingContactResponse, getResponseBySingleUseId } from "@/modules/survey/link/lib/data";
 import { getServableLinkSurvey } from "@/modules/survey/link/lib/servable-survey";
 import { getLinkSurveySingleUseAccess } from "@/modules/survey/link/lib/single-use-link";
@@ -14,7 +14,12 @@ import { ContactSurveyPage } from "./page";
 vi.mock("next/navigation", () => ({ notFound: vi.fn() }));
 vi.mock("@/lib/utils/locale", () => ({ findMatchingLocale: vi.fn(), getAcceptedLanguages: vi.fn() }));
 vi.mock("@/lingodotdev/server", () => ({ getTranslate: vi.fn() }));
-vi.mock("@/modules/ee/contacts/lib/contact-survey-link", () => ({ verifyContactSurveyToken: vi.fn() }));
+vi.mock("@/modules/survey/link/lib/contact-survey-link", () => ({ verifyContactSurveyToken: vi.fn() }));
+vi.mock("@/modules/survey/link/lib/contact-binding", () => ({
+  generateContactBindingToken: vi.fn(
+    (surveyId: string, contactId: string) => `bind(${surveyId},${contactId})`
+  ),
+}));
 vi.mock("@/modules/survey/lib/response", () => ({ getResponseCountBySurveyId: vi.fn() }));
 vi.mock("@/modules/survey/link/components/survey-inactive", () => ({ SurveyInactive: vi.fn() }));
 vi.mock("@/modules/survey/link/components/survey-renderer", () => ({ renderSurvey: vi.fn() }));
@@ -78,6 +83,9 @@ describe("ContactSurveyPage single-use response handoff", () => {
     expect(renderSurvey).toHaveBeenCalledWith(
       expect.objectContaining({
         singleUseResponse: { id: "response-1", finished: false },
+        contactId: "contact-1",
+        // ASLA fork (ASL-1877): the binding token for this survey and contact rides along.
+        contactToken: "bind(survey-1,contact-1)",
       })
     );
     expect(result).toBe(renderResult);

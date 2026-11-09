@@ -6,9 +6,8 @@ import {
 import { reportApiError } from "@/app/lib/api/api-error-reporter";
 import { parseAndValidateJsonBody } from "@/app/lib/api/parse-and-validate-json-body";
 import { responses } from "@/app/lib/api/response";
-import { getOrganizationIdFromWorkspaceId } from "@/lib/utils/helper";
 import { resolveClientApiIds } from "@/lib/utils/resolve-client-id";
-import { getIsContactsEnabled } from "@/modules/ee/license-check/lib/utils";
+import { getBoundContactId } from "@/modules/survey/link/lib/contact-binding";
 import { createDisplay } from "./lib/display";
 
 interface Context {
@@ -67,17 +66,18 @@ export const POST = async (request: Request, context: Context): Promise<Response
 
   const { displayInputData } = validatedInput;
 
+  // ASLA fork: a contactId is accepted WITHOUT an Enterprise Contacts license when it carries this
+  // survey's binding token from the /c page (getBoundContactId), matching the responses route; otherwise
+  // the display is recorded anonymously. Upstream's 403 here is swallowed by the surveys SDK, so
+  // invitation responses would land with no display.
   try {
-    if (displayInputData.contactId) {
-      const organizationId = await getOrganizationIdFromWorkspaceId(workspaceId);
-      const isContactsEnabled = await getIsContactsEnabled(organizationId);
-      if (!isContactsEnabled) {
-        return responses.forbiddenResponse(
-          "User identification is only available for enterprise users.",
-          true
-        );
-      }
-    }
+    displayInputData.contactId = await getBoundContactId({
+      workspaceId,
+      surveyId: displayInputData.surveyId,
+      contactId: displayInputData.contactId,
+      contactToken: displayInputData.contactToken,
+    });
+    delete displayInputData.contactToken;
 
     const response = await createDisplay(displayInputData);
 

@@ -32,7 +32,11 @@ export const SurveyInline = (props: Omit<SurveyContainerProps, "containerId">) =
     isLoadingScript = true;
     try {
       const scriptUrl = props.appUrl ? `${props.appUrl}/js/surveys.umd.cjs` : "/js/surveys.umd.cjs";
-      const response = await fetch(scriptUrl, IS_DEVELOPMENT_BUILD ? { cache: "no-store" } : {});
+      // ASLA fork (ASL-1877): revalidate on every load instead of trusting the browser's cached copy. The
+      // script URL carries no version, so after a deploy a cached bundle could run for up to two hours
+      // (max-age plus stale-while-revalidate) — and a pre-ASL-1877 bundle sends no contact binding token, so
+      // invitees' answers would be stored anonymously. Revalidation is a conditional request: 304 when unchanged.
+      const response = await fetch(scriptUrl, { cache: IS_DEVELOPMENT_BUILD ? "no-store" : "no-cache" });
 
       if (!response.ok) {
         throw new Error("Failed to load the surveys package");

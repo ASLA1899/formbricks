@@ -5,6 +5,8 @@ export class SurveyState {
   displayId: string | null = null;
   userId: string | null = null;
   contactId: string | null = null;
+  /** ASLA fork (ASL-1877): binds contactId to this survey for the client API. */
+  contactToken: string | null = null;
   surveyId: string;
   shouldCreateResponseFromState = false;
   responseAcc: TResponseUpdate = { finished: false, data: {}, ttc: {}, variables: {} };
@@ -17,7 +19,8 @@ export class SurveyState {
     responseId?: string | null,
     userId?: string | null,
     contactId?: string | null,
-    pinAuthToken?: string | null
+    pinAuthToken?: string | null,
+    contactToken?: string | null
   ) {
     this.surveyId = surveyId;
     this.userId = userId ?? null;
@@ -25,6 +28,7 @@ export class SurveyState {
     this.responseId = responseId ?? null;
     this.contactId = contactId ?? null;
     this.pinAuthToken = pinAuthToken ?? null;
+    this.contactToken = contactToken ?? null;
   }
 
   /**
@@ -45,7 +49,8 @@ export class SurveyState {
       this.responseId ?? undefined,
       this.userId ?? undefined,
       this.contactId ?? undefined,
-      this.pinAuthToken ?? undefined
+      this.pinAuthToken ?? undefined,
+      this.contactToken ?? undefined
     );
     copyInstance.responseId = this.responseId;
     copyInstance.responseAcc = this.responseAcc;
@@ -82,6 +87,14 @@ export class SurveyState {
    */
   updateContactId(id: string) {
     this.contactId = id;
+  }
+
+  /**
+   * Update the contact binding token (ASLA fork, ASL-1877)
+   * @param token - The token the /c page minted for this survey and contact
+   */
+  updateContactToken(token: string | null) {
+    this.contactToken = token;
   }
 
   enableBootstrapResponseCreate() {

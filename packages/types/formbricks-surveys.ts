@@ -119,6 +119,8 @@ export interface SurveyContainerProps extends Omit<SurveyBaseProps, "onFileUploa
   isPreviewMode?: boolean;
   userId?: string;
   contactId?: string;
+  /** ASLA fork (ASL-1877): HMAC binding `contactId` to this survey, sent with the display and response. */
+  contactToken?: string;
   onDisplayCreated?: () => void | Promise<void>;
   /**
    * Fires once per survey lifecycle when the response exists. Outside preview mode that is the

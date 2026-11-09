@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { MAX_INGESTED_VALUE_BYTES } from "@formbricks/types/embedded-data-ingest";
+import { generateContactBindingToken } from "@/modules/survey/link/lib/contact-binding";
 import { POST } from "./route";
 
 /**
@@ -253,5 +254,73 @@ describe("POST /api/v2/client/[workspaceId]/responses — duplicate submissions 
     });
     expect(mocks.createResponseWithQuotaEvaluation).not.toHaveBeenCalled();
     expect(mocks.sendToPipeline).not.toHaveBeenCalled();
+  });
+});
+
+// ASLA fork: the /c/<token> invitation flow submits with a contactId and the binding token the page minted
+// for that survey, and this install has no Enterprise Contacts license. Upstream answers any contactId with
+// a 403; here it is kept only with this survey's token, and otherwise recorded anonymously. These go through
+// the real input parser, so a schema that stripped `contactToken` would fail them.
+describe("POST /api/v2/client/[workspaceId]/responses — contactId without a Contacts license (ASL-1877)", () => {
+  const contactId = "clh8ruz3w0000qa8h9x0bt9ry";
+  const otherSurveyId = "cmor8y52a0000qa8h9x0bt9ry";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mocks.resolveClientApiIds.mockResolvedValue({ workspaceId });
+    mocks.getOrganizationIdFromWorkspaceId.mockResolvedValue("org_1");
+    mocks.getIsContactsEnabled.mockResolvedValue(false);
+    mocks.getSurvey.mockResolvedValue({ ...getSurveyWithFields([]), type: "link" });
+    mocks.checkSurveyValidity.mockResolvedValue(null);
+    mocks.validateClientFileUploads.mockReturnValue(true);
+    mocks.validateOtherOptionLengthForMultipleChoice.mockReturnValue(null);
+    mocks.validateResponseData.mockReturnValue(null);
+    mocks.createQuotaFullObject.mockReturnValue({});
+    mocks.findRecentDuplicateResponse.mockResolvedValue(null);
+    mocks.createResponseWithQuotaEvaluation.mockResolvedValue({
+      id: responseId,
+      surveyId,
+      finished: true,
+      quotaFull: undefined,
+    });
+  });
+
+  const created = () => mocks.createResponseWithQuotaEvaluation.mock.calls[0][0];
+
+  test("keeps the contactId with this survey's binding token, and does not store the token", async () => {
+    const contactToken = generateContactBindingToken(surveyId, contactId);
+
+    const response = await postRawBody({ q1: 5 }, { contactId, contactToken, finished: true });
+
+    expect(response.status).toBe(200);
+    expect(created()).toMatchObject({ contactId });
+    expect(created()).not.toHaveProperty("contactToken");
+  });
+
+  test("records anonymously when the token was minted for a different survey", async () => {
+    const contactToken = generateContactBindingToken(otherSurveyId, contactId);
+
+    const response = await postRawBody({ q1: 5 }, { contactId, contactToken, finished: true });
+
+    expect(response.status).toBe(200);
+    expect(created().contactId).toBeUndefined();
+    expect(mocks.findRecentDuplicateResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ contactId: undefined })
+    );
+  });
+
+  test("records anonymously, rather than rejecting, when the token is malformed", async () => {
+    const response = await postRawBody({ q1: 5 }, { contactId, contactToken: "NOT-HEX", finished: true });
+
+    expect(response.status).toBe(200);
+    expect(created().contactId).toBeUndefined();
+  });
+
+  test("records anonymously when no token is sent", async () => {
+    const response = await postRawBody({ q1: 5 }, { contactId, finished: true });
+
+    expect(response.status).toBe(200);
+    expect(created().contactId).toBeUndefined();
   });
 });

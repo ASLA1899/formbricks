@@ -15,13 +15,12 @@ import { applyIngestContractToResponseData } from "@/lib/response/ingest";
 import { getSurvey } from "@/lib/survey/service";
 import { getElementsFromBlocks } from "@/lib/survey/utils";
 import { getClientIpFromHeaders } from "@/lib/utils/client-ip";
-import { getOrganizationIdFromWorkspaceId } from "@/lib/utils/helper";
 import { resolveClientApiIds } from "@/lib/utils/resolve-client-id";
 import { formatValidationErrorsForV1Api, validateResponseData } from "@/modules/api/lib/validation";
 import { validateOtherOptionLengthForMultipleChoice } from "@/modules/api/v2/lib/element";
-import { getIsContactsEnabled } from "@/modules/ee/license-check/lib/utils";
 import { createQuotaFullObject } from "@/modules/ee/quotas/lib/helpers";
 import { validateClientFileUploads } from "@/modules/storage/utils";
+import { getBoundContactId } from "@/modules/survey/link/lib/contact-binding";
 import { createResponseWithQuotaEvaluation } from "./lib/response";
 import { TResponseInputV2, ZResponseInputV2 } from "./types/response";
 
@@ -70,21 +69,10 @@ const parseAndValidateResponseInput = async (
   };
 };
 
-const getContactsDisabledResponse = async (
-  workspaceId: string,
-  contactId: string | null | undefined
-): Promise<Response | null> => {
-  if (!contactId) {
-    return null;
-  }
-
-  const organizationId = await getOrganizationIdFromWorkspaceId(workspaceId);
-  const isContactsEnabled = await getIsContactsEnabled(organizationId);
-
-  return isContactsEnabled
-    ? null
-    : responses.forbiddenResponse("User identification is only available for enterprise users.", true);
-};
+// ASLA fork: a contactId is accepted WITHOUT an Enterprise Contacts license when it carries this survey's
+// binding token from the /c page (getBoundContactId, applied in POST). The /c/<token> invitation flow stores contactId on
+// its responses (that is how "already responded" and reminder suppression work), and upstream's license
+// gate here would 403 every invitation submission.
 
 const validateResponseSubmission = async (
   workspaceId: string,
@@ -235,18 +223,20 @@ export const POST = async (request: Request, context: Context): Promise<Response
   const country = getCountry(request.headers);
 
   try {
-    const contactsDisabledResponse = await getContactsDisabledResponse(
-      workspaceId,
-      responseInputData.contactId
-    );
-    if (contactsDisabledResponse) {
-      return contactsDisabledResponse;
-    }
-
     const survey = await getSurvey(responseInputData.surveyId);
     if (!survey) {
       return responses.notFoundResponse("Survey", responseInputData.surveyId, true);
     }
+
+    // ASLA fork: keep the caller's contactId only with this survey's binding token; see getBoundContactId.
+    // Done before the duplicate fold and the create, which both key on it.
+    responseInputData.contactId = await getBoundContactId({
+      workspaceId,
+      surveyId: responseInputData.surveyId,
+      contactId: responseInputData.contactId,
+      contactToken: responseInputData.contactToken,
+    });
+    delete responseInputData.contactToken;
 
     // The Embedded Data ingest contract (ENG-1845), re-run server-side because this endpoint is
     // public and the renderer's filtering is never trusted. It has to precede
