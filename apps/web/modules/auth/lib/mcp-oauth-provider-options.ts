@@ -66,7 +66,8 @@ export const getMcpOauthProviderOptions = (): TOauthProviderOptions => ({
   // only by CRUD writes in the same process, so on multiple replicas disabling a resource would not
   // take effect until every pod restarted — defeating `disabled` as a revocation lever. It would
   // save one indexed read per /oauth2/token call, which is not the hot path (/api/mcp verifies JWTs
-  // locally against a cached JWKS and never reads these tables).
+  // locally against a cached JWKS and never reads the resource tables; its ASLA client check reads one
+  // `oauthClient` row per request, uncached on purpose).
   allowDynamicClientRegistration: true,
   allowUnauthenticatedClientRegistration: true,
   // Register MCP clients with the full advertised scope set by default so the consent screen offers

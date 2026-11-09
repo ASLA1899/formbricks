@@ -1,66 +1,28 @@
 import "server-only";
 import { logger } from "@formbricks/logger";
 import { env } from "@/lib/env";
+import { getMcpLibreChatCallbackUri } from "./mcp-librechat-callback";
 
 /**
- * Redirect-URI allowlist for the open Dynamic Client Registration endpoint (ENG-3086, ENG-3471).
+ * Redirect-URI policy for the open Dynamic Client Registration endpoint (ENG-3086, ENG-3471; ASLA Must 1).
  *
  * Unauthenticated DCR (RFC 7591) at `/api/auth/oauth2/register` accepts a self-asserted
- * `redirect_uris` array, so an anonymous caller can register a client that points at an
- * attacker-controlled redirect URI and then drive a consent-phishing flow against it. Better Auth's
- * own validation is syntactic: it confirms each URI is well-formed for the client's application type
- * and matches exactly at token exchange, but it does not restrict *which* hosts an anonymous caller
- * may claim — an arbitrary `https` URI is accepted for both `web` and `native` clients (the latter
- * via RFC 8252 §8.3 "claimed https").
+ * `redirect_uris` array. Upstream limits it to http loopback plus a list of hosted-connector callbacks
+ * (claude.ai, ChatGPT). ASLA narrows that to one client: ASLA Chat's LibreChat connector, whose callback
+ * is `MCP_LIBRECHAT_CALLBACK_URI`. Loopback and the hosted callbacks are refused, so no desktop client,
+ * script or third-party connector can obtain a token for survey data.
  *
- * So anonymous registration may only claim a redirect URI an attacker can never receive a code at:
- *
- * 1. `http` loopback (`localhost`, `127.0.0.1`, `[::1]`, any port) — the native-app pattern (RFC 8252
- *    §7.3) local MCP clients use (Claude Code, Codex, MCP Inspector). The code lands on the user's own
- *    machine.
- * 2. An exact hosted-connector callback (`HOSTED_MCP_CLIENT_REDIRECT_URIS`, plus any an operator adds
- *    through `MCP_DCR_ALLOWED_REDIRECT_URIS`). claude.ai and ChatGPT connect from the vendor's cloud and
- *    register a fixed `https` callback on the vendor's own origin. Anyone can register a client with one
- *    of these, but the code is only ever delivered to that vendor — which rejects a `state` it did not
- *    issue — never to the registrant. Matched by exact string, as OAuth 2.1 / RFC 9700 §4.1 require:
- *    no prefix, host or wildcard matching, so a lookalike host, another path, a trailing slash or an
- *    added query string is a different URI and is refused. Better Auth matches https redirect URIs
- *    exactly at `/authorize` too (`findRegisteredRedirectUri`), so a registered callback cannot be
- *    widened later either.
- *
- * Anything else is rejected before it reaches Better Auth, with the same `invalid_redirect_uri` the
- * plugin itself would emit for a malformed redirect.
- *
- * Hosted callbacks are allowed for `redirect_uris` only. `post_logout_redirect_uris` stays loopback-only:
- * no hosted connector registers one, so there is nothing to gain from widening it.
- *
- * Deliberately NOT allowed: private-use reverse-domain schemes (`com.example.app:/cb`, RFC 8252
- * §7.1) and other app-claimed `https` universal links (§8.3). No current MCP client uses either, and
- * adding one is a policy decision for this list rather than a pattern.
+ * Matched by exact string (OAuth 2.1 / RFC 9700 §4.1): a lookalike host, another path, a trailing slash
+ * or an added query string is a different URI and is refused. Anything else is rejected before it
+ * reaches Better Auth, with the same `invalid_redirect_uri` the plugin itself would emit.
  */
-
-/**
- * Callbacks of hosted MCP clients that register through DCR. Each is an exact URI, never a host.
- *
- * - claude.ai / Claude Desktop / mobile custom connectors: `https://claude.ai/api/mcp/auth_callback`
- *   (https://claude.com/docs/connectors/building/authentication). Claude's DCR body lists the
- *   `claude.com` callback alongside it in the same `redirect_uris`, and the gate rejects a body on its
- *   first disallowed URI — so both must be here or claude.ai cannot register at all.
- * - ChatGPT connectors: `https://chatgpt.com/connector_platform_oauth_redirect`
- *   (https://developers.openai.com/plugins/build/auth). ChatGPT uses this stable callback only when the
- *   authorization server supports RFC 9207 issuer identification; otherwise it falls back to a
- *   per-connector `/connector/oauth/{callback_id}` that no exact list can cover. Better Auth advertises
- *   `authorization_response_iss_parameter_supported` and returns `iss`, so the stable one is what we get.
- */
-export const HOSTED_MCP_CLIENT_REDIRECT_URIS = [
-  "https://claude.ai/api/mcp/auth_callback",
-  "https://claude.com/api/mcp/auth_callback",
-  "https://chatgpt.com/connector_platform_oauth_redirect",
-] as const;
 
 const LOOPBACK_REDIRECT_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-/** Whether a redirect URI is an http loopback address (RFC 8252 §7.3). */
+/**
+ * Whether a redirect URI is an http loopback address (RFC 8252 §7.3). No longer an allow rule (ASLA,
+ * Must 1); kept because `withInferredApplicationType` still uses it to classify a registration body.
+ */
 export const isLoopbackRedirectUri = (uri: unknown): boolean => {
   if (typeof uri !== "string") return false;
   try {
@@ -71,54 +33,51 @@ export const isLoopbackRedirectUri = (uri: unknown): boolean => {
   }
 };
 
-/** The exact-match set: the built-in hosted callbacks plus any operator additions. */
-const buildAllowedDcrRedirectUris = (operatorUris: readonly string[] = []): ReadonlySet<string> =>
-  new Set<string>([...HOSTED_MCP_CLIENT_REDIRECT_URIS, ...operatorUris]);
+let warnedIgnoredOperatorUris = false;
 
-/** Origin and path only: a callback's query string can carry a per-tenant secret, and logs leave the box. */
-const describeRedirectUri = (uri: string): string => {
-  const url = new URL(uri);
-  return `${url.origin}${url.pathname}`;
-};
-
-let allowedDcrRedirectUris: ReadonlySet<string> | undefined;
-
-/** The allowlist this process enforces. Built once; env does not change at runtime. */
+/**
+ * The redirect URIs anonymous DCR may register: the LibreChat callback, or nothing when it is unset.
+ *
+ * `MCP_DCR_ALLOWED_REDIRECT_URIS` is ignored. ASLA reads the callback from one variable so DCR, the
+ * per-request client check and a server-created client cannot drift apart; a second list an operator
+ * has to keep in sync is exactly how they would. A non-empty value is logged once so it is noticed.
+ */
 export const getAllowedDcrRedirectUris = (): ReadonlySet<string> => {
-  if (!allowedDcrRedirectUris) {
-    const operatorUris = env.MCP_DCR_ALLOWED_REDIRECT_URIS ?? [];
-    if (operatorUris.length > 0) {
-      logger.info(
-        { redirectUris: operatorUris.map(describeRedirectUri) },
-        "MCP_DCR_ALLOWED_REDIRECT_URIS adds redirect URIs to anonymous OAuth client registration"
-      );
-    }
-    allowedDcrRedirectUris = buildAllowedDcrRedirectUris(operatorUris);
+  const operatorUris = env.MCP_DCR_ALLOWED_REDIRECT_URIS ?? [];
+  if (operatorUris.length > 0 && !warnedIgnoredOperatorUris) {
+    warnedIgnoredOperatorUris = true;
+    logger.warn(
+      { count: operatorUris.length },
+      "MCP_DCR_ALLOWED_REDIRECT_URIS is ignored; dynamic client registration accepts only MCP_LIBRECHAT_CALLBACK_URI"
+    );
   }
-  return allowedDcrRedirectUris;
+  const callbackUri = getMcpLibreChatCallbackUri();
+  return new Set(callbackUri ? [callbackUri] : []);
 };
 
-/** Whether anonymous DCR may register this `redirect_uris` entry: loopback, or an exact allowlisted URI. */
+/** Whether anonymous DCR may register this `redirect_uris` entry: an exact allowlisted URI, nothing else. */
 export const isAllowedDcrRedirectUri = (uri: unknown, allowed: ReadonlySet<string>): boolean =>
-  isLoopbackRedirectUri(uri) || (typeof uri === "string" && allowed.has(uri));
+  typeof uri === "string" && allowed.has(uri);
 
-const REDIRECT_URI_FIELDS = ["redirect_uris", "post_logout_redirect_uris"] as const;
-
-type TRedirectUriField = (typeof REDIRECT_URI_FIELDS)[number];
+type TRedirectUriField = "redirect_uris" | "post_logout_redirect_uris";
 
 export type TDisallowedRedirectUri = {
   field: TRedirectUriField;
-  uri: string;
+  /** The offending entry, or `null` when the field is missing, empty or malformed as a whole. */
+  uri: string | null;
 };
 
-const isAllowedForField = (field: TRedirectUriField, uri: string, allowed: ReadonlySet<string>): boolean =>
-  field === "redirect_uris" ? isAllowedDcrRedirectUri(uri, allowed) : isLoopbackRedirectUri(uri);
-
 /**
- * The first redirect URI in a DCR body that the allowlist rejects, or `null` when the body is not
- * JSON, not an object, or carries no redirect URIs. Those cases are Better Auth's to decide — this
- * check must only *tighten* what upstream accepts, never reject a request upstream would allow, so a
- * body with no `redirect_uris` passes through unchanged and produces upstream's own error.
+ * Why a DCR body is refused, or `null` when it may go on to Better Auth. ASLA (Must 1) turns this from
+ * "only tighten what upstream accepts" into an exact rule, so it now refuses shapes upstream would also
+ * have refused rather than leaving them to it:
+ *
+ * - `redirect_uris` must be a JSON array of exactly one entry, and that entry must be allowlisted. The
+ *   per-request check on `/api/mcp` accepts only a client whose stored list is exactly `[callback]`, so a
+ *   registration with a duplicate or a second URI would only produce a client that can never be used.
+ * - `post_logout_redirect_uris` must be absent or empty. LibreChat registers none, and every entry is
+ *   another place a browser could be sent.
+ * - A body that is not a JSON object is refused outright.
  */
 export const findDisallowedRedirectUri = (
   body: string,
@@ -128,16 +87,28 @@ export const findDisallowedRedirectUri = (
   try {
     parsed = JSON.parse(body);
   } catch {
-    return null;
+    return { field: "redirect_uris", uri: null };
   }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { field: "redirect_uris", uri: null };
+  }
 
   const client = parsed as Record<string, unknown>;
-  for (const field of REDIRECT_URI_FIELDS) {
-    const uris = client[field];
-    if (!Array.isArray(uris)) continue;
-    for (const uri of uris) {
-      if (typeof uri === "string" && !isAllowedForField(field, uri, allowed)) return { field, uri };
+  const redirectUris = client.redirect_uris;
+  if (!Array.isArray(redirectUris) || redirectUris.length !== 1) {
+    return { field: "redirect_uris", uri: null };
+  }
+  const [redirectUri] = redirectUris;
+  if (!isAllowedDcrRedirectUri(redirectUri, allowed)) {
+    return { field: "redirect_uris", uri: typeof redirectUri === "string" ? redirectUri : null };
+  }
+
+  const postLogout = client.post_logout_redirect_uris;
+  if (postLogout !== undefined && postLogout !== null) {
+    if (!Array.isArray(postLogout)) return { field: "post_logout_redirect_uris", uri: null };
+    if (postLogout.length > 0) {
+      const [first] = postLogout;
+      return { field: "post_logout_redirect_uris", uri: typeof first === "string" ? first : null };
     }
   }
   return null;

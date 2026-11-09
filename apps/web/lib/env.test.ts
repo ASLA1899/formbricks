@@ -23,6 +23,7 @@ const setTestEnv = (overrides: Record<string, string | undefined> = {}) => {
     AUTHZED_TOKEN: undefined,
     MCP_OAUTH_JWKS_URL: undefined,
     MCP_DCR_ALLOWED_REDIRECT_URIS: undefined,
+    MCP_LIBRECHAT_CALLBACK_URI: undefined,
     SES_CONFIGURATION_SET: undefined,
     SES_EMAIL_ENVIRONMENT: undefined,
     ...overrides,
@@ -186,6 +187,37 @@ describe("env", () => {
     setTestEnv({ MCP_OAUTH_JWKS_URL: jwksUrl });
 
     await expect(import("./env")).rejects.toThrow("MCP_OAUTH_JWKS_URL");
+  });
+
+  // ASLA (Must 1): the one OAuth callback MCP accepts. Blank is unset, which closes MCP.
+  test.each(["", "  "])("treats a blank MCP_LIBRECHAT_CALLBACK_URI (%j) as unset", async (value) => {
+    setTestEnv({ MCP_LIBRECHAT_CALLBACK_URI: value });
+
+    const { env } = await import("./env");
+
+    expect(env.MCP_LIBRECHAT_CALLBACK_URI).toBeUndefined();
+  });
+
+  test("accepts the LibreChat callback as MCP_LIBRECHAT_CALLBACK_URI", async () => {
+    const callback = "https://chat.aslalabs.org/api/mcp/formbricks-sandbox/oauth/callback";
+    setTestEnv({ MCP_LIBRECHAT_CALLBACK_URI: callback });
+
+    const { env } = await import("./env");
+
+    expect(env.MCP_LIBRECHAT_CALLBACK_URI).toBe(callback);
+  });
+
+  test.each([
+    "http://chat.aslalabs.org/api/mcp/formbricks/oauth/callback",
+    "https://localhost/api/mcp/formbricks/oauth/callback",
+    "https://chat.aslalabs.org/api/mcp/*/oauth/callback",
+    "https://chat.aslalabs.org/api/mcp/formbricks/oauth/callback#x",
+    "https://a.example.com/cb,https://b.example.com/cb",
+    "not a url",
+  ])("rejects an unsafe MCP_LIBRECHAT_CALLBACK_URI %s", async (value) => {
+    setTestEnv({ MCP_LIBRECHAT_CALLBACK_URI: value });
+
+    await expect(import("./env")).rejects.toThrow("MCP_LIBRECHAT_CALLBACK_URI");
   });
 
   test.each(["", "  ", " , "])(

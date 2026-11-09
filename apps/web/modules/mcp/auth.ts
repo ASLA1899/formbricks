@@ -6,7 +6,7 @@ import { type JWTPayload, createLocalJWKSet, decodeProtectedHeader } from "jose"
 import type { NextRequest } from "next/server";
 import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
-import type { Session, TAuthenticationApiKey } from "@formbricks/types/auth";
+import type { Session } from "@formbricks/types/auth";
 import { TooManyRequestsError } from "@formbricks/types/errors";
 import {
   problemBadRequest,
@@ -18,8 +18,12 @@ import {
 import type { TV3Authentication } from "@/app/api/v3/lib/types";
 import { withAuthorizationSurface } from "@/lib/authorization/context";
 import { parseApiKeyV2 } from "@/lib/crypto";
-import { authenticateApiKeyFromHeaders, getBearerTokenFromHeaders } from "@/modules/api/lib/api-key-auth";
+import { getBearerTokenFromHeaders } from "@/modules/api/lib/api-key-auth";
 import { auth } from "@/modules/auth/lib/auth";
+import {
+  getMcpLibreChatCallbackUri,
+  isLibreChatOnlyRedirectUris,
+} from "@/modules/auth/lib/mcp-librechat-callback";
 import {
   MCP_CHALLENGE_SCOPE,
   MCP_RESOURCE_SCOPES,
@@ -47,6 +51,9 @@ const QUERY_CREDENTIAL_PARAMS = new Set([
  * 1.7 onwards; 1.6 emitted no `typ` at all.
  */
 const JWT_ACCESS_TOKEN_TYPE = "at+jwt";
+
+/** ASLA (Must 1): returned for an API key in either header. Points the caller at OAuth, the only way in. */
+const MCP_API_KEY_REFUSED_DETAIL = "API keys are not accepted by the MCP server. Sign in with OAuth.";
 
 const oauthResourceClient = oauthProviderResourceClient(auth);
 
@@ -152,45 +159,6 @@ function isOriginAllowed(request: NextRequest): boolean {
   }
 }
 
-/**
- * Scopes for the API-key path, derived from the key's workspace permissions.
- *
- * `responses:*` is granted here alongside the others (ENG-2862) because it widens nothing: an API key
- * with `read` on a workspace can already read that workspace's responses through v1/v2 management, so
- * withholding the scope would only make the MCP surface narrower than the REST surface the same
- * credential already has. The PII argument that gives responses their own scope is about the **OAuth**
- * path, where a user grants scopes at consent and a token minted for surveys must not silently carry
- * respondent answers — that is handled by the scope being separately grantable, not by omitting it here.
- */
-function getMcpScopes(authentication: TAuthenticationApiKey): string[] {
-  const scopes = new Set(["surveys:read", "workflows:read", "feedbackRecords:read", "responses:read"]);
-  if (
-    authentication.workspacePermissions.some(
-      (permission) => permission.permission === "write" || permission.permission === "manage"
-    )
-  ) {
-    scopes.add("surveys:write");
-    scopes.add("workflows:write");
-    scopes.add("feedbackRecords:write");
-    scopes.add("responses:write");
-  }
-
-  return Array.from(scopes);
-}
-
-function createApiKeyMcpAuthInfo(authentication: TAuthenticationApiKey, requestId: string): TMcpAuthInfo {
-  return {
-    token: authentication.apiKeyId,
-    clientId: authentication.apiKeyId,
-    scopes: getMcpScopes(authentication),
-    extra: {
-      formbricksAuthentication: authentication,
-      requestId,
-      authMethod: "apiKey",
-    },
-  };
-}
-
 function getOAuthScopes(payload: JWTPayload): string[] {
   return typeof payload.scope === "string" ? payload.scope.split(" ").filter(Boolean) : [];
 }
@@ -289,6 +257,36 @@ async function isOAuthUserActive(userId: string): Promise<boolean> {
   });
 
   return user?.isActive === true;
+}
+
+type TMcpOAuthClientRefusal =
+  | "missing_client_id"
+  | "unknown_client"
+  | "disabled_client"
+  | "redirect_uris_mismatch";
+
+/**
+ * ASLA (Must 1): whether the OAuth client a token was issued to may use `/api/mcp` right now. Only a
+ * client whose registered redirect URIs are exactly `MCP_LIBRECHAT_CALLBACK_URI` qualifies — ASLA Chat.
+ *
+ * Read from the database on every request, with no cache, so a client changed or disabled after its
+ * token was issued is refused on the next call rather than when the 15-minute token expires. The
+ * client's creator is deliberately not compared with the token's user: one server-created client serves
+ * every staff member. Returns why the client is refused, or `null` when it is allowed.
+ */
+async function getMcpOAuthClientRefusal(clientId: string | null): Promise<TMcpOAuthClientRefusal | null> {
+  if (!clientId) return "missing_client_id";
+
+  const client = await prisma.oauthClient.findUnique({
+    where: { clientId },
+    select: { redirectUris: true, disabled: true },
+  });
+  if (!client) return "unknown_client";
+  if (client.disabled === true) return "disabled_client";
+  if (!isLibreChatOnlyRedirectUris(client.redirectUris, getMcpLibreChatCallbackUri())) {
+    return "redirect_uris_mismatch";
+  }
+  return null;
 }
 
 /**
@@ -429,46 +427,6 @@ async function rejectUnauthenticatedMcpRequest(params: {
   };
 }
 
-async function authenticateMcpApiKey(
-  request: NextRequest,
-  requestId: string,
-  log: ReturnType<typeof logger.withContext>
-): Promise<TMcpAuthenticationResult> {
-  const instance = request.nextUrl.pathname;
-  const authentication = await authenticateApiKeyFromHeaders(request.headers);
-
-  if (!authentication) {
-    return await rejectUnauthenticatedMcpRequest({
-      requestId,
-      instance,
-      log,
-      detail: "API key or OAuth access token required",
-      logMessage: "MCP API key authentication failed",
-    });
-  }
-
-  try {
-    await applyRateLimit(rateLimitConfigs.api.v3, authentication.apiKeyId);
-  } catch (error) {
-    log.warn({ error, statusCode: 429, apiKeyId: authentication.apiKeyId }, "MCP API rate limit exceeded");
-    return {
-      ok: false,
-      requestId,
-      response: problemTooManyRequests(
-        requestId,
-        error instanceof Error ? error.message : "Rate limit exceeded",
-        error instanceof TooManyRequestsError ? error.retryAfter : undefined
-      ),
-    };
-  }
-
-  return {
-    ok: true,
-    requestId,
-    authInfo: createApiKeyMcpAuthInfo(authentication, requestId),
-  };
-}
-
 async function authenticateMcpOAuthBearer(
   token: string,
   requestId: string,
@@ -554,7 +512,12 @@ async function authenticateMcpOAuthBearer(
   }
 
   const sessionAuthentication = authInfo.extra.formbricksAuthentication as Session;
-  if (!(await isOAuthUserActive(sessionAuthentication.user.id))) {
+  const oauthClientId = getOAuthClientId(payload);
+  const [userActive, clientRefusal] = await Promise.all([
+    isOAuthUserActive(sessionAuthentication.user.id),
+    getMcpOAuthClientRefusal(oauthClientId),
+  ]);
+  if (!userActive) {
     return await rejectUnauthenticatedMcpRequest({
       requestId,
       instance,
@@ -562,6 +525,24 @@ async function authenticateMcpOAuthBearer(
       logMessage: "MCP OAuth token user is inactive",
       logContext: { clientId: authInfo.clientId },
     });
+  }
+
+  // ASLA (Must 1). 403, not 401: the token is genuine, but its client is not ASLA Chat. A 401 challenge
+  // would send the client round the OAuth flow again with the same client, to be refused again.
+  if (clientRefusal) {
+    log.warn(
+      { statusCode: 403, clientId: oauthClientId, reason: clientRefusal },
+      "MCP OAuth client is not the allowed LibreChat client"
+    );
+    return {
+      ok: false,
+      requestId,
+      response: problemForbidden(
+        requestId,
+        "This OAuth client is not allowed to use the MCP server",
+        instance
+      ),
+    };
   }
 
   // Minimum grant required to authenticate against the MCP server at all: at least ONE *resource*
@@ -646,16 +627,16 @@ export async function authenticateMcpRequest(request: NextRequest): Promise<TMcp
   const log = logger.withContext({ requestId, path: instance, method: request.method });
 
   if (hasQueryCredentials(request.nextUrl.searchParams)) {
-    log.warn({ statusCode: 400 }, "MCP API key supplied in query parameters");
+    log.warn({ statusCode: 400 }, "MCP credentials supplied in query parameters");
     return {
       ok: false,
       requestId,
-      response: problemBadRequest(requestId, "API keys must be sent in headers, not query parameters", {
+      response: problemBadRequest(requestId, "Credentials must be sent in headers, not query parameters", {
         instance,
         invalid_params: [
           {
             name: "query",
-            reason: "Send the API key with x-api-key or Authorization: Bearer.",
+            reason: "Send an OAuth access token with Authorization: Bearer.",
           },
         ],
       }),
@@ -672,9 +653,17 @@ export async function authenticateMcpRequest(request: NextRequest): Promise<TMcp
   }
 
   try {
-    const xApiKey = request.headers.get("x-api-key")?.trim();
-    if (xApiKey) {
-      return await authenticateMcpApiKey(request, requestId, log);
+    // ASLA (Must 1): no API keys on /api/mcp. Organization keys carry no person, so every call has to be
+    // a person's own OAuth token. Refused before any key lookup, and whatever else the request carries:
+    // an `x-api-key` header alongside a valid bearer is still refused rather than ignored.
+    if (request.headers.has("x-api-key")) {
+      return await rejectUnauthenticatedMcpRequest({
+        requestId,
+        instance,
+        log,
+        detail: MCP_API_KEY_REFUSED_DETAIL,
+        logMessage: "MCP API key refused (x-api-key)",
+      });
     }
 
     const bearerToken = getBearerTokenFromHeaders(request.headers);
@@ -683,13 +672,19 @@ export async function authenticateMcpRequest(request: NextRequest): Promise<TMcp
         requestId,
         instance,
         log,
-        detail: "API key or OAuth access token required",
+        detail: "OAuth access token required",
         logMessage: "MCP authentication credentials missing",
       });
     }
 
     if (parseApiKeyV2(bearerToken)) {
-      return await authenticateMcpApiKey(request, requestId, log);
+      return await rejectUnauthenticatedMcpRequest({
+        requestId,
+        instance,
+        log,
+        detail: MCP_API_KEY_REFUSED_DETAIL,
+        logMessage: "MCP API key refused (Authorization: Bearer)",
+      });
     }
 
     return await authenticateMcpOAuthBearer(bearerToken, requestId, instance, log);

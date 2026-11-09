@@ -1,5 +1,5 @@
 import "server-only";
-import type { AuthInfo } from "@modelcontextprotocol/server";
+import type { AuthInfo, McpServer } from "@modelcontextprotocol/server";
 import type { MCPAnalyticsOptions } from "@posthog/mcp";
 import { createMcpHandler } from "mcp-handler";
 import { logger } from "@formbricks/logger";
@@ -7,6 +7,7 @@ import { instrumentMcpServerWithTracing } from "@/lib/posthog/mcp-tracing";
 import { getMcpAuthentication } from "./auth";
 import { MCP_SERVER_NAME, MCP_SERVER_VERSION } from "./constants";
 import { mcpRequestStateCodec } from "./request-state";
+import { withMcpToolAllowlist } from "./tool-allowlist";
 import { registerFeedbackRecordTools } from "./tools/feedback-records";
 import { registerResponseTools } from "./tools/responses";
 import { registerSurveyTools } from "./tools/surveys";
@@ -112,11 +113,21 @@ export const MCP_HANDLER_OPTIONS = {
   requestState: { verify: mcpRequestStateCodec.verify },
 } as const;
 
+/**
+ * Upstream's tool modules all register on the allowlisted view of the server (ASLA Must 2), so a tool
+ * outside "Tools (v1)" is never registered. Upstream modules stay registered here unchanged, which keeps
+ * this file merge-friendly; the allowlist decides what is exposed.
+ */
+export const registerMcpTools = (server: McpServer): void => {
+  const allowlisted = withMcpToolAllowlist(server);
+  registerSurveyTools(allowlisted);
+  registerWorkflowTools(allowlisted);
+  registerWorkspaceTools(allowlisted);
+  registerFeedbackRecordTools(allowlisted);
+  registerResponseTools(allowlisted);
+};
+
 export const mcpHandler = createMcpHandler((server) => {
-  registerSurveyTools(server);
-  registerWorkflowTools(server);
-  registerWorkspaceTools(server);
-  registerFeedbackRecordTools(server);
-  registerResponseTools(server);
+  registerMcpTools(server);
   instrumentMcpServerWithTracing(server, identifyMcpUser);
 }, MCP_HANDLER_OPTIONS);
