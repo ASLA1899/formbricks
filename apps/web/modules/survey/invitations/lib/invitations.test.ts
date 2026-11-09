@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "@formbricks/database";
-import { getContactSurveyLink } from "@/modules/ee/contacts/lib/contact-survey-link";
 import { sendSurveyInvitationEmail } from "@/modules/email";
+import { getContactSurveyLink } from "@/modules/survey/link/lib/contact-survey-link";
 import { resolveAudience } from "./audience";
 import {
   enqueueInvitationsForSurvey,
@@ -41,7 +41,7 @@ vi.mock("@/lib/organization/service", () => ({
   getOrganizationByWorkspaceId: vi.fn(async () => ({ name: "ASLA" })),
 }));
 vi.mock("@/modules/email", () => ({ sendSurveyInvitationEmail: vi.fn() }));
-vi.mock("@/modules/ee/contacts/lib/contact-survey-link", () => ({ getContactSurveyLink: vi.fn() }));
+vi.mock("@/modules/survey/link/lib/contact-survey-link", () => ({ getContactSurveyLink: vi.fn() }));
 vi.mock("./audience", () => ({ resolveAudience: vi.fn() }));
 
 const config = {

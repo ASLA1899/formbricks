@@ -255,3 +255,38 @@ describe("POST /api/v2/client/[workspaceId]/responses — duplicate submissions 
     expect(mocks.sendToPipeline).not.toHaveBeenCalled();
   });
 });
+
+// ASLA fork: the /c/<token> invitation flow submits with a contactId, and this install has no Enterprise
+// Contacts license. Upstream answers that with a 403, which would reject every invitation response.
+describe("POST /api/v2/client/[workspaceId]/responses — contactId without a Contacts license (ASL-1877)", () => {
+  const contactId = "clh8ruz3w0000qa8h9x0bt9ry";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mocks.resolveClientApiIds.mockResolvedValue({ workspaceId });
+    mocks.getOrganizationIdFromWorkspaceId.mockResolvedValue("org_1");
+    mocks.getIsContactsEnabled.mockResolvedValue(false);
+    mocks.getSurvey.mockResolvedValue({ ...getSurveyWithFields([]), type: "link" });
+    mocks.checkSurveyValidity.mockResolvedValue(null);
+    mocks.validateClientFileUploads.mockReturnValue(true);
+    mocks.validateOtherOptionLengthForMultipleChoice.mockReturnValue(null);
+    mocks.validateResponseData.mockReturnValue(null);
+    mocks.createQuotaFullObject.mockReturnValue({});
+    mocks.findRecentDuplicateResponse.mockResolvedValue(null);
+    mocks.createResponseWithQuotaEvaluation.mockResolvedValue({
+      id: responseId,
+      surveyId,
+      finished: true,
+      quotaFull: undefined,
+    });
+  });
+
+  test("creates the response and keeps the contactId", async () => {
+    const response = await postRawBody({ q1: 5 }, { contactId, finished: true });
+
+    expect(response.status).toBe(200);
+    expect(mocks.createResponseWithQuotaEvaluation).toHaveBeenCalledTimes(1);
+    expect(mocks.createResponseWithQuotaEvaluation.mock.calls[0][0]).toMatchObject({ contactId });
+  });
+});

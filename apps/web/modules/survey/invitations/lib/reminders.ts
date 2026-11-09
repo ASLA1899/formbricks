@@ -3,8 +3,8 @@ import { prisma } from "@formbricks/database";
 import { logger } from "@formbricks/logger";
 import type { TSurveyInvitationConfig } from "@formbricks/types/surveys/types";
 import { EMAIL_SEND_THROTTLE_MS } from "@/lib/constants";
-import { getContactSurveyLink } from "@/modules/ee/contacts/lib/contact-survey-link";
 import { sendSurveyInvitationEmail } from "@/modules/email";
+import { getContactSurveyLink } from "@/modules/survey/link/lib/contact-survey-link";
 import { sleep } from "./send-queue";
 import { renderSubject, renderTemplate } from "./template";
 

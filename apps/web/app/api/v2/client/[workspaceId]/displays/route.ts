@@ -6,9 +6,7 @@ import {
 import { reportApiError } from "@/app/lib/api/api-error-reporter";
 import { parseAndValidateJsonBody } from "@/app/lib/api/parse-and-validate-json-body";
 import { responses } from "@/app/lib/api/response";
-import { getOrganizationIdFromWorkspaceId } from "@/lib/utils/helper";
 import { resolveClientApiIds } from "@/lib/utils/resolve-client-id";
-import { getIsContactsEnabled } from "@/modules/ee/license-check/lib/utils";
 import { createDisplay } from "./lib/display";
 
 interface Context {
@@ -67,18 +65,11 @@ export const POST = async (request: Request, context: Context): Promise<Response
 
   const { displayInputData } = validatedInput;
 
+  // ASLA fork: a contactId is accepted WITHOUT an Enterprise Contacts license, matching the responses
+  // route. The /c/<token> invitation flow sends contactId with its display, and the 403 upstream returns
+  // here is swallowed by the surveys SDK, so invitation responses would land with no display. createDisplay
+  // only links the contact when it exists in this workspace (doesContactExistInWorkspace).
   try {
-    if (displayInputData.contactId) {
-      const organizationId = await getOrganizationIdFromWorkspaceId(workspaceId);
-      const isContactsEnabled = await getIsContactsEnabled(organizationId);
-      if (!isContactsEnabled) {
-        return responses.forbiddenResponse(
-          "User identification is only available for enterprise users.",
-          true
-        );
-      }
-    }
-
     const response = await createDisplay(displayInputData);
 
     return responses.successResponse(response, true);
