@@ -570,7 +570,9 @@ describe("LibreChat connector registration vs. the real plugin (ASLA Must 1)", (
     const registered = (await response.json()) as { client_id?: string; redirect_uris?: string[] };
 
     expect(response.status).toBe(201);
-    expect(registered.client_id).toBeTruthy();
+    // The operator pins this value as MCP_LIBRECHAT_CLIENT_ID, so a generated ID must pass the same
+    // format rule `lib/env.ts` enforces, or the app refuses to boot with it.
+    expect(registered.client_id).toMatch(/^[\w-]{8,128}$/);
     expect(registered.redirect_uris).toEqual([LIBRECHAT]);
   });
 
