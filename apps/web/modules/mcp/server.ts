@@ -7,7 +7,8 @@ import { instrumentMcpServerWithTracing } from "@/lib/posthog/mcp-tracing";
 import { getMcpAuthentication } from "./auth";
 import { MCP_SERVER_NAME, MCP_SERVER_VERSION } from "./constants";
 import { mcpRequestStateCodec } from "./request-state";
-import { withMcpToolAllowlist } from "./tool-allowlist";
+import { MCP_TOOL_GUARDS } from "./survey-write-guard/tool-guards";
+import { MCP_TOOL_ALLOWLIST, withMcpToolAllowlist } from "./tool-allowlist";
 import { registerFeedbackRecordTools } from "./tools/feedback-records";
 import { registerResponseTools } from "./tools/responses";
 import { registerSurveyTools } from "./tools/surveys";
@@ -119,7 +120,7 @@ export const MCP_HANDLER_OPTIONS = {
  * this file merge-friendly; the allowlist decides what is exposed.
  */
 export const registerMcpTools = (server: McpServer): void => {
-  const allowlisted = withMcpToolAllowlist(server);
+  const allowlisted = withMcpToolAllowlist(server, MCP_TOOL_ALLOWLIST, MCP_TOOL_GUARDS);
   registerSurveyTools(allowlisted);
   registerWorkflowTools(allowlisted);
   registerWorkspaceTools(allowlisted);

@@ -3,10 +3,16 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { V3_REQUEST_ARRAY_MAX_ITEMS } from "@/app/api/v3/lib/array-budget";
 import { buildV3AuditLog, queueV3AuditLog } from "@/app/api/v3/lib/audit";
 import { problemBadRequest, successListResponse, successResponse } from "@/app/api/v3/lib/response";
+import { getAuthorizedV3Survey } from "@/app/api/v3/surveys/authorization";
 import {
   createV3SurveyResponseFromRawInput,
+  deleteV3Survey,
+  editV3SurveyBlocksResponse,
   listV3Surveys,
+  patchV3SurveyResponse,
+  setV3SurveyBlockOrderResponse,
   validateV3SurveyFromRawInput,
+  withGeneratedInsertIds,
 } from "@/app/api/v3/surveys/lib/operations";
 import { DEFAULT_REQUEST_BODY_LIMIT_BYTES } from "@/app/lib/api/request-body";
 import { applyIPRateLimit, applyRateLimit } from "@/modules/core/rate-limit/helpers";
@@ -94,10 +100,18 @@ vi.mock("@/modules/core/rate-limit/helpers", () => ({
 vi.mock("@/app/api/v3/surveys/lib/operations", () => ({
   createV3SurveyResponseFromRawInput: vi.fn(),
   deleteV3Survey: vi.fn(),
+  editV3SurveyBlocksResponse: vi.fn(),
   getV3Survey: vi.fn(),
   listV3Surveys: vi.fn(),
   patchV3SurveyResponse: vi.fn(),
+  setV3SurveyBlockOrderResponse: vi.fn(),
   validateV3SurveyFromRawInput: vi.fn(),
+  withGeneratedInsertIds: vi.fn(),
+}));
+
+// ASLA draft guard (2.3): the permission-checked read it takes the survey's status from.
+vi.mock("@/app/api/v3/surveys/authorization", () => ({
+  getAuthorizedV3Survey: vi.fn(),
 }));
 
 /**
@@ -370,6 +384,7 @@ describe("POST /api/mcp", () => {
     expect(message.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
       "list_surveys",
       "get_survey",
+      "create_survey_draft",
       "validate_survey",
       "patch_survey",
       "edit_survey_blocks",
@@ -805,5 +820,288 @@ describe("POST /api/mcp", () => {
       detail: "Invalid survey validation request",
       invalid_params: [{ name: "surveyId", reason: "Required" }],
     });
+  });
+});
+
+/**
+ * ASLA (Must 3 and Must 5): the draft-only guard on the write tools, through the real route. The v3
+ * operations are mocked, so each test asserts whether the write was reached and with what.
+ */
+describe("POST /api/mcp — draft-only guard (ASL-1893)", () => {
+  const SURVEY_ID = "clsv1234567890123456789012";
+  const WORKSPACE_ID = "clws1234567890123456789012";
+  const UPDATED_AT = new Date("2026-11-01T12:00:00.000Z");
+  const OPEN_TEXT_BLOCK = {
+    name: "Block 1",
+    elements: [{ id: "q1", type: "openText", headline: { default: "What did you think?" }, required: true }],
+  };
+
+  const draftSurvey = (status = "draft") =>
+    vi.mocked(getAuthorizedV3Survey).mockResolvedValue({
+      survey: { id: SURVEY_ID, status, updatedAt: UPDATED_AT },
+      authResult: {},
+      response: null,
+    } as never);
+
+  const callTool = async (name: string, args: Record<string, unknown>, scope?: string) => {
+    if (scope) {
+      verifyBearerTokenMock.mockResolvedValueOnce({
+        aud: MCP_AUDIENCE,
+        sub: "user_1",
+        scope,
+        exp: Math.floor(Date.now() / 1000) + 900,
+        azp: "client_1",
+      });
+    }
+    const response = await POST(
+      createMcpRequest({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } })
+    );
+    expect(response.status).toBe(200);
+    return readMcpResponse(response);
+  };
+
+  const ok = () => successResponse({ id: SURVEY_ID }, { requestId: "req_ok" });
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(applyRateLimit).mockResolvedValue({ allowed: true });
+    vi.mocked(applyIPRateLimit).mockResolvedValue({ allowed: true });
+    userFindUniqueMock.mockResolvedValue({ isActive: true });
+    oauthClientFindUniqueMock.mockResolvedValue({ redirectUris: [LIBRECHAT_CALLBACK], disabled: false });
+    getJwksMock.mockResolvedValue({ keys: [] });
+    verifyBearerTokenMock.mockResolvedValue({
+      aud: MCP_AUDIENCE,
+      sub: "user_1",
+      scope: "surveys:read surveys:write",
+      exp: Math.floor(Date.now() / 1000) + 900,
+      azp: "client_1",
+    });
+    vi.mocked(buildV3AuditLog).mockReturnValue({ status: "failure" } as never);
+    vi.mocked(withGeneratedInsertIds).mockImplementation((ops) => ops as never);
+    for (const operation of [
+      createV3SurveyResponseFromRawInput,
+      patchV3SurveyResponse,
+      editV3SurveyBlocksResponse,
+      setV3SurveyBlockOrderResponse,
+      deleteV3Survey,
+    ]) {
+      vi.mocked(operation).mockResolvedValue(ok());
+    }
+    draftSurvey();
+  });
+
+  test("create_survey_draft always creates a link draft", async () => {
+    await callTool("create_survey_draft", {
+      workspaceId: WORKSPACE_ID,
+      name: "Pulse",
+      blocks: [OPEN_TEXT_BLOCK],
+    });
+
+    expect(createV3SurveyResponseFromRawInput).toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.objectContaining({ status: "draft", type: "link" }) })
+    );
+  });
+
+  test.each([
+    ["status", "inProgress"],
+    ["customCss", { light: "", dark: "" }],
+    ["metadata", {}],
+  ])("create_survey_draft does not accept %s", async (key, value) => {
+    const message = await callTool("create_survey_draft", {
+      workspaceId: WORKSPACE_ID,
+      name: "Pulse",
+      blocks: [OPEN_TEXT_BLOCK],
+      [key]: value,
+    });
+
+    expect(message.result?.isError ?? Boolean(message.error)).toBe(true);
+    expect(createV3SurveyResponseFromRawInput).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["a fileUpload question", { ...OPEN_TEXT_BLOCK, elements: [{ id: "f1", type: "fileUpload" }] }],
+    ["a contactInfo question", { ...OPEN_TEXT_BLOCK, elements: [{ id: "c1", type: "contactInfo" }] }],
+    [
+      "an image from another host",
+      {
+        ...OPEN_TEXT_BLOCK,
+        elements: [{ ...OPEN_TEXT_BLOCK.elements[0], imageUrl: "https://example.com/a.png" }],
+      },
+    ],
+    [
+      "an embedded video",
+      {
+        ...OPEN_TEXT_BLOCK,
+        elements: [{ ...OPEN_TEXT_BLOCK.elements[0], videoUrl: "https://www.youtube.com/embed/x" }],
+      },
+    ],
+    [
+      "an http CTA link",
+      {
+        ...OPEN_TEXT_BLOCK,
+        elements: [{ id: "c1", type: "cta", buttonExternal: true, buttonUrl: "http://asla.org" }],
+      },
+    ],
+  ])("create_survey_draft refuses %s, audited, without writing", async (_label, block) => {
+    const message = await callTool("create_survey_draft", {
+      workspaceId: WORKSPACE_ID,
+      name: "Pulse",
+      blocks: [block],
+    });
+
+    expect(message.result.isError).toBe(true);
+    expect(message.result.structuredContent.error).toMatchObject({ status: 422 });
+    expect(createV3SurveyResponseFromRawInput).not.toHaveBeenCalled();
+    expect(queueV3AuditLog).toHaveBeenCalledTimes(1);
+  });
+
+  test("create_survey_draft accepts a Formbricks storage image", async () => {
+    const block = {
+      ...OPEN_TEXT_BLOCK,
+      elements: [{ ...OPEN_TEXT_BLOCK.elements[0], imageUrl: "/storage/clws1/public/logo.png" }],
+    };
+    const message = await callTool("create_survey_draft", {
+      workspaceId: WORKSPACE_ID,
+      name: "Pulse",
+      blocks: [block],
+    });
+
+    expect(message.result.isError).toBeFalsy();
+    expect(createV3SurveyResponseFromRawInput).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    ["patch_survey", { surveyId: SURVEY_ID, data: { name: "New" } }, patchV3SurveyResponse],
+    [
+      "edit_survey_blocks",
+      { surveyId: SURVEY_ID, ops: [{ op: "remove", id: "b1" }] },
+      editV3SurveyBlocksResponse,
+    ],
+    ["set_survey_block_order", { surveyId: SURVEY_ID, order: ["b1"] }, setV3SurveyBlockOrderResponse],
+    ["delete_survey", { surveyId: SURVEY_ID }, deleteV3Survey],
+  ] as const)("%s refuses a survey that is not a draft, audited", async (name, args, operation) => {
+    draftSurvey("inProgress");
+
+    const message = await callTool(name, args);
+
+    expect(message.result.isError).toBe(true);
+    expect(message.result.structuredContent.error).toMatchObject({ status: 409 });
+    expect(operation).not.toHaveBeenCalled();
+    expect(queueV3AuditLog).toHaveBeenCalledTimes(1);
+  });
+
+  test("a survey the caller cannot write gets v3's own refusal, not its status", async () => {
+    vi.mocked(getAuthorizedV3Survey).mockResolvedValue({
+      survey: null,
+      authResult: null,
+      response: problemBadRequest("req_forbidden", "stand-in for the v3 403"),
+    } as never);
+
+    const message = await callTool("delete_survey", { surveyId: SURVEY_ID });
+
+    expect(message.result.structuredContent.error).toMatchObject({ detail: "stand-in for the v3 403" });
+    expect(deleteV3Survey).not.toHaveBeenCalled();
+  });
+
+  test("a token without surveys:write gets the scope refusal before any survey is read", async () => {
+    const message = await callTool("delete_survey", { surveyId: SURVEY_ID }, "surveys:read");
+
+    expect(message.result.structuredContent.error).toMatchObject({ status: 403 });
+    expect(getAuthorizedV3Survey).not.toHaveBeenCalled();
+  });
+
+  test.each([["inProgress"], ["paused"], ["completed"]])(
+    "patch_survey refuses status %s without reading the survey",
+    async (status) => {
+      const message = await callTool("patch_survey", { surveyId: SURVEY_ID, data: { status } });
+
+      expect(message.result.structuredContent.error).toMatchObject({ status: 422 });
+      expect(patchV3SurveyResponse).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each([["customCss"], ["distribution"], ["targeting"], ["metadata"]])(
+    "patch_survey refuses the settings field %s",
+    async (key) => {
+      const message = await callTool("patch_survey", { surveyId: SURVEY_ID, data: { [key]: null } });
+
+      expect(message.result.structuredContent.error).toMatchObject({ status: 422 });
+      expect(patchV3SurveyResponse).not.toHaveBeenCalled();
+    }
+  );
+
+  test("patch_survey sends the read updatedAt as its precondition", async () => {
+    await callTool("patch_survey", { surveyId: SURVEY_ID, data: { name: "New", status: "draft" } });
+
+    expect(patchV3SurveyResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ body: { name: "New", status: "draft", updatedAt: UPDATED_AT.toISOString() } })
+    );
+  });
+
+  test("edit_survey_blocks and set_survey_block_order send the read updatedAt as expectedUpdatedAt", async () => {
+    await callTool("edit_survey_blocks", { surveyId: SURVEY_ID, ops: [{ op: "remove", id: "b1" }] });
+    await callTool("set_survey_block_order", { surveyId: SURVEY_ID, order: ["b1"] });
+
+    expect(editV3SurveyBlocksResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ expectedUpdatedAt: UPDATED_AT.toISOString() }),
+      })
+    );
+    expect(setV3SurveyBlockOrderResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ expectedUpdatedAt: UPDATED_AT.toISOString() }),
+      })
+    );
+  });
+
+  test("a caller's own expectedUpdatedAt is kept", async () => {
+    const own = "2026-10-01T00:00:00.000Z";
+    await callTool("set_survey_block_order", { surveyId: SURVEY_ID, order: ["b1"], expectedUpdatedAt: own });
+
+    expect(setV3SurveyBlockOrderResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.objectContaining({ expectedUpdatedAt: own }) })
+    );
+  });
+
+  test("edit_survey_blocks refuses an inserted block with a disallowed question type", async () => {
+    const message = await callTool("edit_survey_blocks", {
+      surveyId: SURVEY_ID,
+      ops: [
+        {
+          op: "insert",
+          position: { type: "end" },
+          block: { name: "B", elements: [{ id: "a", type: "address" }] },
+        },
+      ],
+    });
+
+    expect(message.result.structuredContent.error).toMatchObject({
+      status: 422,
+      invalid_params: [expect.objectContaining({ name: "ops.0.block.elements.0.type" })],
+    });
+    expect(editV3SurveyBlocksResponse).not.toHaveBeenCalled();
+  });
+
+  // Tripwire: a write tool exposed without a draft guard is the hole this ticket closes. An upgrade that
+  // adds one to the allowlist, or a guard that stops matching an upstream name, fails here.
+  test("every write tool listed is draft-guarded", async () => {
+    const response = await POST(
+      createMcpRequest({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} })
+    );
+    const { result } = await readMcpResponse(response);
+    const writeTools = (result.tools as { name: string; annotations?: { readOnlyHint?: boolean } }[])
+      .filter((tool) => tool.annotations?.readOnlyHint !== true)
+      .map((tool) => tool.name)
+      .sort();
+
+    expect(writeTools).toEqual(
+      [
+        "create_survey_draft",
+        "delete_survey",
+        "edit_survey_blocks",
+        "patch_survey",
+        "set_survey_block_order",
+      ].sort()
+    );
   });
 });

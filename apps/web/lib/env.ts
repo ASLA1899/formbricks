@@ -128,6 +128,32 @@ const ZMcpDcrInitialAccessToken = z.preprocess(
     .optional()
 );
 
+/**
+ * ASLA (Must 5): hosts, besides Formbricks storage, that survey images written through MCP may load
+ * from. Respondents' browsers fetch these, so each host sees their IP addresses. Comma-separated
+ * hostnames (no scheme, path or port), lowercase; blank or unset means Formbricks storage only.
+ */
+const ZMcpAllowedImageHosts = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const hosts = value
+      .split(",")
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean);
+    return hosts.length > 0 ? hosts : undefined;
+  },
+  z
+    .array(
+      z
+        .string()
+        .regex(
+          /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/,
+          "MCP_ALLOWED_IMAGE_HOSTS entries must be bare hostnames such as assets.aslalabs.org"
+        )
+    )
+    .optional()
+);
+
 /** Comma-separated list; blank, and empty entries from a stray comma, count as unset. */
 const ZDcrRedirectUriList = z.preprocess((value) => {
   if (typeof value !== "string") return value;
@@ -747,6 +773,7 @@ const parsedEnv = createEnv({
     MCP_LIBRECHAT_CALLBACK_URI: ZMcpLibreChatCallbackUri,
     MCP_LIBRECHAT_CLIENT_ID: ZMcpLibreChatClientId,
     MCP_DCR_INITIAL_ACCESS_TOKEN: ZMcpDcrInitialAccessToken,
+    MCP_ALLOWED_IMAGE_HOSTS: ZMcpAllowedImageHosts,
     MAIL_FROM_NAME: z.string().optional(),
     NOTION_OAUTH_CLIENT_ID: z.string().optional(),
     NOTION_OAUTH_CLIENT_SECRET: z.string().optional(),
@@ -883,6 +910,7 @@ const parsedEnv = createEnv({
     MCP_LIBRECHAT_CALLBACK_URI: process.env.MCP_LIBRECHAT_CALLBACK_URI,
     MCP_LIBRECHAT_CLIENT_ID: process.env.MCP_LIBRECHAT_CLIENT_ID,
     MCP_DCR_INITIAL_ACCESS_TOKEN: process.env.MCP_DCR_INITIAL_ACCESS_TOKEN,
+    MCP_ALLOWED_IMAGE_HOSTS: process.env.MCP_ALLOWED_IMAGE_HOSTS,
     BREVO_API_KEY: process.env.BREVO_API_KEY,
     BREVO_LIST_ID: process.env.BREVO_LIST_ID,
     CRON_SECRET: process.env.CRON_SECRET,
